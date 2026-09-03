@@ -222,7 +222,7 @@ def day_page(author: str, date: str) -> str:
             ts = u["created_at"][11:16] if len(u["created_at"]) > 16 else u["created_at"]
             lines.append("- `%s` [%s] %s" % (ts, u["source_agent"], u["content_md"].strip()))
         lines.append("")
-    lines += ["", "<!-- 由 Scribe 自动生成，勿手改；提交入口只有 MCP / API -->"]
+    lines += ["", "<!-- 由 Fecho 自动生成，勿手改；提交入口只有 MCP / API -->"]
     return "\n".join(lines)
 
 

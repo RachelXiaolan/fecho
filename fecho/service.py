@@ -87,7 +87,7 @@ def doctor() -> Dict[str, Any]:
         "ok": mob_ok,
         "detail": ("已连接（%s）" % st.get("auth")) if mob_ok else "未连接",
         "fix": None if mob_ok else
-        "调用 mobius_login 工具，会开浏览器让你授权；或 scribe login --token <你的 token>",
+        "调用 mobius_login 工具，会开浏览器让你授权；或 fecho login --token <你的 token>",
     })
 
     n_issues = len(mobius.cached_issues(cfg["author"])) if mob_ok else 0
@@ -104,7 +104,7 @@ def doctor() -> Dict[str, Any]:
         "detail": "%s / %s" % (cfg["llm"]["base_url"], cfg["llm"]["model"])
         if llm_ok else "未配置",
         "fix": None if llm_ok else
-        "scribe setup --llm-url <url> --llm-key <key> --llm-model <model>；"
+        "fecho setup --llm-url <url> --llm-key <key> --llm-model <model>；"
         "不配也能记流水，只是日终出的是兜底稿",
     })
 

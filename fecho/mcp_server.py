@@ -1,4 +1,4 @@
-"""Scribe MCP server（stdio）—— agent 的入口。
+"""Fecho MCP server（stdio）—— agent 的入口。
 
 单进程：直接读写本地 SQLite，不需要先起任何服务。
 自己实现最小 JSON-RPC，不引第三方 MCP SDK。
@@ -15,13 +15,13 @@ from typing import Any, Dict, Optional
 
 from . import __version__, config, db, service
 
-SESSION_ID = os.getenv("SCRIBE_SESSION_ID") or str(uuid.uuid4())
+SESSION_ID = os.getenv("FECHO_SESSION_ID") or str(uuid.uuid4())
 PROTOCOL = "2024-11-05"
 _client_name = "unknown-agent"
 
 
 def log(msg: str) -> None:
-    sys.stderr.write("[scribe] %s\n" % msg)
+    sys.stderr.write("[fecho] %s\n" % msg)
     sys.stderr.flush()
 
 
@@ -72,7 +72,7 @@ TOOLS = [
     {
         "name": "mobius_login",
         "description": ("连接 Mobius。会打开浏览器让用户授权（OAuth），授权完自动接上，"
-                        "不需要用户手动贴任何 key。装好 scribe 后第一件事就调它。"),
+                        "不需要用户手动贴任何 key。装好 fecho 后第一件事就调它。"),
         "inputSchema": {"type": "object", "properties": {
             "assignee": {"type": "string",
                          "description": "用户在 Mobius 上的邮箱，用来确定拉谁的 issue"}}},
@@ -83,7 +83,7 @@ TOOLS = [
         "inputSchema": {"type": "object", "properties": {"assignee": {"type": "string"}}},
     },
     {
-        "name": "scribe_doctor",
+        "name": "fecho_doctor",
         "description": ("自检：什么配好了、什么还缺、缺的怎么补。装完先调这个，"
                         "然后按它给的 fix 一步步做完。"),
         "inputSchema": {"type": "object", "properties": {}},
@@ -206,7 +206,7 @@ def call_tool(name: str, args: Dict[str, Any]) -> str:
             res = oauth.complete(started["ctx"])
         except oauth.OAuthError as exc:
             return "\n".join(out + ["", "❌ 授权失败：%s" % exc,
-                                    "可以重试，或改用 scribe login --token <token>"])
+                                    "可以重试，或改用 fecho login --token <token>"])
         try:
             s = service.sync_issues()
             out.append("✅ 已连接 Mobius，并同步了 %d 个在办 issue（%s）。" % (s["count"], s["assignee"]))
@@ -221,9 +221,9 @@ def call_tool(name: str, args: Dict[str, Any]) -> str:
         s = service.sync_issues(args.get("assignee"))
         return "已从 Mobius 同步 %d 个在办 issue（%s），配对缓存已刷新。" % (s["count"], s["assignee"])
 
-    if name == "scribe_doctor":
+    if name == "fecho_doctor":
         d = service.doctor()
-        out = ["Scribe %s · 作者=%s · 数据在 %s" % (
+        out = ["Fecho %s · 作者=%s · 数据在 %s" % (
             __version__, d["config"]["author"], d["config"]["home"])]
         for c in d["checks"]:
             out.append("%s %s — %s" % ("✓" if c["ok"] else "✗", c["name"], c["detail"]))
@@ -247,7 +247,7 @@ def handle(msg: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         return {"jsonrpc": "2.0", "id": mid, "result": {
             "protocolVersion": (msg.get("params") or {}).get("protocolVersion", PROTOCOL),
             "capabilities": {"tools": {}},
-            "serverInfo": {"name": "scribe", "version": __version__}}}
+            "serverInfo": {"name": "fecho", "version": __version__}}}
 
     if method in ("notifications/initialized", "notifications/cancelled"):
         return None

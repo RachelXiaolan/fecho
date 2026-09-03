@@ -287,7 +287,7 @@ def run_all(date: str, force: bool = False) -> List[Dict[str, Any]]:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Scribe 日终整理（cron 入口）")
+    ap = argparse.ArgumentParser(description="Fecho 日终整理（cron 入口）")
     ap.add_argument("--date", default=store.today())
     ap.add_argument("--author", default=None)
     ap.add_argument("--force", action="store_true")

@@ -62,7 +62,7 @@ def _chat_once(
 ) -> str:
     if not config.llm_configured():
         raise LLMNotConfigured(
-            "未配置 LLM：请设置 SCRIBE_LLM_BASE_URL 与 SCRIBE_LLM_API_KEY"
+            "未配置 LLM：请设置 FECHO_LLM_BASE_URL 与 FECHO_LLM_API_KEY"
         )
     url = config.LLM_BASE_URL.rstrip("/") + "/chat/completions"
     payload = {

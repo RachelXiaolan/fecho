@@ -1,16 +1,16 @@
 """配置：文件优先，环境变量覆盖。
 
-装完就能跑，不需要先起服务：默认数据落在 ~/.scribe/ 下，单进程直连 SQLite。
-只有做团队共享部署时才需要 REST 服务（设 SCRIBE_REMOTE_URL 指过去）。
+装完就能跑，不需要先起服务：默认数据落在 ~/.fecho/ 下，单进程直连 SQLite。
+只有做团队共享部署时才需要 REST 服务（设 FECHO_REMOTE_URL 指过去）。
 
-密钥只落在 ~/.scribe/config.json（0600），不进代码、不进仓库、不打印。
+密钥只落在 ~/.fecho/config.json（0600），不进代码、不进仓库、不打印。
 """
 import json
 import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-HOME = Path(os.getenv("SCRIBE_HOME", Path.home() / ".scribe"))
+HOME = Path(os.getenv("FECHO_HOME", Path.home() / ".fecho"))
 CONFIG_FILE = HOME / "config.json"
 
 _cache: Optional[Dict[str, Any]] = None
@@ -70,42 +70,42 @@ def _path(key: str, env: str, default: Path) -> Path:
 
 
 # ---- 数据位置 ----
-DB_PATH = _path("db", "SCRIBE_DB", HOME / "scribe.db")
-LOGS_DIR = _path("logs_dir", "SCRIBE_LOGS_DIR", HOME / "logs")
-PERSONAS_DIR = _path("personas_dir", "SCRIBE_PERSONAS_DIR",
+DB_PATH = _path("db", "FECHO_DB", HOME / "fecho.db")
+LOGS_DIR = _path("logs_dir", "FECHO_LOGS_DIR", HOME / "logs")
+PERSONAS_DIR = _path("personas_dir", "FECHO_PERSONAS_DIR",
                      Path(__file__).resolve().parent / "presets" / "personas")
-PTO_FILE = _path("pto_file", "SCRIBE_PTO_FILE", HOME / "pto.json")
-TOKENS_FILE = _path("tokens_file", "SCRIBE_TOKENS", HOME / "tokens.json")
+PTO_FILE = _path("pto_file", "FECHO_PTO_FILE", HOME / "pto.json")
+TOKENS_FILE = _path("tokens_file", "FECHO_TOKENS", HOME / "tokens.json")
 
 # ---- 身份 ----
-AUTHOR = get("author", "SCRIBE_AUTHOR", os.getenv("USER") or "me")
-DISPLAY_NAME = get("display_name", "SCRIBE_DISPLAY_NAME", "")
-PERSONA = get("persona", "SCRIBE_PERSONA", "default")
+AUTHOR = get("author", "FECHO_AUTHOR", os.getenv("USER") or "me")
+DISPLAY_NAME = get("display_name", "FECHO_DISPLAY_NAME", "")
+PERSONA = get("persona", "FECHO_PERSONA", "default")
 
-# ---- 团队模式（可选）：指向一台共享的 scribe 服务 ----
-REMOTE_URL = get("remote_url", "SCRIBE_REMOTE_URL", "")
-REMOTE_TOKEN = get("remote_token", "SCRIBE_TOKEN", "")
-HOST = get("host", "SCRIBE_HOST", "127.0.0.1")
-PORT = int(get("port", "SCRIBE_PORT", 8899))
+# ---- 团队模式（可选）：指向一台共享的 fecho 服务 ----
+REMOTE_URL = get("remote_url", "FECHO_REMOTE_URL", "")
+REMOTE_TOKEN = get("remote_token", "FECHO_TOKEN", "")
+HOST = get("host", "FECHO_HOST", "127.0.0.1")
+PORT = int(get("port", "FECHO_PORT", 8899))
 
 # ---- LLM ----
-LLM_BASE_URL = get("llm_base_url", "SCRIBE_LLM_BASE_URL", "")
-LLM_API_KEY = get("llm_api_key", "SCRIBE_LLM_API_KEY", "")
-LLM_MODEL = get("llm_model", "SCRIBE_LLM_MODEL", "")
-LLM_TIMEOUT = float(get("llm_timeout", "SCRIBE_LLM_TIMEOUT", 180))
-LLM_REASONING_EFFORT = get("llm_reasoning_effort", "SCRIBE_LLM_REASONING_EFFORT", "")
+LLM_BASE_URL = get("llm_base_url", "FECHO_LLM_BASE_URL", "")
+LLM_API_KEY = get("llm_api_key", "FECHO_LLM_API_KEY", "")
+LLM_MODEL = get("llm_model", "FECHO_LLM_MODEL", "")
+LLM_TIMEOUT = float(get("llm_timeout", "FECHO_LLM_TIMEOUT", 180))
+LLM_REASONING_EFFORT = get("llm_reasoning_effort", "FECHO_LLM_REASONING_EFFORT", "")
 
 # ---- Mobius ----
-MOBIUS_URL = get("mobius_url", "SCRIBE_MOBIUS_URL", "")
-MOBIUS_TOKEN = get("mobius_token", "SCRIBE_MOBIUS_TOKEN", "")
-MOBIUS_ASSIGNEE = get("mobius_assignee", "SCRIBE_MOBIUS_ASSIGNEE", "")
+MOBIUS_URL = get("mobius_url", "FECHO_MOBIUS_URL", "")
+MOBIUS_TOKEN = get("mobius_token", "FECHO_MOBIUS_TOKEN", "")
+MOBIUS_ASSIGNEE = get("mobius_assignee", "FECHO_MOBIUS_ASSIGNEE", "")
 
 # ---- 调参 ----
-MATCH_THRESHOLD = float(get("match_threshold", "SCRIBE_MATCH_THRESHOLD", 0.30))
+MATCH_THRESHOLD = float(get("match_threshold", "FECHO_MATCH_THRESHOLD", 0.30))
 TASK_CONTINUE_THRESHOLD = float(get("task_continue_threshold",
-                                    "SCRIBE_TASK_CONTINUE_THRESHOLD", 0.35))
-VOICE_MIN_CHARS = int(get("voice_min", "SCRIBE_VOICE_MIN", 200))
-VOICE_MAX_CHARS = int(get("voice_max", "SCRIBE_VOICE_MAX", 280))
+                                    "FECHO_TASK_CONTINUE_THRESHOLD", 0.35))
+VOICE_MIN_CHARS = int(get("voice_min", "FECHO_VOICE_MIN", 200))
+VOICE_MAX_CHARS = int(get("voice_max", "FECHO_VOICE_MAX", 280))
 
 
 def reload_module() -> None:

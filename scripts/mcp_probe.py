@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""最小 MCP client：把 scribe-mcp 当子进程拉起来，走真实 stdio JSON-RPC。
+"""最小 MCP client：把 fecho-mcp 当子进程拉起来，走真实 stdio JSON-RPC。
 
 开发时用来验证工具链路，不依赖任何 MCP 宿主。
   python3 scripts/mcp_probe.py list
@@ -18,9 +18,9 @@ class MCPSession:
     def __init__(self, client_name="mcp-probe", session_id=None, cmd=None):
         env = dict(os.environ)
         if session_id:
-            env["SCRIBE_SESSION_ID"] = session_id
+            env["FECHO_SESSION_ID"] = session_id
         self.p = subprocess.Popen(
-            cmd or [sys.executable, "-u", "-m", "scribe.mcp_server"],
+            cmd or [sys.executable, "-u", "-m", "fecho.mcp_server"],
             cwd=ROOT, env=env, text=True, encoding="utf-8",
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.n = 0

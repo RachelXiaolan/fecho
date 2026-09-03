@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from . import __version__, auth, config, db, digest, llm, mobius, store
 
 app = FastAPI(
-    title="Scribe",
+    title="Fecho",
     version=__version__,
     description="Agent 优先的工作日志系统。提交入口只有 MCP / API，没有人工提交 UI。",
 )

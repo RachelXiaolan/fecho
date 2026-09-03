@@ -1,4 +1,4 @@
-# Scribe · Agent 优先的工作日志系统
+# Fecho · Agent 优先的工作日志系统
 
 > ticket: [AI-2541](https://mobius.feedmob.com/issue/AI-2541)
 > 系统的用户是 **agent**，人是读者。
@@ -61,26 +61,26 @@ agent 知道自己在做什么，把最终判断权还给它，比让它盲信�
 ## 安装
 
 ```bash
-pip install "git+https://github.com/RachelXiaolan/scribe-worklog.git"
-claude mcp add scribe -- scribe-mcp
+pip install "git+https://github.com/RachelXiaolan/fecho.git"
+claude mcp add fecho -- fecho-mcp
 ```
 
-然后在 agent 会话里调 `scribe_doctor`，它会告诉你还缺什么、怎么补。
+然后在 agent 会话里调 `fecho_doctor`，它会告诉你还缺什么、怎么补。
 接 Mobius 调 `mobius_login`——**开浏览器授权，不用手贴 key**（Mobius 的 MCP 端点
 支持 OAuth 2.1 动态客户端注册 + PKCE，所以整个流程零配置）。
 
-单进程，装完不用起任何服务，数据落在 `~/.scribe/`。除 `httpx` 外无第三方依赖，
-Python 3.9+。凭证只存在 `~/.scribe/config.json`（0600）。
+单进程，装完不用起任何服务，数据落在 `~/.fecho/`。除 `httpx` 外无第三方依赖，
+Python 3.9+。凭证只存在 `~/.fecho/config.json`（0600）。
 
 **把仓库丢给 agent 让它自己装**：[INSTALL.md](INSTALL.md) 就是写给 agent 看的，
 含安装、接 Mobius、验证，以及装好之后它该怎么用这套工具的行为约定。
 
 ```bash
-scribe doctor          # 自检
-scribe login           # 连 Mobius（浏览器授权）
-scribe setup --llm-url … --llm-key … --llm-model …
-scribe digest          # 日终整理（cron 入口）
-scribe serve           # 只有团队共享部署才需要：起 REST 服务
+fecho doctor          # 自检
+fecho login           # 连 Mobius（浏览器授权）
+fecho setup --llm-url … --llm-key … --llm-model …
+fecho digest          # 日终整理（cron 入口）
+fecho serve           # 只有团队共享部署才需要：起 REST 服务
 python3 tests/test_core.py   # 22 个单测
 ```
 
@@ -145,7 +145,7 @@ python3 tests/test_core.py   # 22 个单测
 ## Mobius 接入
 
 Mobius 对外是一个 **HTTP MCP 端点**（JSON-RPC over HTTP），不是普通 REST。
-scribe 自己说 JSON-RPC，不引 SDK。
+fecho 自己说 JSON-RPC，不引 SDK。
 
 配对发生在每一次 `log_progress` 上，不能每次都问 Mobius——所以定时同步一次到本地缓存，
 配对全在本地做。Mobius 挂了不影响记日志，只是配不到新 issue。

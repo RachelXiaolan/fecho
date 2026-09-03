@@ -62,7 +62,7 @@ def register_client(meta: Dict[str, Any], redirect_uri: str) -> Dict[str, Any]:
     if not endpoint:
         raise OAuthError("该授权服务器不支持动态注册，请改用 --token 手动贴凭证")
     body = {
-        "client_name": "Scribe 工作日志",
+        "client_name": "Fecho 工作日志",
         "redirect_uris": [redirect_uri],
         "grant_types": ["authorization_code", "refresh_token"],
         "response_types": ["code"],

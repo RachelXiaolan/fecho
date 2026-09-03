@@ -1,4 +1,4 @@
-"""scribe 命令行：装完之后人（或 agent）用来配置和排查的入口。"""
+"""fecho 命令行：装完之后人（或 agent）用来配置和排查的入口。"""
 import argparse
 import json
 import sys
@@ -13,7 +13,7 @@ def _p(obj: Any) -> None:
 
 def cmd_doctor(args) -> int:
     d = service.doctor()
-    print("Scribe %s · 作者=%s · 数据在 %s\n" % (
+    print("Fecho %s · 作者=%s · 数据在 %s\n" % (
         __version__, d["config"]["author"], d["config"]["home"]))
     for c in d["checks"]:
         print("%s %s — %s" % ("✓" if c["ok"] else "✗", c["name"], c["detail"]))
@@ -51,7 +51,7 @@ def cmd_login(args) -> int:
         print("已连接（授权有效期至 %s）" % res["expires_at"])
 
     if not config.MOBIUS_ASSIGNEE:
-        print("提示：还不知道要拉谁的 issue，补一句 scribe login --assignee you@company.com")
+        print("提示：还不知道要拉谁的 issue，补一句 fecho login --assignee you@company.com")
         return 0
     try:
         s = service.sync_issues()
@@ -105,7 +105,7 @@ def cmd_digest(args) -> int:
 
 MCP_SNIPPET = {
     "mcpServers": {
-        "scribe": {"command": "scribe-mcp", "args": [], "env": {}}
+        "fecho": {"command": "fecho-mcp", "args": [], "env": {}}
     }
 }
 
@@ -114,9 +114,9 @@ def cmd_install(args) -> int:
     print("把下面这段合进你的 MCP 配置：\n")
     print(json.dumps(MCP_SNIPPET, ensure_ascii=False, indent=2))
     print("\n位置：")
-    print("  claude code : ~/.claude.json 的 mcpServers（或 claude mcp add scribe -- scribe-mcp）")
-    print("  codex       : ~/.codex/config.toml 的 [mcp_servers.scribe]")
-    print("\n装好之后在 agent 会话里调 scribe_doctor，它会告诉你还缺什么。")
+    print("  claude code : ~/.claude.json 的 mcpServers（或 claude mcp add fecho -- fecho-mcp）")
+    print("  codex       : ~/.codex/config.toml 的 [mcp_servers.fecho]")
+    print("\n装好之后在 agent 会话里调 fecho_doctor，它会告诉你还缺什么。")
     return 0
 
 
@@ -124,12 +124,12 @@ def cmd_serve(args) -> int:
     """团队共享部署时才需要：起 REST 服务，多人共用一个库。"""
     import uvicorn
 
-    uvicorn.run("scribe.api:app", host=args.host, port=args.port)
+    uvicorn.run("fecho.api:app", host=args.host, port=args.port)
     return 0
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(prog="scribe", description="Agent 优先的工作日志系统")
+    ap = argparse.ArgumentParser(prog="fecho", description="Agent 优先的工作日志系统")
     ap.add_argument("--version", action="version", version=__version__)
     sub = ap.add_subparsers(dest="cmd", required=True)
 

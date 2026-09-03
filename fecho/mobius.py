@@ -24,7 +24,7 @@ def configured() -> bool:
 
 def _rpc(method: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     if not configured():
-        raise MobiusError("未配置 Mobius：需要 SCRIBE_MOBIUS_URL 与 SCRIBE_MOBIUS_TOKEN")
+        raise MobiusError("未配置 Mobius：需要 FECHO_MOBIUS_URL 与 FECHO_MOBIUS_TOKEN")
     body: Dict[str, Any] = {"jsonrpc": "2.0", "id": 1, "method": method}
     if params is not None:
         body["params"] = params
@@ -66,7 +66,7 @@ def sync(author: str, assignee: Optional[str] = None) -> Dict[str, Any]:
     """把某人的 issue 同步进本地缓存。cron 或开工时调。"""
     assignee = assignee or config.MOBIUS_ASSIGNEE
     if not assignee:
-        raise MobiusError("不知道要同步谁的 issue：设置 SCRIBE_MOBIUS_ASSIGNEE 或传 assignee")
+        raise MobiusError("不知道要同步谁的 issue：设置 FECHO_MOBIUS_ASSIGNEE 或传 assignee")
     issues = fetch_open_issues(assignee)
     now = store.now_iso()
     with db.cursor() as conn:
