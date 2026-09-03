@@ -1,0 +1,4 @@
+{
+  "_comment": "V0 的 PTO 数据源：本地覆盖表。二批换成 timeoff API 后本文件仅作 fallback。",
+  "leo": ["2026-09-03"]
+}
