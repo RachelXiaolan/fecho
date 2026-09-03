@@ -92,6 +92,20 @@ fecho setup --llm-url <base_url> --llm-key <key> --llm-model <model>
 
 ---
 
+## Step 5b · 接团队 collector（可选，只有团队已经部署了共享 collector 才做这步）
+
+问用户：「团队的 fecho collector 地址是什么？有没有给你分配 token？」都没有就跳过这步，
+不影响个人使用。有的话：
+
+```bash
+fecho setup --collector-url <地址> --collector-token <token>
+```
+
+**验证**：`fecho_doctor` 的「团队协作」一项变 ✓。之后每次 `end_of_day` / `fecho digest`
+出完稿会自动把日报和口播稿推给 collector——只推成品，不推原始进展。
+
+---
+
 ## Step 6 · 试一条
 
 调用 `log_progress(content="装好了 fecho 并接上了 Mobius")`，看返回里的「配对方式」。

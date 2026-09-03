@@ -88,6 +88,16 @@ TOOLS = [
                         "然后按它给的 fix 一步步做完。"),
         "inputSchema": {"type": "object", "properties": {}},
     },
+    {
+        "name": "team_digest",
+        "description": (
+            "看团队某天各自推送过来的日报（需要团队配好共享 collector）。"
+            "只有整理好的成品，看不到任何人的原始进展——collector 那边物理上就不存这个。"
+        ),
+        "inputSchema": {"type": "object", "properties": {
+            "date": {"type": "string", "description": "YYYY-MM-DD，默认今天"},
+            "author": {"type": "string", "description": "可选，只看某人"}}},
+    },
 ]
 
 _METHOD_LABEL = {
@@ -121,6 +131,9 @@ def _fmt_report(r: Dict[str, Any]) -> str:
         out.append("! " + w)
     out += ["", "=== 日报 ===", r["daily_md"], "", "=== 口播稿 ===", r["voice_md"],
             "", "文件：", "\n".join("  " + p for p in r["files"].values())]
+    tp = r.get("team_push")
+    if tp:
+        out.append("团队：已推送到 collector" if tp.get("pushed") else "团队：未推送（%s）" % tp.get("reason"))
     return "\n".join(out)
 
 
@@ -229,8 +242,25 @@ def call_tool(name: str, args: Dict[str, Any]) -> str:
             out.append("%s %s — %s" % ("✓" if c["ok"] else "✗", c["name"], c["detail"]))
             if c.get("fix"):
                 out.append("    → %s" % c["fix"])
-        out += ["", "现在能做：记进展 ✓｜自动配 Mobius %s｜出日报 %s" % (
-            "✓" if d["ready_to_match"] else "✗", "✓" if d["ready_to_report"] else "✗")]
+        out += ["", "现在能做：记进展 ✓｜自动配 Mobius %s｜出日报 %s｜团队协作 %s" % (
+            "✓" if d["ready_to_match"] else "✗", "✓" if d["ready_to_report"] else "✗",
+            "✓" if d["ready_for_team"] else "✗（可选）")]
+        return "\n".join(out)
+
+    if name == "team_digest":
+        from . import push
+
+        try:
+            d = service.team_digest(args.get("date"), args.get("author"))
+        except push.PushError as exc:
+            return "连不上团队 collector：%s" % exc
+        if not d["count"]:
+            return "%s 团队还没有人推送过报告。" % d["date"]
+        out = ["%s 团队日报（%d 人）：" % (d["date"], d["count"])]
+        for a in d["authors"]:
+            out.append("\n## %s" % a["author"])
+            if a.get("daily"):
+                out.append(a["daily"]["content_md"])
         return "\n".join(out)
 
     raise RuntimeError("未知工具: %s" % name)

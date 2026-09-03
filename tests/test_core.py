@@ -241,6 +241,65 @@ class TestScoping(unittest.TestCase):
         self.assertEqual(len(db.list_updates(date=D)), 2)
 
 
+class TestCollector(unittest.TestCase):
+    """team_reports 是 collector 的全部——没有 entries/tasks 表，隐私边界是结构性的。
+    这里盯的是唯一真正重要的安全属性：author 只能从 token 反查，body 里传什么都不算。"""
+
+    def setUp(self):
+        import importlib
+
+        from fastapi.testclient import TestClient
+
+        with open(os.environ["FECHO_TOKENS"], "w") as f:
+            json.dump({
+                "tok-a": {"author": "alice", "display_name": "Alice"},
+                "tok-b": {"author": "bob", "display_name": "Bob"},
+            }, f)
+
+        from fecho import collector as collector_mod
+
+        importlib.reload(collector_mod)
+        self.collector = collector_mod
+        collector_mod._db_path().unlink(missing_ok=True)
+        collector_mod.init()
+        self.client = TestClient(collector_mod.app)
+
+    def _push(self, token, **body):
+        return self.client.post("/reports", json=body, headers={"Authorization": "Bearer " + token})
+
+    def test_push_without_token_is_rejected(self):
+        r = self.client.post("/reports", json={"date": D, "daily_md": "x"})
+        self.assertEqual(r.status_code, 401)
+
+    def test_push_with_bad_token_is_rejected(self):
+        r = self._push("not-a-real-token", date=D, daily_md="x")
+        self.assertEqual(r.status_code, 401)
+
+    def test_author_comes_from_token_never_from_body(self):
+        """body 里塞 'author': 'bob' 也不该生效——ReportPush 模型压根不接受这个字段。"""
+        r = self._push("tok-a", date=D, daily_md="冒充 bob 的内容", author="bob")
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(r.json()["author"], "alice")
+        got = self.client.get("/reports", params={"date": D, "author": "bob"},
+                              headers={"Authorization": "Bearer tok-b"}).json()
+        self.assertEqual(got["count"], 0, "bob 名下不该出现 alice 用 bob 的 token 都没用过就写进去的记录")
+
+    def test_repush_overwrites_only_own_slot(self):
+        self._push("tok-a", date=D, daily_md="alice 第一版")
+        self._push("tok-a", date=D, daily_md="alice 第二版")
+        self._push("tok-b", date=D, daily_md="bob 的日报")
+        team = self.client.get("/reports", params={"date": D},
+                               headers={"Authorization": "Bearer tok-a"}).json()
+        by_author = {a["author"]: a for a in team["authors"]}
+        self.assertEqual(team["count"], 2)
+        self.assertEqual(by_author["alice"]["daily"]["content_md"], "alice 第二版")
+        self.assertEqual(by_author["bob"]["daily"]["content_md"], "bob 的日报")
+
+    def test_empty_push_is_rejected(self):
+        r = self._push("tok-a", date=D)
+        self.assertEqual(r.status_code, 400)
+
+
 if __name__ == "__main__":
     try:
         unittest.main(verbosity=2, exit=False)

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fecho"
-version = "0.3.0"
+version = "0.4.0"
 description = "Agent 优先的工作日志系统：agent 边干边记，自动归到 Mobius 任务上，日终出日报和口播稿"
 readme = "README.md"
 requires-python = ">=3.9"

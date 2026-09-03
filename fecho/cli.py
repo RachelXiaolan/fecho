@@ -68,10 +68,12 @@ def cmd_setup(args) -> int:
         "llm_base_url": args.llm_url, "llm_api_key": args.llm_key, "llm_model": args.llm_model,
         "llm_reasoning_effort": args.llm_reasoning_effort,
         "mobius_assignee": args.mobius_assignee,
+        "collector_url": args.collector_url, "collector_token": args.collector_token,
     }.items() if v}
     if not kw:
         print("没有要改的。可设：--author --display-name --persona "
-              "--llm-url --llm-key --llm-model --llm-reasoning-effort --mobius-assignee")
+              "--llm-url --llm-key --llm-model --llm-reasoning-effort --mobius-assignee "
+              "--collector-url --collector-token")
         return 1
     config.update(**kw)
     config.reload_module()
@@ -85,10 +87,8 @@ def cmd_sync(args) -> int:
 
 
 def cmd_digest(args) -> int:
-    from . import digest
-
     db.init()
-    r = digest.generate(config.AUTHOR, args.date or store.today(), force=args.force)
+    r = service.end_of_day(args.date, force=args.force)
     line = "[%s] %s %s · %d 个任务 / %d 条进展" % (
         r["status"], r["date"], r["author"], r["task_count"], r["update_count"])
     if r.get("generator"):
@@ -100,6 +100,31 @@ def cmd_digest(args) -> int:
         print("    ! %s" % w)
     for p in (r.get("files") or {}).values():
         print("    -> %s" % p)
+    tp = r.get("team_push")
+    if tp:
+        print(("    团队: 已推送" if tp.get("pushed") else "    团队: 未推送（%s）" % tp.get("reason")))
+    return 0
+
+
+def cmd_team(args) -> int:
+    from . import push
+
+    try:
+        d = service.team_digest(args.date or store.today(), args.author)
+    except push.PushError as exc:
+        print("连不上团队 collector：%s" % exc, file=sys.stderr)
+        return 1
+    if not d["count"]:
+        print("%s 团队还没有人推送过报告" % d["date"])
+        return 0
+    print("%s 团队日报（%d 人）：\n" % (d["date"], d["count"]))
+    for a in d["authors"]:
+        print("=== %s ===" % a["author"])
+        if a.get("daily"):
+            print(a["daily"]["content_md"])
+        if a.get("voice"):
+            print("\n--- 口播稿 ---\n%s" % a["voice"]["content_md"])
+        print()
     return 0
 
 
@@ -121,10 +146,17 @@ def cmd_install(args) -> int:
 
 
 def cmd_serve(args) -> int:
-    """团队共享部署时才需要：起 REST 服务，多人共用一个库。"""
+    """起团队 collector：只收日报/口播稿成品，不是共享的原始数据库。
+
+    部署在一台团队都能访问到的内部机器上。认证用 config.TOKENS_FILE
+    （examples/tokens.example.json 是格式参考），一人一个 token。
+    """
     import uvicorn
 
-    uvicorn.run("fecho.api:app", host=args.host, port=args.port)
+    print("Fecho collector 启动在 %s:%d" % (args.host, args.port))
+    print("token 文件：%s（不存在就先建一个，格式见 examples/tokens.example.json）"
+          % config.TOKENS_FILE)
+    uvicorn.run("fecho.collector:app", host=args.host, port=args.port)
     return 0
 
 
@@ -143,9 +175,10 @@ def main() -> int:
     p.add_argument("--timeout", type=int, default=300)
     p.set_defaults(fn=cmd_login)
 
-    p = sub.add_parser("setup", help="写配置（身份 / LLM / Mobius）")
+    p = sub.add_parser("setup", help="写配置（身份 / LLM / Mobius / 团队 collector）")
     for flag in ("--author", "--display-name", "--persona", "--llm-url", "--llm-key",
-                 "--llm-model", "--llm-reasoning-effort", "--mobius-assignee"):
+                 "--llm-model", "--llm-reasoning-effort", "--mobius-assignee",
+                 "--collector-url", "--collector-token"):
         p.add_argument(flag)
     p.set_defaults(fn=cmd_setup)
 
@@ -153,14 +186,19 @@ def main() -> int:
     p.add_argument("--assignee")
     p.set_defaults(fn=cmd_sync)
 
-    p = sub.add_parser("digest", help="日终整理（cron 入口）")
+    p = sub.add_parser("digest", help="日终整理（cron 入口，配了 collector 会顺带推送）")
     p.add_argument("--date")
     p.add_argument("--force", action="store_true")
     p.set_defaults(fn=cmd_digest)
 
+    p = sub.add_parser("team", help="看团队某天的日报（需要配好 collector）")
+    p.add_argument("--date")
+    p.add_argument("--author", help="只看某人")
+    p.set_defaults(fn=cmd_team)
+
     sub.add_parser("install", help="打印 MCP 配置片段").set_defaults(fn=cmd_install)
 
-    p = sub.add_parser("serve", help="起 REST 服务（团队共享部署时才需要）")
+    p = sub.add_parser("serve", help="起团队 collector（只收成品，不是共享数据库）")
     p.add_argument("--host", default=config.HOST)
     p.add_argument("--port", type=int, default=config.PORT)
     p.set_defaults(fn=cmd_serve)

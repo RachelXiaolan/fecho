@@ -51,7 +51,22 @@ def report(date: str, author: Optional[str] = None) -> Dict[str, Any]:
 
 def end_of_day(date: Optional[str] = None, author: Optional[str] = None,
                force: bool = False) -> Dict[str, Any]:
-    return digest.generate(author or whoami(), date or store.today(), force=force)
+    who = author or whoami()
+    when = date or store.today()
+    r = digest.generate(who, when, force=force)
+    if r["status"] in ("generated", "skipped", "pto-exempt"):
+        # 无论这次是不是重新生成，都把本地当前的成品同步给团队 collector；
+        # 没配 collector 或推送失败都不影响本地产物，只是团队视图暂时看不到这份。
+        from . import push
+
+        r["team_push"] = push.push(who, when)
+    return r
+
+
+def team_digest(date: Optional[str] = None, author: Optional[str] = None) -> Dict[str, Any]:
+    from . import push
+
+    return push.team_digest(date or store.today(), author)
 
 
 def sync_issues(assignee: Optional[str] = None, author: Optional[str] = None) -> Dict[str, Any]:
@@ -108,10 +123,21 @@ def doctor() -> Dict[str, Any]:
         "不配也能记流水，只是日终出的是兜底稿",
     })
 
+    team_ok = bool(cfg["team"]["collector_url"])
+    checks.append({
+        "name": "团队协作（可选）",
+        "ok": team_ok,
+        "detail": "已配置 %s" % cfg["team"]["collector_url"] if team_ok
+        else "未配置——日报只留在本机，不影响个人使用",
+        "fix": None if team_ok else
+        "团队部署了共享 collector 后：fecho setup --collector-url <url> --collector-token <token>",
+    })
+
     return {
         "config": cfg,
         "checks": checks,
         "ready_to_log": True,
         "ready_to_match": mob_ok and n_issues > 0,
         "ready_to_report": llm_ok,
+        "ready_for_team": team_ok,
     }

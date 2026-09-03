@@ -82,9 +82,12 @@ AUTHOR = get("author", "FECHO_AUTHOR", os.getenv("USER") or "me")
 DISPLAY_NAME = get("display_name", "FECHO_DISPLAY_NAME", "")
 PERSONA = get("persona", "FECHO_PERSONA", "default")
 
-# ---- 团队模式（可选）：指向一台共享的 fecho 服务 ----
-REMOTE_URL = get("remote_url", "FECHO_REMOTE_URL", "")
-REMOTE_TOKEN = get("remote_token", "FECHO_TOKEN", "")
+# ---- 团队联邦（可选）：日终把成品（日报/口播稿）推给共享收集端 ----
+# collector 只存收到的成品，物理上没有 entries/tasks 表——不是靠权限管住的隐私边界，
+# 是收集端的库里压根不存在能读到原始进展的表。
+COLLECTOR_URL = get("collector_url", "FECHO_COLLECTOR_URL", "")
+COLLECTOR_TOKEN = get("collector_token", "FECHO_COLLECTOR_TOKEN", "")
+# 下面两个只在你本机就是 collector（跑 `fecho serve`）时才有意义
 HOST = get("host", "FECHO_HOST", "127.0.0.1")
 PORT = int(get("port", "FECHO_PORT", 8899))
 
@@ -138,7 +141,7 @@ def redacted() -> Dict[str, Any]:
         "persona": PERSONA,
         "db": str(DB_PATH),
         "logs_dir": str(LOGS_DIR),
-        "mode": "remote(%s)" % REMOTE_URL if REMOTE_URL else "local",
+        "team": {"collector_url": COLLECTOR_URL or None, "token": mark(COLLECTOR_TOKEN)},
         "llm": {"base_url": LLM_BASE_URL or None, "model": LLM_MODEL or None,
                 "api_key": mark(LLM_API_KEY)},
         "mobius": {"url": MOBIUS_URL or None, "assignee": MOBIUS_ASSIGNEE or None,

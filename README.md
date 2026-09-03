@@ -92,9 +92,11 @@ python3 tests/test_core.py   # 22 个单测
 | `catch_up` | **开工时调**：拉回昨天的日报、口播稿，和现在还挂着的任务 |
 | `my_tasks` | 我现在有哪些任务在推进，各自最近一条进展是什么 |
 | `get_my_log` | 我今天推进了哪些任务、推到哪了 |
-| `list_team_log` | 团队某天推进了哪些任务 |
+| `end_of_day` | 收工出稿。输入没变时不重复生成；配了团队 collector 会顺带推送成品 |
+| `mobius_login` | 连接 Mobius：开浏览器走 OAuth，不用手贴 key |
 | `sync_issues` | 从 Mobius 刷新配对用的 issue 缓存（cron 也会跑） |
-| `end_of_day` | 收工出稿。输入没变时不重复生成 |
+| `fecho_doctor` | 自检：什么配好了、什么还缺、缺的怎么补 |
+| `team_digest` | 看团队某天各自推送过来的日报（需要配好共享 collector） |
 
 `catch_up` 是"反向"那一环。说明白：**MCP 协议里服务端没法主动往会话里塞东西**，
 所以这不是系统推送，是 agent 开工时自己拉一次。配上宿主的会话启动钩子，效果等同于推。
@@ -124,23 +126,59 @@ python3 tests/test_core.py   # 22 个单测
 **端点形态**：`http://api.feedmob.it.com` 把思维链拆进 `reasoning_content`；带 `/v1` 的那层
 内联在 `content` 的 `<think>` 标签里。客户端两种都吃得下，端点行为不泄漏到整理层。
 
-## API
+## 团队部署（联邦模式）
 
-全部走 `Authorization: Bearer <token>`，token 即身份。
+单进程模式没有对外接口——每个人的数据只在自己机器上的 SQLite 里，`fecho-mcp` 直接读写
+本地文件，没有网络请求，也没有可以远程访问的 API。**这是默认状态，个人使用到此为止。**
+
+要多人协作，走的是**联邦汇总**，不是共享数据库：每个人本机还是单机跑，只把**日终整理好
+的成品**（日报 + 口播稿）推给一个共享的 collector；collector 从不读任何人的原始进展。
+
+```
+每人的本机                          共享 collector
+┌─────────────┐   POST /reports   ┌──────────────┐
+│ entries      │ ─────成品──────▶  │ team_reports  │
+│ tasks        │  (只有日报/口播稿) │ （没有 entries/│
+│ updates      │                   │  tasks 表）    │
+└─────────────┘                   └──────────────┘
+```
+
+**部署 collector**（找一台团队都能访问到的内部机器）：
+
+```bash
+# collector 主机上，建 tokens.json（格式参考 examples/tokens.example.json）
+cat > ~/.fecho/tokens.json <<'JSON'
+{ "tok-rachel": {"author": "rachel", "display_name": "Rachel Lu"},
+  "tok-leo":    {"author": "leo",    "display_name": "Leo"} }
+JSON
+fecho serve --host 0.0.0.0 --port 8899
+```
+
+**每个人本机接上去**：
+
+```bash
+fecho setup --collector-url http://<collector-host>:8899 --collector-token tok-rachel
+```
+
+之后每次 `fecho digest`（或 `end_of_day` 工具）出完稿会自动推送，本地文件永远是权威副本——
+collector 连不上不影响本地记进展、出日报，只是团队视图暂时看不到这份。查团队某天的日报：
+
+```bash
+fecho team --date 2026-09-04
+```
+
+或 agent 会话里调 `team_digest` 工具。
+
+**认证**：复用同一套 Bearer token（`auth.py`），一人一个 token。**author 只从 token 反查，
+请求体里传什么都不算数**——没人能拿自己的 token 冒充别人推送，`tests/test_core.py` 的
+`TestCollector` 专门测了这条。
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| POST | `/progress` | 记一条进展。返回配到了哪个任务、怎么配的、置信度 |
-| GET | `/progress?date=&author=&mine=` | 某天按任务分组的进展 |
-| GET | `/tasks?mine=&status=` | 任务列表 |
-| GET | `/tasks/{id}` | 单个任务及其全部进展 |
-| POST | `/tasks/{id}/close` | 关掉一个任务 |
-| POST | `/mobius/sync` | 刷新 Mobius issue 缓存 |
-| GET | `/mobius/issues` | 看缓存里有什么 |
-| GET | `/report/{date}?generate=&force=` | 取整理稿，可顺手触发生成 |
-| POST | `/report/{date}/generate?all_authors=` | cron 入口 |
-| GET | `/stats?since=&until=` | 按人 / 任务 / agent / 配对方式聚合 |
-| GET | `/day/{date}/{author}.md` | 只读日页（纯文本） |
+| POST | `/reports` | 推成品：`{date, daily_md?, voice_md?, meta}`，author 由 token 决定 |
+| GET | `/reports?date=&author=` | 团队某天的成品，缺省=全员 |
+| GET | `/reports/{date}/{author}.md?kind=daily\|voice` | 只读单人单份（纯文本） |
+| GET | `/healthz` | 存活检查 |
 
 ## Mobius 接入
 
@@ -154,14 +192,18 @@ fecho 自己说 JSON-RPC，不引 SDK。
 
 ## cron
 
+单进程模式下 cron 直接调 CLI，不用起任何服务：
+
 ```bash
-0  9 * * 1-5 curl -sX POST -H "Authorization: Bearer $TOK" localhost:8899/mobius/sync
-30 19 * * 1-5 /path/to/scripe/scripts/cron_digest.sh >> /path/to/scripe/logs/cron.log 2>&1
+0  9 * * 1-5 fecho sync                              # 早上刷新 issue 缓存
+30 19 * * 1-5 /path/to/repo/scripts/cron_digest.sh    # 下班前出稿（配了 collector 会顺带推送）
 ```
 
 ## 还没做
 
-- **只读 UI** —— 该有，看任务/日报/翻历史。提交入口仍然不放网页上。数据结构已经撑得住
+- **只读 UI** —— 该有，看任务/日报/翻历史，团队视图现在只有 `fecho team` 一个命令行入口。
+  提交入口仍然不放网页上。数据结构已经撑得住
 - **timeoff 真对接** —— PTO 的管道分支（豁免/降级）已经跑通，数据源还是本地表
 - **任务状态回写 Mobius** —— 现在只读不写
+- **collector 高可用** —— 现在是单机单进程 SQLite，团队再大一点要考虑挂了怎么办
 - **Slack 推送** —— 语音永远人录，文字稿要不要自动发待定
