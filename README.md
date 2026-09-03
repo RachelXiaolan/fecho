@@ -61,7 +61,7 @@ agent 知道自己在做什么，把最终判断权还给它，比让它盲信�
 ## 安装
 
 ```bash
-pip install "git+https://github.com/<owner>/<repo>.git"
+pip install "git+https://github.com/RachelXiaolan/scribe-worklog.git"
 claude mcp add scribe -- scribe-mcp
 ```
 

@@ -8,7 +8,7 @@
 ## Step 1 · 安装
 
 ```bash
-pip install "git+https://github.com/<owner>/<repo>.git"
+pip install "git+https://github.com/RachelXiaolan/scribe-worklog.git"
 ```
 
 装好之后有两个命令：`scribe`（人和你用来配置/排查）、`scribe-mcp`（MCP 服务本体）。
@@ -17,6 +17,8 @@ pip install "git+https://github.com/<owner>/<repo>.git"
 
 > 装不上就换 `pipx install git+…` 或 `uv tool install git+…`。
 > 需要 Python 3.9 以上，除 `httpx` 外无第三方依赖。
+> 仓库是私有的——如果报 403/认证失败，说明当前机器没有该仓库的 GitHub 访问权限，
+> 让用户先 `gh auth login`，或者找仓库所有者要访问权。
 
 ---
 
