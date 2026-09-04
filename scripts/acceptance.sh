@@ -13,7 +13,7 @@ TODAY="$(date +%F)"
 
 step() { printf '\n\033[1;36m━━━ %s\033[0m\n' "$*"; }
 ok()   { printf '  \033[32m✓\033[0m %s\n' "$*"; }
-mcp()  { SCRIBE_SESSION_ID="$2" FECHO_SESSION_ID="$2" python3 scripts/mcp_probe.py --client "$1" call "${@:3}"; }
+mcp()  { FECHO_SESSION_ID="$2" python3 scripts/mcp_probe.py --client "$1" call "${@:3}"; }
 
 step "0. 干净安装状态：fecho doctor"
 python3 -m fecho.cli doctor
@@ -122,7 +122,18 @@ printf '  错 token  -> HTTP %s\n' "$(curl -s -o /dev/null -w '%{http_code}' -X 
   -H 'Content-Type: application/json' -d '{"date":"'"${TODAY}"'","daily_md":"x"}')"
 
 step "16. 隐私边界是结构性的：collector 的库里有哪些表"
-sqlite3 "${CHOME}/collector.db" ".tables"
+# sqlite3 在 macOS 自带、Linux 不一定有——没有就退回 Python 的 sqlite3 模块，
+# 免得队友在别的机器上跑验收莫名其妙挂在最后一步。
+if command -v sqlite3 >/dev/null 2>&1; then
+  sqlite3 "${CHOME}/collector.db" ".tables"
+else
+  python3 -c "
+import sqlite3, sys
+c = sqlite3.connect(sys.argv[1])
+print(' '.join(r[0] for r in c.execute(
+    \"SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'\")))
+" "${CHOME}/collector.db"
+fi
 ok "只有 team_reports —— entries / tasks / updates 在这台机器上根本不存在"
 
 printf '\n\033[1;32m验收完成。\033[0m 个人产物在 %s\n' "${FECHO_HOME#$ROOT/}/logs/${TODAY}/"
