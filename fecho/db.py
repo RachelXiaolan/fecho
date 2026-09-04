@@ -60,6 +60,15 @@ CREATE TABLE IF NOT EXISTS mobius_issues (
     PRIMARY KEY (issue_key, author)
 );
 
+-- 扫描水位线：记住每个会话已经处理到哪个时刻。
+-- 没有它，能开好几周的会话每天都会被重新总结一遍，库里堆重复。
+CREATE TABLE IF NOT EXISTS scan_marks (
+    session_id    TEXT PRIMARY KEY,
+    last_ts       TEXT NOT NULL,     -- 已处理到的最后一条消息时间戳（ISO，UTC）
+    last_scan_at  TEXT NOT NULL,
+    entries       INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS reports (
     report_id     TEXT PRIMARY KEY,
     author        TEXT NOT NULL,

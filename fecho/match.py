@@ -163,19 +163,19 @@ def decide(
             "score": s_issue,
         }
 
-    task, s_task = best_task(content, tasks, recent_texts)
-
-    if task and s_task >= config.TASK_CONTINUE_THRESHOLD:
-        return {"method": "task-continue", "task_id": task["task_id"], "score": s_task}
-
-    # 关键词和已有任务都没配上，但工作目录绑了 issue —— 用它。
-    # 位置是刻意的：排在关键词证据**之后**（正文里明确提到别的 issue 时，
-    # 那个更具体的信号该赢），排在会话惯性**之前**（绑定是人主动配的，
-    # 比「上一条进展去了哪」这种无分数的猜测更可信）。
+    # 工作目录绑了 issue —— 用它。
+    # 位置是刻意的：排在关键词证据**之后**（正文里明确提到别的 issue 时，那个更
+    # 具体的信号该赢），但排在「接续已有任务」**之前**。后者是启发式打分，实测会
+    # 被一个碰巧标题相近的旧自由任务截胡；绑定是人主动配的，更可信。
     bound = project_binding(project)
     if bound:
         return {"method": "project-bound", "issue_key": bound, "score": None,
                 "via": "project:%s" % project}
+
+    task, s_task = best_task(content, tasks, recent_texts)
+
+    if task and s_task >= config.TASK_CONTINUE_THRESHOLD:
+        return {"method": "task-continue", "task_id": task["task_id"], "score": s_task}
 
     # 到这里说明：正文里没有 issue 号，也配不到任何 issue 或已有任务。
     # 这种「接口跑通了」式的句子靠关键词永远判不出归属，只有一个信号可用——

@@ -147,6 +147,23 @@ class TestAggregation(unittest.TestCase):
         self.assertEqual(b["verdict"], "duplicate")
         self.assertEqual(len(db.list_updates(task_id=a["task"]["task_id"])), 1)
 
+    def test_scan_near_duplicates_are_blocked(self):
+        """扫描是把同一段对话重新总结，措辞变了信息量没变——重跑时该挡。"""
+        store.record_progress("t", "AI-2541 验收脚本扩到 16 步并全过，含真实 LLM 和 collector",
+                              date=D, source_agent="scan")
+        b = store.record_progress("t", "AI-2541 验收脚本扩展到 16 步全绿，加入 collector 全链路和真实 LLM",
+                                  date=D, source_agent="scan")
+        self.assertEqual(b["verdict"], "duplicate")
+
+    def test_agent_written_near_duplicates_are_still_kept(self):
+        """但 agent 主动记的相似内容可能是真实的不同进展，必须全留——
+        这正是最早那版把真进度删掉的错误，不能借去重之名倒回去。"""
+        a = store.record_progress("t", "AI-2541 接口跑通了", date=D, source_agent="claude-code")
+        b = store.record_progress("t", "AI-2541 接口又改了下，跑通了", date=D,
+                                  source_agent="claude-code")
+        self.assertNotEqual(b["verdict"], "duplicate")
+        self.assertEqual(len(db.list_updates(task_id=a["task"]["task_id"])), 2)
+
     def test_empty_content_rejected(self):
         with self.assertRaises(ValueError):
             store.record_progress("t", "   ", date=D)
@@ -320,6 +337,72 @@ class TestProjectBinding(unittest.TestCase):
                                   project="/home/me/work/some-research")
         self.assertEqual(r["task"]["source"], "freeform")
         self.assertIsNone(r["task"]["issue_key"])
+
+
+class TestScanWatermark(unittest.TestCase):
+    """水位线。这一组盯的是一个数据丢失级的 bug：
+    某组 LLM 失败时，如果水位线照样推过去，那段对话永远不会被重试。"""
+
+    def setUp(self):
+        reset()
+        from fecho import scan
+        self.scan = scan
+        with db.cursor() as c:
+            c.execute("DELETE FROM scan_marks")
+
+    def test_mark_roundtrip(self):
+        self.assertIsNone(self.scan.get_mark("s1"))
+        self.scan.set_mark("s1", "2030-01-01T10:00:00Z", 3)
+        self.assertEqual(self.scan.get_mark("s1"), "2030-01-01T10:00:00Z")
+
+    def test_mark_advances_and_accumulates_count(self):
+        self.scan.set_mark("s1", "2030-01-01T10:00:00Z", 3)
+        self.scan.set_mark("s1", "2030-01-01T12:00:00Z", 2)
+        self.assertEqual(self.scan.get_mark("s1"), "2030-01-01T12:00:00Z")
+        with db.cursor() as c:
+            row = c.execute("SELECT entries FROM scan_marks WHERE session_id=?",
+                            ("s1",)).fetchone()
+        self.assertEqual(row["entries"], 5)
+
+    def test_watermark_stops_before_a_failed_group(self):
+        """成功的段保持已处理，失败那段及之后的必须能被重试。"""
+        stamps = ["2030-01-01T09:00:00Z", "2030-01-01T10:00:00Z",
+                  "2030-01-01T11:00:00Z", "2030-01-01T12:00:00Z"]
+        failed_from = "2030-01-01T11:00:00Z"
+        usable = [t for t in stamps if t < failed_from]
+        self.assertEqual(usable[-1], "2030-01-01T10:00:00Z",
+                         "水位线该停在失败组之前那条")
+
+    def test_whole_session_blocked_keeps_mark_untouched(self):
+        stamps = ["2030-01-01T11:00:00Z", "2030-01-01T12:00:00Z"]
+        failed_from = "2030-01-01T11:00:00Z"
+        usable = [t for t in stamps if t < failed_from]
+        self.assertEqual(usable, [], "第一组就失败时，水位线一步都不能动")
+
+    def test_parse_survives_chinese_quotes(self):
+        """中文引号会把 JSON 打断，所以输出格式是竖线分隔的一行一条。"""
+        raw = 'done | 把"一条条记录"改成了"任务+进展"，日报按任务分组\npitfall | 试了 X 不行'
+        got = self.scan.parse_entries(raw)
+        self.assertEqual(len(got), 2)
+        self.assertIn("一条条记录", got[0]["content"])
+        self.assertEqual(got[1]["kind"], "pitfall")
+
+    def test_parse_ignores_noise_lines(self):
+        raw = "这是模型的开场白\n```\ndone | 真正的一条\n随便一行没有竖线\nbogus | 类型不认识"
+        got = self.scan.parse_entries(raw)
+        self.assertEqual([e["content"] for e in got], ["真正的一条"])
+
+    def test_boilerplate_is_dropped_before_llm(self):
+        """宿主注入的 skill 文档不是用户说的话，实测占一天内容 40%+。"""
+        rec = {"message": {"content": [
+            {"type": "text", "text": "<command-name>/ego-browser</command-name> 一大段文档"}]}}
+        self.assertEqual(self.scan._text_of(rec), "")
+
+    def test_tool_output_is_dropped_before_llm(self):
+        rec = {"message": {"content": [
+            {"type": "text", "text": "真话"},
+            {"type": "tool_result", "content": "几百 KB 的工具输出"}]}}
+        self.assertEqual(self.scan._text_of(rec), "真话")
 
 
 class TestCollector(unittest.TestCase):

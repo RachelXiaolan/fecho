@@ -162,6 +162,21 @@ def record_progress(
             return _result(task, dup["update_id"], "duplicate", decision, date, author,
                            note="同一任务下已有逐字相同的进展，未重复写入。")
 
+        # 扫描来源额外挡近似重复。这跟「相似就删」不是一回事：
+        # agent 主动记的相似内容可能是真实的不同进展（措辞碰巧像），必须全留；
+        # 但扫描是把同一段对话重新总结一遍，措辞变了信息量没变，留着只是噪音。
+        # 重跑（比如上次某组失败后补跑）会大量产生这种，实测一天能堆出 85 条里 158 对。
+        if (source_agent or "") == "scan":
+            near = conn.execute(
+                "SELECT update_id, content_md FROM updates WHERE task_id=? AND date=?"
+                " AND source_agent='scan' AND status='active'",
+                (task["task_id"], date),
+            ).fetchall()
+            for row in near:
+                if match.score(content_md, row["content_md"]) >= config.SCAN_DEDUPE_SIMILARITY:
+                    return _result(task, row["update_id"], "duplicate", decision, date, author,
+                                   note="同一任务下已有内容几乎相同的扫描进展，未重复写入。")
+
         update_id = str(uuid.uuid4())
         ts = now_iso()
         conn.execute(

@@ -112,6 +112,12 @@ PROJECT_BINDINGS: Dict[str, str] = load().get("project_bindings") or {}
 
 # ---- 调参 ----
 MATCH_THRESHOLD = float(get("match_threshold", "FECHO_MATCH_THRESHOLD", 0.30))
+# 扫描来源的近似重复门槛。只作用于机器复述，不动 agent 主动记的内容。
+# 0.62 是拿真实重跑数据标出来的：0.62-0.75 那一档 8 对全是同一件事的两种说法，
+# 0.55 那一档全是不同的事（比如「加了约束」和「约束没管用」是相反结论，
+# 合并掉就丢信息）。中间这条缝很干净。
+SCAN_DEDUPE_SIMILARITY = float(get("scan_dedupe_similarity",
+                                   "FECHO_SCAN_DEDUPE_SIMILARITY", 0.62))
 TASK_CONTINUE_THRESHOLD = float(get("task_continue_threshold",
                                     "FECHO_TASK_CONTINUE_THRESHOLD", 0.35))
 VOICE_MIN_CHARS = int(get("voice_min", "FECHO_VOICE_MIN", 200))

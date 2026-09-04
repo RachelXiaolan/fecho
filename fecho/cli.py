@@ -162,6 +162,109 @@ def cmd_scope(args) -> int:
     return 0
 
 
+def cmd_scan(args) -> int:
+    """读会话记录，把「做成了什么」自动记成进展。cron 的第一步。"""
+    from . import scan as scanner
+
+    r = scanner.scan(days=args.days, dry_run=args.dry_run)
+    if not r["ok"]:
+        print(r["error"], file=sys.stderr)
+        return 1
+
+    for verdict, paths in sorted(r["skipped"].items()):
+        label = {"unregistered": "未登记，已跳过（只知道路径，没读内容）",
+                 "ignored": "已设为忽略"}.get(verdict, verdict)
+        print("%s：" % label)
+        for pth in paths:
+            print("  %s" % pth)
+        if verdict == "unregistered":
+            print("  → 要算工作就在那个目录里跑 fecho scope --work .")
+        print()
+
+    if not r["groups"]:
+        print(r.get("note", "没有新内容"))
+        return 0
+
+    for g in r["groups"]:
+        head = "%s · %s · %d 条消息 ≈ %d tokens" % (
+            g["date"], g["project"], g["messages"], g["tokens_in"])
+        if g.get("chunks", 1) > 1:
+            head += " · 切 %d 块" % g["chunks"]
+        if g["bound"]:
+            head += " · 绑定 %s" % g["bound"]
+        print(head)
+        if g.get("error"):
+            print("  ! LLM 失败：%s" % g["error"])
+            continue
+        icon = {"done": "✓", "pitfall": "⚠", "decision": "◆"}
+        for e in g["entries"]:
+            dup = "（重复，未写入）" if e["verdict"] == "duplicate" else ""
+            print("  %s %s" % (icon.get(e["kind"], "·"), e["content"]))
+            print("      → %s%s" % (e["issue"] or e["task"], dup))
+        print()
+
+    if r["dry_run"]:
+        print("dry-run：没有写入，水位线也没推进。共 %d tokens 的输入待处理。"
+              % r["tokens_in"])
+    else:
+        print("写入 %d 条进展，消耗输入约 %d tokens。" % (r["recorded"], r["tokens_in"]))
+        if r.get("retry_next_time"):
+            print("有 %d 个会话的部分内容这次没处理成，水位线已卡在失败处，下次扫描会重来。"
+                  % len(r["retry_next_time"]))
+    return 0
+
+
+def cmd_dedupe(args) -> int:
+    """清理扫描重跑留下的复述条目。默认只看不删，加 --apply 才动手。
+
+    只处理 source_agent='scan' 的条目——agent 主动记的内容里，措辞相似可能
+    是真实的不同进展，不在这个命令的射程内。
+    """
+    from . import match
+
+    db.init()
+    sql = ("SELECT update_id, task_id, date, content_md, created_at FROM updates"
+           " WHERE source_agent='scan' AND status='active'")
+    params = []
+    if args.date:
+        sql += " AND date=?"
+        params.append(args.date)
+    sql += " ORDER BY task_id, date, created_at"
+    with db.cursor() as conn:
+        rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
+
+    kept, drop = {}, []
+    for r in rows:
+        key = (r["task_id"], r["date"])
+        for k in kept.setdefault(key, []):
+            if match.score(r["content_md"], k["content_md"]) >= config.SCAN_DEDUPE_SIMILARITY:
+                drop.append((r, k))
+                break
+        else:
+            kept[key].append(r)
+
+    if not drop:
+        print("没有需要清理的复述条目（共检查 %d 条扫描进展）。" % len(rows))
+        return 0
+
+    print("发现 %d 条复述（保留先写入的那条）：\n" % len(drop))
+    for r, k in drop[:20]:
+        print("  删 %s" % r["content_md"][:58])
+        print("  留 %s\n" % k["content_md"][:58])
+    if len(drop) > 20:
+        print("  …另有 %d 条\n" % (len(drop) - 20))
+
+    if not args.apply:
+        print("这是预览。确认没问题再加 --apply 真删。")
+        return 0
+
+    with db.cursor() as conn:
+        conn.executemany("UPDATE updates SET status='superseded' WHERE update_id=?",
+                         [(r["update_id"],) for r, _ in drop])
+    print("已把 %d 条标记为 superseded（没有物理删除，随时可查）。" % len(drop))
+    return 0
+
+
 def cmd_digest(args) -> int:
     db.init()
     r = service.end_of_day(args.date, force=args.force)
@@ -275,6 +378,16 @@ def main() -> int:
     p.add_argument("--list", action="store_true", help="看现有绑定")
     p.add_argument("--remove", help="解除某条绑定")
     p.set_defaults(fn=cmd_bind)
+
+    p = sub.add_parser("scan", help="读会话记录自动记进展（cron 第一步）")
+    p.add_argument("--days", type=int, default=1, help="最多往回看几天，默认 1")
+    p.add_argument("--dry-run", action="store_true", help="只看会记出什么，不写库不推水位线")
+    p.set_defaults(fn=cmd_scan)
+
+    p = sub.add_parser("dedupe", help="清理扫描重跑留下的复述条目（默认只看不删）")
+    p.add_argument("--date", help="只处理某天")
+    p.add_argument("--apply", action="store_true", help="真的执行，不加就只预览")
+    p.set_defaults(fn=cmd_dedupe)
 
     p = sub.add_parser("digest", help="日终整理（cron 入口，配了 collector 会顺带推送）")
     p.add_argument("--date")
