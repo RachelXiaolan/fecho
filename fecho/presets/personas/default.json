@@ -2,7 +2,12 @@
   "display_name": "",
   "language": "zh",
   "daily_template": "# {date} 工作日志 · {display_name}\n\n## Done\n- ...\n\n## Todo\n- ...\n",
-  "daily_style": "分 Done / Todo 两段，条目化，动词开头，写清结果。涉及 ticket 的在行尾标注。",
+  "daily_style": "分 Done / To do 两段。每个任务一条编号项：短名 + 冒号 + 一句话总结，底下子弹点列具体进展。",
   "voice_style": "第一人称、口语化、平铺直叙地讲今天做了什么，结尾带一句明天计划。不出现 markdown 符号。",
-  "voice_target_chars": [200, 280]
+  "voice_target_chars": [
+    200,
+    280
+  ],
+  "daily_header": "{date_slash} 工作日志",
+  "issue_url_template": "https://mobius.feedmob.com/issue/{issue_key}"
 }

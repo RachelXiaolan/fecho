@@ -216,7 +216,7 @@ class TestDigest(unittest.TestCase):
         def flaky(messages, **kw):
             calls["n"] += 1
             if calls["n"] == 1:
-                return "# 日报\n\n- AI-2541 接口跑通了"
+                return "[1] 接口 | 跑通了\n- 细节一条"
             raise llm.LLMError("模拟口播稿失败")
 
         orig, llm.chat = llm.chat, flaky
@@ -256,6 +256,64 @@ class TestScoping(unittest.TestCase):
         store.record_progress("other", "别人的事", date=D)
         self.assertEqual(len(db.day_tasks("t", D)), 1)
         self.assertEqual(len(db.list_updates(date=D)), 2)
+
+
+class TestDailyFormat(unittest.TestCase):
+    """日报格式：链接必须由代码拼。模型复述 URL 会出错——它把 RachelXiaolan
+    写成过 RachelXiaelan，也把改名前的仓库名写回去过。"""
+
+    def setUp(self):
+        reset()
+        from fecho import personas
+        self.persona = personas.load("rachel")
+
+    def _tasks(self):
+        return [
+            {"title": "写一个提交工作日志的系统（给agent专用）", "issue_key": "AI-2541",
+             "source": "mobius", "task_id": "t1", "updates": [{"content_md": "跑通了"}]},
+            {"title": "帮同事查爬虫超时", "issue_key": None,
+             "source": "freeform", "task_id": "t2", "updates": [{"content_md": "是 DNS"}]},
+        ]
+
+    def test_mobius_task_gets_a_link_freeform_does_not(self):
+        items = {1: {"label": "fecho", "summary": "第一轮本地测试", "bullets": ["mcp 已接入"]},
+                 2: {"label": "爬虫超时", "summary": "定位到 DNS", "bullets": []}}
+        md = digest._assemble_daily("2026-09-04", self._tasks(), items, [], self.persona)
+        self.assertIn("[**fecho**](https://mobius.feedmob.com/issue/AI-2541)", md)
+        self.assertIn("**爬虫超时**", md)
+        self.assertNotIn("[**爬虫超时**](", md, "自由任务不该有链接")
+
+    def test_header_uses_slash_date(self):
+        md = digest._assemble_daily("2026-09-04", self._tasks(), {}, [], self.persona)
+        self.assertIn("# 2026/09/04 工作日志", md)
+
+    def test_todo_can_reference_a_task_and_inherit_its_link(self):
+        items = {1: {"label": "fecho", "summary": "x", "bullets": []}}
+        md = digest._assemble_daily("2026-09-04", self._tasks(), items,
+                                    [(1, "交给 Leo 验收"), (None, "找素材")], self.persona)
+        self.assertIn("## To do", md)
+        self.assertIn("[**fecho**](https://mobius.feedmob.com/issue/AI-2541)：交给 Leo 验收", md)
+        self.assertIn("2. 找素材", md)
+
+    def test_parse_handles_the_block_format(self):
+        raw = ("[1] fecho | 第一轮本地测试\n"
+               "- mcp 已接入 Claude\n"
+               "- 能总结日志，准确率待优化\n"
+               "[2] 爬虫 | 定位到 DNS\n"
+               "- 顺着链路查下来的\n"
+               "TODO\n"
+               "- [1] 交给 Leo 验收\n"
+               "- 找 yongcheng 要素材\n")
+        items, todos = digest._parse_daily(raw, 2)
+        self.assertEqual(items[1]["label"], "fecho")
+        self.assertEqual(len(items[1]["bullets"]), 2)
+        self.assertEqual(items[2]["summary"], "定位到 DNS")
+        self.assertEqual(todos[0], (1, "交给 Leo 验收"))
+        self.assertEqual(todos[1], (None, "找 yongcheng 要素材"))
+
+    def test_no_todo_section_when_nothing_pending(self):
+        md = digest._assemble_daily("2026-09-04", self._tasks(), {}, [], self.persona)
+        self.assertNotIn("## To do", md)
 
 
 class TestScope(unittest.TestCase):

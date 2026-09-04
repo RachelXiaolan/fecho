@@ -2,7 +2,12 @@
   "display_name": "Rachel Lu",
   "language": "zh",
   "daily_template": "# {date} 工作日志 · {display_name}\n\n## Done\n1. ...\n2. ...\n3. ...\n\n## Todo\n1. ...\n2. ...\n\n## 记录\n- ...\n",
-  "daily_style": "分 Done / Todo / 记录 三段。Done 按重要性排序，每条一行，动词开头，写清做了什么和结果；涉及 ticket 的在行尾用 (AI-1234) 标注。Todo 从流水里没做完的事推出来，没有就写「无」。记录放判断、坑、待确认的事，没有就整段省略。不写套话，不写「今天是充实的一天」这类总结句。",
+  "daily_style": "分 Done / To do 两段。每个任务一条编号项：短名 + 冒号 + 一句话说清今天推到哪了，底下用子弹点列具体进展和踩的坑。短名要能一眼认出是什么事（项目就用项目名如 fecho，别人的 ticket 就用 issue 号如 AI-2408）。不写套话，不写「今天是充实的一天」这类总结句。验收类的事可以用 ✅ / ⭕️ 标状态。",
   "voice_style": "第一人称、口语、像跟同事口头汇报。开头一句「今天主要做了几件事」之类的自然引入，然后按顺序讲 2-4 件事，结尾一句明天打算。不要念标题、不要念序号符号、不要出现 markdown。数字和英文缩写按中文口语读法写。",
-  "voice_target_chars": [200, 280]
+  "voice_target_chars": [
+    200,
+    280
+  ],
+  "daily_header": "{date_slash} 工作日志",
+  "issue_url_template": "https://mobius.feedmob.com/issue/{issue_key}"
 }

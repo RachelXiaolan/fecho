@@ -12,7 +12,7 @@ import hashlib
 import json
 import re
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from . import config, db, llm, personas, pto, store
 
@@ -52,26 +52,108 @@ def _tasks_block(tasks: List[Dict[str, Any]]) -> str:
 
 
 def _daily_prompt(author, date, tasks, persona) -> List[dict]:
+    """只让模型产出内容，**不让它碰链接**。
+
+    实测模型复述精确字符串会出错（把 RachelXiaolan 写成 RachelXiaelan、把改名前的
+    仓库名写回去）。issue 号和 URL 是确定性已知的，由代码拼，模型只管说人话。
+    """
     sys = (
-        "你是 %s 的日志助手。把当天推进的几个任务整理成一份本人风格的工作日志。\n"
+        "你是 %s 的日志助手。把当天推进的几个任务整理成工作日志的内容。\n"
         "硬规则：\n"
-        "- **一个任务写一条**，不要把同一个任务的多条进展拆成多行。\n"
         "- 只用给到的进展事实，不许推断、不许补充没写的进展、不许夸大。\n"
-        "- 有 issue 号的，在该条行尾用 (AI-1234) 标注；没有 issue 的不要编。\n"
-        "- Todo 只写进展里明确提到还没做完的事；没有就写「无」。\n"
-        "- 直接输出 Markdown 正文，不要解释，不要代码块包裹。\n"
-        "风格要求：%s"
+        "- **不要写任何 URL、链接、issue 号**——这些由系统自动加，你写了反而会错。\n"
+        "- **不许把「还在讨论/在评估」写成「已决定」**。\n"
+        "- 每个任务给一个短名（≤12 字，一眼能认出是什么事）和一句话总结，\n"
+        "  再列 1-4 条子弹点写具体做了什么、踩了什么坑。\n"
+        "- To do 只写进展里明确提到还没做完的事；没有就整段不写。\n"
+        "风格要求：%s\n\n"
+        "输出格式（严格照此，不要 JSON、不要代码块、不要别的解释）：\n"
+        "[1] 短名 | 一句话总结\n"
+        "- 子弹点\n"
+        "- 子弹点\n"
+        "[2] 短名 | 一句话总结\n"
+        "- 子弹点\n"
+        "TODO\n"
+        "- [1] 跟任务 1 有关的待办\n"
+        "- 跟具体任务无关的待办\n"
     ) % (persona.get("display_name") or author, persona.get("daily_style", ""))
-    user = (
-        "日期：%s\n作者：%s\n\n格式骨架（照这个结构，内容按实际写）：\n%s\n\n"
-        "今天推进了 %d 个任务：\n\n%s"
-    ) % (
-        date, persona.get("display_name") or author,
-        persona.get("daily_template", "").format(
-            date=date, display_name=persona.get("display_name") or author),
-        len(tasks), _tasks_block(tasks),
-    )
+
+    blocks = []
+    for i, t in enumerate(tasks, 1):
+        label = "%s（Mobius: %s）" % (t["title"], t["issue_key"]) if t["issue_key"] else t["title"]
+        body = "\n".join("  - %s" % u["content_md"].strip().replace("\n", " ")
+                          for u in t["updates"])
+        blocks.append("[%d] %s\n%s" % (i, label, body))
+    user = "日期：%s\n\n今天推进了 %d 个任务：\n\n%s" % (date, len(tasks), "\n\n".join(blocks))
     return [{"role": "system", "content": sys}, {"role": "user", "content": user}]
+
+
+def _parse_daily(raw: str, n_tasks: int) -> Tuple[Dict[int, Dict[str, Any]], List[Tuple[Optional[int], str]]]:
+    """解析成 {任务序号: {label, summary, bullets}} 和 [(任务序号|None, 待办)]。"""
+    raw = re.sub(r"^```\w*\s*|\s*```$", "", raw.strip())
+    items: Dict[int, Dict[str, Any]] = {}
+    todos: List[Tuple[Optional[int], str]] = []
+    cur, in_todo = None, False
+    for line in raw.splitlines():
+        line = line.rstrip()
+        if not line.strip():
+            continue
+        if re.match(r"^\s*todo\s*[:：]?\s*$", line, re.I):
+            in_todo, cur = True, None
+            continue
+        m = re.match(r"^\s*\[(\d+)\]\s*(.+)$", line)
+        if m and not in_todo:
+            idx = int(m.group(1))
+            label, _, summary = m.group(2).partition("|")
+            if 1 <= idx <= n_tasks:
+                cur = idx
+                items[idx] = {"label": label.strip().strip("*：: "),
+                              "summary": summary.strip(), "bullets": []}
+            continue
+        b = re.match(r"^\s*[-*•]\s*(.+)$", line)
+        if not b:
+            continue
+        text = b.group(1).strip()
+        if in_todo:
+            m2 = re.match(r"^\[(\d+)\]\s*(.+)$", text)
+            todos.append((int(m2.group(1)), m2.group(2).strip()) if m2 else (None, text))
+        elif cur is not None:
+            items[cur]["bullets"].append(text)
+    return items, todos
+
+
+def _link(task: Dict[str, Any], label: str, persona: Dict[str, Any]) -> str:
+    """有 issue 就带链接，自由任务不带——链接在这里拼，不经过模型。"""
+    label = label or task["title"]
+    if not task.get("issue_key"):
+        return "**%s**" % label
+    url = persona.get("issue_url_template",
+                      "https://mobius.feedmob.com/issue/{issue_key}").format(
+        issue_key=task["issue_key"])
+    return "[**%s**](%s)" % (label, url)
+
+
+def _assemble_daily(date, tasks, items, todos, persona) -> str:
+    header = persona.get("daily_header", "{date_slash} 工作日志").format(
+        date_slash=date.replace("-", "/"), date=date,
+        display_name=persona.get("display_name", ""))
+    out = ["# %s" % header, "", "## Done", ""]
+    for i, t in enumerate(tasks, 1):
+        it = items.get(i) or {}
+        head = _link(t, it.get("label"), persona)
+        summary = it.get("summary", "")
+        out.append("%d. %s%s" % (i, head, "：" + summary if summary else ""))
+        for b in it.get("bullets", []):
+            out.append("    * %s" % b)
+    if todos:
+        out += ["", "## To do", ""]
+        for n, (idx, text) in enumerate(todos, 1):
+            if idx and 1 <= idx <= len(tasks):
+                head = _link(tasks[idx - 1], (items.get(idx) or {}).get("label"), persona)
+                out.append("%d. %s：%s" % (n, head, text))
+            else:
+                out.append("%d. %s" % (n, text))
+    return "\n".join(out) + "\n"
 
 
 def _voice_prompt(author, date, daily_md, persona, target_items, feedback=None) -> List[dict]:
@@ -99,15 +181,14 @@ def _voice_prompt(author, date, daily_md, persona, target_items, feedback=None) 
 # ---------- fallback（LLM 不可用时的确定性产物） ----------
 
 def _fallback_daily(author, date, tasks, persona) -> str:
-    name = persona.get("display_name") or author
-    lines = ["# %s 工作日志 · %s" % (date, name), "", "## Done", ""]
-    for t in tasks:
-        first = t["updates"][0]["content_md"].strip().splitlines()[0]
-        more = "（另有 %d 条进展）" % (len(t["updates"]) - 1) if len(t["updates"]) > 1 else ""
-        tag = " (%s)" % t["issue_key"] if t["issue_key"] else ""
-        lines.append("- **%s**%s：%s%s" % (t["title"], tag, first, more))
-    lines += ["", "## 记录", "", "- 本篇为兜底稿（LLM 不可用），内容取自进展原文，未经整理。", ""]
-    return "\n".join(lines)
+    """LLM 挂了也要出同样结构的稿——链接照拼，只是内容用进展原文顶上。"""
+    items = {}
+    for i, t in enumerate(tasks, 1):
+        ups = [u["content_md"].strip().splitlines()[0] for u in t["updates"]]
+        items[i] = {"label": t["title"][:12], "summary": ups[0] if ups else "",
+                    "bullets": ups[1:]}
+    body = _assemble_daily(date, tasks, items, [], persona)
+    return body + "\n> 本篇为兜底稿（LLM 不可用），内容取自进展原文，未经整理。\n"
 
 
 def _fallback_voice(author, date, tasks, persona, hi: int) -> str:
@@ -166,8 +247,12 @@ def generate(author: str, date: str, force: bool = False,
 
     # 日报和口播稿各自独立降级：一个挂了不该把另一个也拖成兜底稿。
     try:
-        daily = llm.chat(_daily_prompt(author, date, tasks, persona), max_tokens=4000)
-        daily = re.sub(r"^```(?:markdown)?\s*|\s*```$", "", daily.strip())
+        raw = llm.chat(_daily_prompt(author, date, tasks, persona), max_tokens=4000)
+        items, todos = _parse_daily(raw, len(tasks))
+        if not items:
+            raise llm.LLMError("没解析出任何任务块，原样片段：%s" % raw[:200])
+        # 链接和结构在这里拼死，模型碰不到——它写错 URL 的账已经吃过一次了。
+        daily = _assemble_daily(date, tasks, items, todos, persona)
         daily_gen = "llm"
     except llm.LLMError as exc:
         warnings.append("日报 LLM 失败（%s），已输出兜底稿" % str(exc)[:160])
