@@ -103,6 +103,13 @@ MOBIUS_URL = get("mobius_url", "FECHO_MOBIUS_URL", "")
 MOBIUS_TOKEN = get("mobius_token", "FECHO_MOBIUS_TOKEN", "")
 MOBIUS_ASSIGNEE = get("mobius_assignee", "FECHO_MOBIUS_ASSIGNEE", "")
 
+# ---- 项目 → issue 绑定 ----
+# 关键词配对在「做这个项目本身」的场景下天然失效：AI-2541 的标题是「写一个提交
+# 工作日志的系统」，而真干活时说的是「配对引擎」「单测」「OAuth」，字面一个词都
+# 不重合。但工作目录是个几乎免费的强信号——绑一次，这个仓库里的进展默认归它。
+# 形如 {"work/scripe": "AI-2541"}，键是路径片段，匹配 cwd 或 transcript 的项目目录。
+PROJECT_BINDINGS: Dict[str, str] = load().get("project_bindings") or {}
+
 # ---- 调参 ----
 MATCH_THRESHOLD = float(get("match_threshold", "FECHO_MATCH_THRESHOLD", 0.30))
 TASK_CONTINUE_THRESHOLD = float(get("task_continue_threshold",
@@ -142,6 +149,7 @@ def redacted() -> Dict[str, Any]:
         "db": str(DB_PATH),
         "logs_dir": str(LOGS_DIR),
         "team": {"collector_url": COLLECTOR_URL or None, "token": mark(COLLECTOR_TOKEN)},
+        "project_bindings": dict(PROJECT_BINDINGS),
         "llm": {"base_url": LLM_BASE_URL or None, "model": LLM_MODEL or None,
                 "api_key": mark(LLM_API_KEY)},
         "mobius": {"url": MOBIUS_URL or None, "assignee": MOBIUS_ASSIGNEE or None,

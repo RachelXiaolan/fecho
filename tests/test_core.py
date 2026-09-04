@@ -241,6 +241,87 @@ class TestScoping(unittest.TestCase):
         self.assertEqual(len(db.list_updates(date=D)), 2)
 
 
+class TestScope(unittest.TestCase):
+    """工作范围是隐私边界，不是功能开关。这一组盯的是失败方向：
+    没登记过的目录必须被跳过，而不是默认扫进来。"""
+
+    def setUp(self):
+        reset()
+        from fecho import scope
+        scope.config.update(scope={"work_prefixes": [], "work": [], "ignore": []},
+                            project_bindings={})
+        scope.config.reload_module()
+
+    def test_unregistered_directory_is_not_scanned(self):
+        from fecho import scope
+        verdict, _ = scope.classify("/somewhere/nobody/registered")
+        self.assertEqual(verdict, "unregistered")
+        self.assertFalse(scope.is_work("/somewhere/nobody/registered"))
+
+    def test_work_prefix_covers_children(self):
+        from fecho import scope
+        scope.add("work_prefixes", "/home/me/work")
+        scope.config.reload_module()
+        self.assertTrue(scope.is_work("/home/me/work/anything/deep"))
+        self.assertFalse(scope.is_work("/home/me/personal/thing"))
+
+    def test_ignore_beats_everything(self):
+        """显式忽略必须压过工作前缀——私人目录恰好在工作目录底下也要挡住。"""
+        from fecho import scope
+        scope.add("work_prefixes", "/home/me/work")
+        scope.add("ignore", "/home/me/work/side-hustle")
+        scope.config.reload_module()
+        self.assertFalse(scope.is_work("/home/me/work/side-hustle/repo"))
+        self.assertEqual(scope.classify("/home/me/work/side-hustle/repo")[0], "ignored")
+
+    def test_bound_project_counts_as_work_without_prefix(self):
+        from fecho import scope
+        scope.config.update(project_bindings={"repos/thing": "AI-1"})
+        scope.config.reload_module()
+        self.assertTrue(scope.is_work("/anywhere/repos/thing"))
+
+
+class TestProjectBinding(unittest.TestCase):
+    """做项目本身时，说的话跟 issue 标题字面零重合，关键词配对必然失效。
+    绑定是兜底，但不能压过更具体的证据。"""
+
+    def setUp(self):
+        reset()
+        from fecho import config as _c
+        _c.update(project_bindings={"work/scripe": "AI-2541"})
+        _c.reload_module()
+
+    def tearDown(self):
+        from fecho import config as _c
+        _c.update(project_bindings={})
+        _c.reload_module()
+
+    def test_binding_catches_what_keywords_miss(self):
+        r = store.record_progress("t", "22 个单测全过，README 重写了", date=D,
+                                  project="/home/me/work/scripe")
+        self.assertEqual(r["match"]["method"], "project-bound")
+        self.assertEqual(r["task"]["issue_key"], "AI-2541")
+
+    def test_explicit_issue_in_text_beats_binding(self):
+        r = store.record_progress("t", "顺手把 AI-2460 的申请单填了", date=D,
+                                  project="/home/me/work/scripe")
+        self.assertEqual(r["task"]["issue_key"], "AI-2460")
+
+    def test_strong_keyword_match_beats_binding(self):
+        """在 fecho 仓库里干别的 issue 的活时，正文的具体信号该赢。"""
+        r = store.record_progress("t", "本地试了下 awesome-gpt-image-2，出图一般", date=D,
+                                  project="/home/me/work/scripe")
+        self.assertEqual(r["match"]["method"], "mobius-auto")
+        self.assertEqual(r["task"]["issue_key"], "AI-2539")
+
+    def test_unbound_project_still_records_as_freeform(self):
+        """没绑 issue 的工作项目照样记，只是走自由任务——不硬塞给任何 issue。"""
+        r = store.record_progress("t", "整理了一版选品汇总表", date=D,
+                                  project="/home/me/work/some-research")
+        self.assertEqual(r["task"]["source"], "freeform")
+        self.assertIsNone(r["task"]["issue_key"])
+
+
 class TestCollector(unittest.TestCase):
     """team_reports 是 collector 的全部——没有 entries/tasks 表，隐私边界是结构性的。
     这里盯的是唯一真正重要的安全属性：author 只能从 token 反查，body 里传什么都不算。"""

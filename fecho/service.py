@@ -3,6 +3,7 @@
 MCP server 直接调这里（单进程，装完就能跑）；REST 服务也调这里（团队共享部署时用）。
 两条路同一套逻辑，不会跑偏。
 """
+import os
 from datetime import date as _date, timedelta
 from typing import Any, Dict, List, Optional
 
@@ -14,6 +15,7 @@ def whoami() -> str:
 
 
 def record(content: str, author: Optional[str] = None, **kw) -> Dict[str, Any]:
+    kw.setdefault("project", os.getcwd())   # 进程的工作目录就是项目，不用调用方操心
     res = store.record_progress(author or whoami(), content, **kw)
     res["today_task_count"] = len(db.day_tasks(res["author"], res["date"]))
     return res
@@ -121,6 +123,32 @@ def doctor() -> Dict[str, Any]:
         "fix": None if llm_ok else
         "fecho setup --llm-url <url> --llm-key <key> --llm-model <model>；"
         "不配也能记流水，只是日终出的是兜底稿",
+    })
+
+    from . import scope as _scope
+    sr = _scope.rules()
+    n_rules = len(sr["work_prefixes"]) + len(sr["work"])
+    here_verdict = _scope.classify(os.getcwd())[0]
+    checks.append({
+        "name": "工作范围",
+        "ok": n_rules > 0,
+        "detail": ("%d 条规则；当前目录=%s" % (n_rules, here_verdict)) if n_rules
+        else "未配置——默认不扫任何目录，等于什么都不会自动记",
+        "fix": None if n_rules else
+        "fecho scope --work-prefix <你放工作仓库的父目录>，或在项目里 fecho scope --work .",
+    })
+
+    binds = cfg.get("project_bindings") or {}
+    here = os.getcwd()
+    from . import match as _match
+    bound_here = _match.project_binding(here)
+    checks.append({
+        "name": "项目绑定",
+        "ok": bool(bound_here),
+        "detail": "当前目录 → %s" % bound_here if bound_here
+        else "当前目录没绑（共 %d 条绑定）" % len(binds),
+        "fix": None if bound_here else
+        "在项目目录里跑 fecho bind AI-xxxx；做这个项目本身时关键词配不上，绑定能兜住",
     })
 
     team_ok = bool(cfg["team"]["collector_url"])

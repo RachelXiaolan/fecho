@@ -1,7 +1,9 @@
 """fecho 命令行：装完之后人（或 agent）用来配置和排查的入口。"""
 import argparse
 import json
+import os
 import sys
+from pathlib import Path
 from typing import Any, Dict
 
 from . import __version__, config, db, service, store
@@ -83,6 +85,80 @@ def cmd_setup(args) -> int:
 
 def cmd_sync(args) -> int:
     _p(service.sync_issues(args.assignee))
+    return 0
+
+
+def cmd_bind(args) -> int:
+    """把当前目录（或指定路径片段）绑到一个 Mobius issue 上。
+
+    解决的是：做这个项目本身时，说的话跟 issue 标题字面上一个词都不重合，
+    关键词配对必然失效。工作目录是个免费的强信号，绑一次就够。
+    """
+    bindings = dict(config.PROJECT_BINDINGS)
+
+    if args.list or (not args.issue and not args.remove):
+        if not bindings:
+            print("还没有任何项目绑定。\n  在项目目录里跑：fecho bind AI-2541")
+            return 0
+        print("项目绑定（路径含左边片段 → 默认归右边的 issue）：\n")
+        for frag, key in sorted(bindings.items()):
+            print("  %-40s → %s" % (frag, key))
+        return 0
+
+    if args.remove:
+        if args.remove not in bindings:
+            print("没有这条绑定：%s" % args.remove, file=sys.stderr)
+            return 1
+        bindings.pop(args.remove)
+        config.update(project_bindings=bindings)
+        print("已解除：%s" % args.remove)
+        return 0
+
+    frag = args.path or os.getcwd()
+    if not args.path:
+        # 默认用「最后两级目录」而不是绝对路径：换台机器、仓库挪了位置都还能匹配上
+        parts = Path(frag).parts
+        frag = os.path.join(*parts[-2:]) if len(parts) >= 2 else frag
+    bindings[frag] = args.issue
+    config.update(project_bindings=bindings)
+    print("已绑定：路径含 %s 的项目 → %s" % (frag, args.issue))
+    print("之后在这个项目里记的进展，配不到别的 issue 时默认归它。")
+    return 0
+
+
+def cmd_scope(args) -> int:
+    """管工作范围。默认不扫任何目录——没登记的一律跳过。"""
+    from . import scope
+
+    if args.work_prefix:
+        scope.add("work_prefixes", os.path.abspath(os.path.expanduser(args.work_prefix)))
+        print("已登记工作前缀：%s（这底下的项目默认都算工作）"
+              % os.path.abspath(os.path.expanduser(args.work_prefix)))
+    elif args.work:
+        val = args.work if args.work != "." else os.getcwd()
+        scope.add("work", val)
+        print("已登记为工作项目：%s（没有对应 issue 也会记，走自由任务）" % val)
+    elif args.ignore:
+        val = args.ignore if args.ignore != "." else os.getcwd()
+        scope.add("ignore", val)
+        print("已加入忽略：%s（这里的活动永远不会进工作日志，也不会发给 LLM）" % val)
+    elif args.remove:
+        scope.remove(args.remove)
+        print("已移除：%s" % args.remove)
+
+    r = scope.rules()
+    print("\n当前工作范围：")
+    for label, key in (("工作前缀", "work_prefixes"), ("工作项目", "work"), ("忽略", "ignore")):
+        vals = r[key] or ["（无）"]
+        for v in vals:
+            print("  %-8s %s" % (label, v))
+    for frag, key in sorted(config.PROJECT_BINDINGS.items()):
+        print("  %-8s %s → %s" % ("绑定", frag, key))
+
+    verdict, why = scope.classify(os.getcwd())
+    print("\n当前目录 %s\n  → %s（%s）" % (os.getcwd(), verdict, why))
+    if verdict == "unregistered":
+        print("  未登记的目录不会被扫描。要算工作就跑 fecho scope --work .")
     return 0
 
 
@@ -185,6 +261,20 @@ def main() -> int:
     p = sub.add_parser("sync", help="刷新 Mobius issue 缓存")
     p.add_argument("--assignee")
     p.set_defaults(fn=cmd_sync)
+
+    p = sub.add_parser("scope", help="管工作范围：哪些目录能进工作日志（默认不扫）")
+    p.add_argument("--work-prefix", help="这个前缀底下的项目默认都算工作，如放工作仓库的那个父目录")
+    p.add_argument("--work", help="登记为工作项目（. = 当前目录），没有 issue 也会记")
+    p.add_argument("--ignore", help="永不进工作日志、永不发给 LLM（. = 当前目录）")
+    p.add_argument("--remove", help="移除某条规则")
+    p.set_defaults(fn=cmd_scope)
+
+    p = sub.add_parser("bind", help="把当前项目绑到一个 Mobius issue（解决关键词配不上的问题）")
+    p.add_argument("issue", nargs="?", help="如 AI-2541")
+    p.add_argument("--path", help="要绑的路径片段，缺省=当前目录的最后两级")
+    p.add_argument("--list", action="store_true", help="看现有绑定")
+    p.add_argument("--remove", help="解除某条绑定")
+    p.set_defaults(fn=cmd_bind)
 
     p = sub.add_parser("digest", help="日终整理（cron 入口，配了 collector 会顺带推送）")
     p.add_argument("--date")

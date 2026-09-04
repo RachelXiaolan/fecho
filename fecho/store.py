@@ -116,6 +116,7 @@ def record_progress(
     session_id: Optional[str] = None,
     issue: Optional[str] = None,
     task_id: Optional[str] = None,
+    project: Optional[str] = None,
     meta: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     content_md = (content_md or "").strip()
@@ -137,6 +138,7 @@ def record_progress(
         session_task_id=_session_last_task(session_id, author),
         explicit_issue=issue,
         explicit_task_id=task_id,
+        project=project,
     )
 
     if decision.get("task_id"):
