@@ -6,7 +6,7 @@
   "voice_style": "第一人称、口语化、平铺直叙地讲今天做了什么，结尾带一句明天计划。不出现 markdown 符号。",
   "voice_target_chars": [
     200,
-    280
+    1000
   ],
   "daily_header": "{date_slash} 工作日志",
   "issue_url_template": "https://mobius.feedmob.com/issue/{issue_key}"

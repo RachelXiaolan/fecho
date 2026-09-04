@@ -101,8 +101,10 @@ def cmd_bind(args) -> int:
             print("还没有任何项目绑定。\n  在项目目录里跑：fecho bind AI-2541")
             return 0
         print("项目绑定（路径含左边片段 → 默认归右边的 issue）：\n")
+        aliases = config.load().get("task_aliases") or {}
         for frag, key in sorted(bindings.items()):
-            print("  %-40s → %s" % (frag, key))
+            alias = "  [日报里显示为 %s]" % aliases[key] if key in aliases else ""
+            print("  %-36s → %s%s" % (frag, key, alias))
         return 0
 
     if args.remove:
@@ -113,6 +115,13 @@ def cmd_bind(args) -> int:
         config.update(project_bindings=bindings)
         print("已解除：%s" % args.remove)
         return 0
+
+    if args.alias:
+        aliases = dict(config.load().get("task_aliases") or {})
+        aliases[args.issue] = args.alias
+        config.update(task_aliases=aliases)
+        config.reload_module()
+        print("日报里 %s 会显示成「%s」" % (args.issue, args.alias))
 
     frag = args.path or os.getcwd()
     if not args.path:
@@ -375,6 +384,7 @@ def main() -> int:
     p = sub.add_parser("bind", help="把当前项目绑到一个 Mobius issue（解决关键词配不上的问题）")
     p.add_argument("issue", nargs="?", help="如 AI-2541")
     p.add_argument("--path", help="要绑的路径片段，缺省=当前目录的最后两级")
+    p.add_argument("--alias", help="日报里这个 issue 显示成什么短名，如 fecho")
     p.add_argument("--list", action="store_true", help="看现有绑定")
     p.add_argument("--remove", help="解除某条绑定")
     p.set_defaults(fn=cmd_bind)

@@ -117,6 +117,56 @@ class TestMatching(unittest.TestCase):
         self.assertEqual(b["task"]["issue_key"], "AI-2460")
 
 
+class TestFalsePositives(unittest.TestCase):
+    """打分器的伪相关。真实翻车：闲鱼选品的内容被配进「写一个提交工作日志的系统」，
+    唯一的共同点是两句话里都出现了 agent 这个词。"""
+
+    def setUp(self):
+        reset()
+
+    def test_common_token_alone_does_not_match(self):
+        c = "LDC 建议售价只是基于价格带规律的映射，非精确利润测算，agent 无这部分数据"
+        t = "写一个提交工作日志的系统（给agent专用）"
+        self.assertEqual(match._cjk_bigrams(c) & match._cjk_bigrams(t), set(),
+                         "前提：这两句中文毫无重合")
+        self.assertLess(match.score(c, t), 0.30, "光靠 agent 一个通用词不该过线")
+
+    def test_distinctive_token_still_matches(self):
+        """但罕见词该继续单独定案——awesome-gpt-image-2 撞上就是同一件事。"""
+        self.assertGreaterEqual(
+            match.score("本地试了下 awesome-gpt-image-2，出图一般",
+                        "本地试用 awesome-gpt-image-2 并评估复用价值"), 0.30)
+
+    def test_chinese_overlap_still_matches(self):
+        self.assertGreaterEqual(
+            match.score("读完 PRD，把工作日志系统的 V0 边界定下来了",
+                        "写一个提交工作日志的系统（给agent专用）"), 0.30)
+
+
+class TestScanDoesNotCascade(unittest.TestCase):
+    """扫描是批量抽取，同 session 的条目没有对话先后关系。
+    一条配错时，会话惯性会把后面全带偏——实测就是这么发生的。"""
+
+    def setUp(self):
+        reset()
+
+    def test_scan_entry_does_not_inherit_session_task(self):
+        a = store.record_progress("t", "开始做 AI-2541 的工作日志系统", date=D,
+                                  session_id="s1", source_agent="scan")
+        b = store.record_progress("t", "闲鱼那边抓了十六个商品的详情", date=D,
+                                  session_id="s1", source_agent="scan")
+        self.assertNotEqual(b["task"]["task_id"], a["task"]["task_id"])
+        self.assertEqual(b["match"]["method"], "new-task")
+
+    def test_interactive_entry_still_inherits(self):
+        """但交互式记录保留会话兜底——那里「刚才在聊什么」是真实上下文。"""
+        a = store.record_progress("t", "开始做 AI-2541 的工作日志系统", date=D,
+                                  session_id="s2", source_agent="claude-code")
+        b = store.record_progress("t", "顺手把那个东西也弄了一下", date=D,
+                                  session_id="s2", source_agent="claude-code")
+        self.assertEqual(b["task"]["task_id"], a["task"]["task_id"])
+
+
 class TestAggregation(unittest.TestCase):
     """这一组盯的是最早那版的设计错误：把同一任务的多条进展当重复删掉。"""
 
@@ -259,13 +309,14 @@ class TestScoping(unittest.TestCase):
 
 
 class TestDailyFormat(unittest.TestCase):
-    """日报格式：链接必须由代码拼。模型复述 URL 会出错——它把 RachelXiaolan
-    写成过 RachelXiaelan，也把改名前的仓库名写回去过。"""
+    """日报格式。链接、短名、状态图标全部由代码渲染——模型复述精确字符串会出错：
+    它把 RachelXiaolan 写成过 RachelXiaelan，也把已经改掉的项目名写回去过。"""
 
     def setUp(self):
         reset()
         from fecho import personas
         self.persona = personas.load("rachel")
+        self.persona["task_aliases"] = {"AI-2541": "fecho"}
 
     def _tasks(self):
         return [
@@ -276,40 +327,64 @@ class TestDailyFormat(unittest.TestCase):
         ]
 
     def test_mobius_task_gets_a_link_freeform_does_not(self):
-        items = {1: {"label": "fecho", "summary": "第一轮本地测试", "bullets": ["mcp 已接入"]},
-                 2: {"label": "爬虫超时", "summary": "定位到 DNS", "bullets": []}}
+        items = {1: {"status": "done", "summary": "第一轮本地测试",
+                     "bullets": [("done", "mcp 已接入")]},
+                 2: {"status": "done", "summary": "定位到 DNS", "bullets": []}}
         md = digest._assemble_daily("2026-09-04", self._tasks(), items, [], self.persona)
         self.assertIn("[**fecho**](https://mobius.feedmob.com/issue/AI-2541)", md)
-        self.assertIn("**爬虫超时**", md)
-        self.assertNotIn("[**爬虫超时**](", md, "自由任务不该有链接")
+        self.assertIn("**帮同事查爬虫超时**", md)
+        self.assertNotIn("[**帮同事查爬虫超时**](", md, "自由任务不该有链接")
+
+    def test_alias_wins_over_derived_name(self):
+        t = self._tasks()[0]
+        self.assertEqual(digest.short_name(t, self.persona), "fecho")
+
+    def test_short_name_derived_from_title_when_no_alias(self):
+        """没配别名时从标题派生，砍掉括号后缀——不让模型起名（它会把 fecho 写成 fmjot）。"""
+        t = dict(self._tasks()[0])
+        p = dict(self.persona); p["task_aliases"] = {}
+        self.assertEqual(digest.short_name(t, p), "写一个提交工作日志的系统")
+        self.assertNotIn("（", digest.short_name(t, p))
+
+    def test_status_icons_render_from_tokens(self):
+        items = {1: {"status": "wip", "summary": "在做",
+                     "bullets": [("done", "这条做完了"), ("blocked", "这条卡住了")]}}
+        md = digest._assemble_daily("2026-09-04", self._tasks()[:1], items, [], self.persona)
+        self.assertIn("1. ⭕️ [**fecho**]", md)
+        self.assertIn("* ✅ 这条做完了", md)
+        self.assertIn("* ❌ 这条卡住了", md)
+
+    def test_missing_status_defaults_to_done(self):
+        items, _ = digest._parse_daily("[1] 没写状态的总结\n- 也没写状态的子弹点", 1)
+        self.assertEqual(items[1]["status"], "done")
+        self.assertEqual(items[1]["bullets"][0][0], "done")
 
     def test_header_uses_slash_date(self):
         md = digest._assemble_daily("2026-09-04", self._tasks(), {}, [], self.persona)
         self.assertIn("# 2026/09/04 工作日志", md)
 
     def test_todo_can_reference_a_task_and_inherit_its_link(self):
-        items = {1: {"label": "fecho", "summary": "x", "bullets": []}}
-        md = digest._assemble_daily("2026-09-04", self._tasks(), items,
+        md = digest._assemble_daily("2026-09-04", self._tasks(), {},
                                     [(1, "交给 Leo 验收"), (None, "找素材")], self.persona)
         self.assertIn("## To do", md)
         self.assertIn("[**fecho**](https://mobius.feedmob.com/issue/AI-2541)：交给 Leo 验收", md)
         self.assertIn("2. 找素材", md)
 
-    def test_parse_handles_the_block_format(self):
-        raw = ("[1] fecho | 第一轮本地测试\n"
-               "- mcp 已接入 Claude\n"
-               "- 能总结日志，准确率待优化\n"
-               "[2] 爬虫 | 定位到 DNS\n"
-               "- 顺着链路查下来的\n"
+    def test_parse_handles_status_and_todo_blocks(self):
+        raw = ("[1] done | 第一轮本地测试\n"
+               "- done | mcp 已接入 Claude\n"
+               "- wip | 准确率待优化\n"
+               "[2] blocked | 卡在 path 问题\n"
+               "- blocked | 还没装成功\n"
                "TODO\n"
                "- [1] 交给 Leo 验收\n"
                "- 找 yongcheng 要素材\n")
         items, todos = digest._parse_daily(raw, 2)
-        self.assertEqual(items[1]["label"], "fecho")
-        self.assertEqual(len(items[1]["bullets"]), 2)
-        self.assertEqual(items[2]["summary"], "定位到 DNS")
-        self.assertEqual(todos[0], (1, "交给 Leo 验收"))
-        self.assertEqual(todos[1], (None, "找 yongcheng 要素材"))
+        self.assertEqual(items[1]["status"], "done")
+        self.assertEqual(items[1]["bullets"], [("done", "mcp 已接入 Claude"),
+                                               ("wip", "准确率待优化")])
+        self.assertEqual(items[2]["status"], "blocked")
+        self.assertEqual(todos, [(1, "交给 Leo 验收"), (None, "找 yongcheng 要素材")])
 
     def test_no_todo_section_when_nothing_pending(self):
         md = digest._assemble_daily("2026-09-04", self._tasks(), {}, [], self.persona)

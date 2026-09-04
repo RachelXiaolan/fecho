@@ -48,8 +48,19 @@ def _cjk_bigrams(text: str) -> set:
     return {s[i : i + 2] for i in range(len(s) - 1)}
 
 
+# 在这个语境里满地都是、毫无区分度的词。实测 agent 一个词就能把闲鱼选品的内容
+# 送进「写一个提交工作日志的系统」——标题里只有 agent / 专用 两个 latin token，
+# 命中一个就是 1/2 的召回率，乘权重正好过线。
+_COMMON_TOKENS = {
+    "agent", "agents", "ai", "api", "app", "bug", "cli", "code", "data", "demo",
+    "doc", "docs", "issue", "json", "llm", "log", "logs", "mcp", "pro", "test",
+    "tests", "todo", "url", "web", "http", "https", "com", "www",
+}
+
+
 def _tokens(text: str) -> set:
-    return {t for t in _TOKEN.findall(_norm(text)) if not t.isdigit() or len(t) >= 3}
+    return {t for t in _TOKEN.findall(_norm(text))
+            if (not t.isdigit() or len(t) >= 3) and t not in _COMMON_TOKENS}
 
 
 def _distinctive(tok: str) -> bool:
@@ -91,6 +102,10 @@ def score(content: str, title: str) -> float:
     tok = len(shared) / len(tt) if tt else 0.0
 
     base = 0.65 * cjk + 0.35 * tok
+    # 光靠普通 token 命中不足以定案——中文那边必须也有一点关联，否则就是
+    # 「两句话都出现过 agent」这种伪相关。罕见词（见下）才有单独定案的资格。
+    if cjk == 0.0 and not any(_distinctive(t) for t in shared):
+        base = min(base, config.MATCH_THRESHOLD - 0.01)
     if any(_distinctive(t) for t in shared):
         base = max(base, 0.55)          # 罕见词命中，单独就够定案
 
@@ -145,6 +160,7 @@ def decide(
     explicit_issue: Optional[str] = None,
     explicit_task_id: Optional[str] = None,
     project: Optional[str] = None,
+    allow_session_fallback: bool = True,
 ) -> Dict[str, Any]:
     """返回 {method, issue_key?, task_id?, score, runner_up?}。"""
     if explicit_task_id:
@@ -185,7 +201,12 @@ def decide(
     # 代价说清楚：同一个对话里换了话题、新话题又没有特征词时会错归。
     # V0 不假装能解决，只保证归属对 agent 可见（返回值里写明配对方式），
     # agent 判断错了可以带 issue 或 task_id 重记。
-    if session_task_id and any(t["task_id"] == session_task_id for t in tasks):
+    # 扫描来源关掉这条路（allow_session_fallback=False）：批量抽出来的进展共用
+    # 同一个 session_id，一条配错会顺着惯性把后面全带偏。实测闲鱼的内容先被
+    # 误判进 AI-2541，紧跟着那条 0.0 分的也跟着进去了。
+    # 交互式 log_progress 保留——那里「刚才在聊什么」是真实的上下文。
+    if allow_session_fallback and session_task_id and any(
+            t["task_id"] == session_task_id for t in tasks):
         st = next(t for t in tasks if t["task_id"] == session_task_id)
         return {
             "method": "task-continue",

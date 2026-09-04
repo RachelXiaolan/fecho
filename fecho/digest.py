@@ -51,28 +51,55 @@ def _tasks_block(tasks: List[Dict[str, Any]]) -> str:
     return "\n\n".join(out)
 
 
-def _daily_prompt(author, date, tasks, persona) -> List[dict]:
-    """只让模型产出内容，**不让它碰链接**。
+STATUS_ICON = {"done": "✅", "wip": "⭕️", "blocked": "❌"}
 
-    实测模型复述精确字符串会出错（把 RachelXiaolan 写成 RachelXiaelan、把改名前的
-    仓库名写回去）。issue 号和 URL 是确定性已知的，由代码拼，模型只管说人话。
+# 标题里这些后缀对短名没信息量，砍掉
+_TITLE_TRIM = re.compile(r"[（(【\[].*?[）)】\]]|[:：].*$")
+
+
+def short_name(task: Dict[str, Any], persona: Dict[str, Any], limit: int = 14) -> str:
+    """任务短名。优先用人配的别名，否则从标题派生——不让模型起名。
+
+    模型给任务起短名时会把当天还在讨论的候选名当成已确定（把 fecho 写成 fmjot）。
+    标题和 issue 号在库里是确定的，没理由让它猜。
+    """
+    aliases = persona.get("task_aliases") or {}
+    if task.get("issue_key") and task["issue_key"] in aliases:
+        return aliases[task["issue_key"]]
+
+    title = (task.get("title") or "").strip()
+    trimmed = _TITLE_TRIM.sub("", title).strip(" -—、,，。")
+    name = trimmed or title
+    if len(name) > limit:
+        cut = max((name.rfind(c, 0, limit + 1) for c in "，,、 ；;"), default=-1)
+        name = name[:cut] if cut >= 6 else name[:limit]
+        name = name.rstrip(" ，,、；;") + "…"
+    return name or (task.get("issue_key") or "未命名")
+
+
+def _daily_prompt(author, date, tasks, persona) -> List[dict]:
+    """模型只出语义，不出符号也不起名。
+
+    实测它复述精确字符串会出错（把 RachelXiaolan 写成 RachelXiaelan、把已经改掉的
+    项目名写回去）。所以链接、短名、状态图标全部由代码渲染，模型只负责说人话和
+    判断每条是「做完了 / 还在做 / 卡住了」。
     """
     sys = (
         "你是 %s 的日志助手。把当天推进的几个任务整理成工作日志的内容。\n"
         "硬规则：\n"
         "- 只用给到的进展事实，不许推断、不许补充没写的进展、不许夸大。\n"
-        "- **不要写任何 URL、链接、issue 号**——这些由系统自动加，你写了反而会错。\n"
-        "- **不许把「还在讨论/在评估」写成「已决定」**。\n"
-        "- 每个任务给一个短名（≤12 字，一眼能认出是什么事）和一句话总结，\n"
-        "  再列 1-4 条子弹点写具体做了什么、踩了什么坑。\n"
+        "- **不要写 URL、不要写 issue 号、不要给任务起名、不要写 emoji**——\n"
+        "  这些由系统自动加，你写了反而会错。\n"
+        "- 每条都要判一个状态：done=做完了 / wip=还在做或部分完成 / blocked=卡住了。\n"
+        "- 每个任务一句话总结，再列 1-4 条子弹点写具体做了什么、踩了什么坑。\n"
         "- To do 只写进展里明确提到还没做完的事；没有就整段不写。\n"
         "风格要求：%s\n\n"
         "输出格式（严格照此，不要 JSON、不要代码块、不要别的解释）：\n"
-        "[1] 短名 | 一句话总结\n"
-        "- 子弹点\n"
-        "- 子弹点\n"
-        "[2] 短名 | 一句话总结\n"
-        "- 子弹点\n"
+        "[1] done | 一句话总结\n"
+        "- done | 子弹点\n"
+        "- wip | 子弹点\n"
+        "[2] wip | 一句话总结\n"
+        "- blocked | 子弹点\n"
         "TODO\n"
         "- [1] 跟任务 1 有关的待办\n"
         "- 跟具体任务无关的待办\n"
@@ -80,35 +107,41 @@ def _daily_prompt(author, date, tasks, persona) -> List[dict]:
 
     blocks = []
     for i, t in enumerate(tasks, 1):
-        label = "%s（Mobius: %s）" % (t["title"], t["issue_key"]) if t["issue_key"] else t["title"]
         body = "\n".join("  - %s" % u["content_md"].strip().replace("\n", " ")
                           for u in t["updates"])
-        blocks.append("[%d] %s\n%s" % (i, label, body))
+        blocks.append("[%d]\n%s" % (i, body))
     user = "日期：%s\n\n今天推进了 %d 个任务：\n\n%s" % (date, len(tasks), "\n\n".join(blocks))
     return [{"role": "system", "content": sys}, {"role": "user", "content": user}]
 
 
+def _split_status(text: str) -> Tuple[str, str]:
+    """从 `status | 正文` 里取出状态；没写状态就当作已完成。"""
+    head, sep, rest = text.partition("|")
+    key = head.strip().lower()
+    if sep and key in STATUS_ICON:
+        return key, rest.strip()
+    return "done", text.strip()
+
+
 def _parse_daily(raw: str, n_tasks: int) -> Tuple[Dict[int, Dict[str, Any]], List[Tuple[Optional[int], str]]]:
-    """解析成 {任务序号: {label, summary, bullets}} 和 [(任务序号|None, 待办)]。"""
+    """解析成 {任务序号: {status, summary, bullets}} 和 [(任务序号|None, 待办)]。"""
     raw = re.sub(r"^```\w*\s*|\s*```$", "", raw.strip())
     items: Dict[int, Dict[str, Any]] = {}
     todos: List[Tuple[Optional[int], str]] = []
     cur, in_todo = None, False
     for line in raw.splitlines():
-        line = line.rstrip()
         if not line.strip():
             continue
         if re.match(r"^\s*todo\s*[:：]?\s*$", line, re.I):
             in_todo, cur = True, None
             continue
-        m = re.match(r"^\s*\[(\d+)\]\s*(.+)$", line)
+        m = re.match(r"^\s*\[(\d+)\]\s*(.*)$", line)
         if m and not in_todo:
             idx = int(m.group(1))
-            label, _, summary = m.group(2).partition("|")
             if 1 <= idx <= n_tasks:
+                status, summary = _split_status(m.group(2))
                 cur = idx
-                items[idx] = {"label": label.strip().strip("*：: "),
-                              "summary": summary.strip(), "bullets": []}
+                items[idx] = {"status": status, "summary": summary, "bullets": []}
             continue
         b = re.match(r"^\s*[-*•]\s*(.+)$", line)
         if not b:
@@ -118,13 +151,13 @@ def _parse_daily(raw: str, n_tasks: int) -> Tuple[Dict[int, Dict[str, Any]], Lis
             m2 = re.match(r"^\[(\d+)\]\s*(.+)$", text)
             todos.append((int(m2.group(1)), m2.group(2).strip()) if m2 else (None, text))
         elif cur is not None:
-            items[cur]["bullets"].append(text)
+            status, body = _split_status(text)
+            items[cur]["bullets"].append((status, body))
     return items, todos
 
 
 def _link(task: Dict[str, Any], label: str, persona: Dict[str, Any]) -> str:
     """有 issue 就带链接，自由任务不带——链接在这里拼，不经过模型。"""
-    label = label or task["title"]
     if not task.get("issue_key"):
         return "**%s**" % label
     url = persona.get("issue_url_template",
@@ -140,16 +173,17 @@ def _assemble_daily(date, tasks, items, todos, persona) -> str:
     out = ["# %s" % header, "", "## Done", ""]
     for i, t in enumerate(tasks, 1):
         it = items.get(i) or {}
-        head = _link(t, it.get("label"), persona)
+        icon = STATUS_ICON.get(it.get("status", "done"), STATUS_ICON["done"])
+        head = _link(t, short_name(t, persona), persona)
         summary = it.get("summary", "")
-        out.append("%d. %s%s" % (i, head, "：" + summary if summary else ""))
-        for b in it.get("bullets", []):
-            out.append("    * %s" % b)
+        out.append("%d. %s %s%s" % (i, icon, head, "：" + summary if summary else ""))
+        for status, text in it.get("bullets", []):
+            out.append("    * %s %s" % (STATUS_ICON.get(status, STATUS_ICON["done"]), text))
     if todos:
         out += ["", "## To do", ""]
         for n, (idx, text) in enumerate(todos, 1):
             if idx and 1 <= idx <= len(tasks):
-                head = _link(tasks[idx - 1], (items.get(idx) or {}).get("label"), persona)
+                head = _link(tasks[idx - 1], short_name(tasks[idx - 1], persona), persona)
                 out.append("%d. %s：%s" % (n, head, text))
             else:
                 out.append("%d. %s" % (n, text))
@@ -181,14 +215,14 @@ def _voice_prompt(author, date, daily_md, persona, target_items, feedback=None) 
 # ---------- fallback（LLM 不可用时的确定性产物） ----------
 
 def _fallback_daily(author, date, tasks, persona) -> str:
-    """LLM 挂了也要出同样结构的稿——链接照拼，只是内容用进展原文顶上。"""
+    """LLM 挂了也要出同样结构的稿——链接、短名、图标照拼，内容用进展原文顶上。"""
     items = {}
     for i, t in enumerate(tasks, 1):
         ups = [u["content_md"].strip().splitlines()[0] for u in t["updates"]]
-        items[i] = {"label": t["title"][:12], "summary": ups[0] if ups else "",
-                    "bullets": ups[1:]}
-    body = _assemble_daily(date, tasks, items, [], persona)
-    return body + "\n> 本篇为兜底稿（LLM 不可用），内容取自进展原文，未经整理。\n"
+        items[i] = {"status": "done", "summary": ups[0] if ups else "",
+                    "bullets": [("done", u) for u in ups[1:]]}
+    return (_assemble_daily(date, tasks, items, [], persona)
+            + "\n> 本篇为兜底稿（LLM 不可用），内容取自进展原文，未经整理。\n")
 
 
 def _fallback_voice(author, date, tasks, persona, hi: int) -> str:

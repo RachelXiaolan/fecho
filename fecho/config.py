@@ -121,7 +121,7 @@ SCAN_DEDUPE_SIMILARITY = float(get("scan_dedupe_similarity",
 TASK_CONTINUE_THRESHOLD = float(get("task_continue_threshold",
                                     "FECHO_TASK_CONTINUE_THRESHOLD", 0.35))
 VOICE_MIN_CHARS = int(get("voice_min", "FECHO_VOICE_MIN", 200))
-VOICE_MAX_CHARS = int(get("voice_max", "FECHO_VOICE_MAX", 280))
+VOICE_MAX_CHARS = int(get("voice_max", "FECHO_VOICE_MAX", 1000))
 
 
 def reload_module() -> None:

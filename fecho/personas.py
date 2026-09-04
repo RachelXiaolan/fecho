@@ -24,6 +24,8 @@ def load(name: str) -> Dict[str, Any]:
         data = json.load(f)
     merged = dict(_FALLBACK)
     merged.update(data)
+    # 任务别名存在个人配置里（issue 号 → 显示用的短名），不写死在预设模板里
+    merged["task_aliases"] = dict(config.load().get("task_aliases") or {})
     return merged
 
 
