@@ -58,4 +58,71 @@ for f in "${FECHO_HOME}/logs/${TODAY}"/*-日报.md "${FECHO_HOME}/logs/${TODAY}"
   printf '\n\033[1;33m═══ %s\033[0m\n' "${f#$ROOT/}"; cat "$f"
 done
 
-printf '\n\033[1;32m验收完成。\033[0m 产物在 %s\n' "${FECHO_HOME#$ROOT/}/logs/${TODAY}/"
+# ─────────────────────────────────────────────────────────────
+# 团队联邦部分。这几步刻意不配 LLM——走确定性兜底稿，跑得快也可重复；
+# 这里要验的是推送、跨人读取和身份边界，跟 LLM 没关系。
+# ─────────────────────────────────────────────────────────────
+CPORT=8907
+CHOME="${ROOT}/.acceptance/collector"
+AHOME="${ROOT}/.acceptance/alice"
+BHOME="${ROOT}/.acceptance/bob"
+mkdir -p "$CHOME" "$AHOME" "$BHOME"
+cat > "${CHOME}/tokens.json" <<'JSON'
+{
+  "tok-a": {"author": "alice", "display_name": "Alice"},
+  "tok-b": {"author": "bob",   "display_name": "Bob"}
+}
+JSON
+
+step "12. 起一个团队 collector"
+FECHO_HOME="$CHOME" python3 -m fecho.cli serve --port "$CPORT" > "${CHOME}/serve.log" 2>&1 &
+CPID=$!
+trap 'kill $CPID 2>/dev/null' EXIT
+for _ in $(seq 30); do
+  curl -sf "http://127.0.0.1:${CPORT}/healthz" >/dev/null && break; sleep 0.5
+done
+curl -s "http://127.0.0.1:${CPORT}/healthz"; echo
+ok "collector 起来了（它自己的库里没有 entries/tasks 表）"
+
+# 两个人各自的本机：独立 FECHO_HOME，不配 LLM（走兜底稿），配上 collector
+solo() {  # solo <HOME> <author> <token>
+  env FECHO_HOME="$1" FECHO_LLM_BASE_URL= FECHO_LLM_API_KEY= FECHO_LLM_MODEL= \
+      FECHO_MOBIUS_TOKEN= FECHO_MOBIUS_URL= "${@:4}"
+}
+
+step "13. 两个人各自记进展、出稿，自动推送给 collector"
+for pair in "alice tok-a $AHOME" "bob tok-b $BHOME"; do
+  set -- $pair; WHO=$1; TOK=$2; H=$3
+  solo "$H" "$WHO" "$TOK" python3 -m fecho.cli setup --author "$WHO" \
+      --collector-url "http://127.0.0.1:${CPORT}" --collector-token "$TOK" > /dev/null
+  solo "$H" "$WHO" "$TOK" python3 scripts/mcp_probe.py --client claude-code \
+      call log_progress "{\"content\":\"${WHO} today: 验证联邦推送链路，只推成品不推原始进展\"}"
+  solo "$H" "$WHO" "$TOK" python3 -m fecho.cli digest | tail -2
+done
+
+step "14. 跨人读取：alice 用自己的 token 能看到 bob 推的成品"
+solo "$AHOME" alice tok-a python3 -m fecho.cli team --date "$TODAY" | head -20
+
+step "15. 身份边界：拿 alice 的 token 塞一段冒充内容，看落库算谁的"
+SPOOF=$(curl -s -X POST "http://127.0.0.1:${CPORT}/reports" \
+  -H "Authorization: Bearer tok-a" -H "Content-Type: application/json" \
+  -d '{"date":"'"${TODAY}"'","daily_md":"# 冒充测试\n\n若这条出现在 bob 名下即为漏洞","author":"bob"}')
+echo "$SPOOF"
+echo "$SPOOF" | python3 -c "
+import json,sys
+got = json.load(sys.stdin)['author']
+assert got == 'alice', '身份边界破了：落库 author=%s' % got
+print('  \033[32m✓\033[0m 落库 author=alice —— body 里的 author 字段完全不生效')
+"
+printf '  无 token  -> HTTP %s\n' "$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+  "http://127.0.0.1:${CPORT}/reports" -H 'Content-Type: application/json' \
+  -d '{"date":"'"${TODAY}"'","daily_md":"x"}')"
+printf '  错 token  -> HTTP %s\n' "$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+  "http://127.0.0.1:${CPORT}/reports" -H 'Authorization: Bearer nope' \
+  -H 'Content-Type: application/json' -d '{"date":"'"${TODAY}"'","daily_md":"x"}')"
+
+step "16. 隐私边界是结构性的：collector 的库里有哪些表"
+sqlite3 "${CHOME}/collector.db" ".tables"
+ok "只有 team_reports —— entries / tasks / updates 在这台机器上根本不存在"
+
+printf '\n\033[1;32m验收完成。\033[0m 个人产物在 %s\n' "${FECHO_HOME#$ROOT/}/logs/${TODAY}/"
