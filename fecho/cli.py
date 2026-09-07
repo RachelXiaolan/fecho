@@ -314,6 +314,26 @@ def cmd_hidden(args) -> int:
     return 0
 
 
+def cmd_web(args) -> int:
+    """起本机 HTTP 服务：dashboard + MCP over HTTP。
+
+    两样东西一个进程托着——都需要「有个 HTTP 服务能读到这份 SQLite」，而数据在
+    本机、扫描要读本机的对话记录，所以服务也得在本机。
+    """
+    from . import web
+
+    scheme = "http://%s:%d" % (args.host, args.port)
+    print("dashboard  %s/" % scheme)
+    print("MCP 端点   %s/mcp" % scheme)
+    if args.host in ("127.0.0.1", "localhost"):
+        print("\n只监听本机。要从 ChatGPT 连，先设 FECHO_WEB_TOKEN，再用隧道把它暴露出去：")
+        print("  cloudflared tunnel --url %s" % scheme)
+    elif not web.TOKEN:
+        print("\n⚠️  监听了非本机地址却没设 FECHO_WEB_TOKEN —— 拒绝启动。")
+    web.serve(host=args.host, port=args.port, open_browser=not args.no_browser)
+    return 0
+
+
 def cmd_digest(args) -> int:
     db.init()
     r = service.end_of_day(args.date, force=args.force)
@@ -438,6 +458,12 @@ def main() -> int:
     p.add_argument("--date", help="只处理某天")
     p.add_argument("--apply", action="store_true", help="真的执行，不加就只预览")
     p.set_defaults(fn=cmd_dedupe)
+
+    p = sub.add_parser("web", help="起 dashboard + MCP over HTTP（本机）")
+    p.add_argument("--host", default="127.0.0.1")
+    p.add_argument("--port", type=int, default=8900)
+    p.add_argument("--no-browser", action="store_true", help="不自动开浏览器")
+    p.set_defaults(fn=cmd_web)
 
     p = sub.add_parser("hidden", help="看被去重挡掉的进展（判错了可以捞回来）")
     p.add_argument("--date", help="只看某天")

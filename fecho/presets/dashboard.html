@@ -1,0 +1,186 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>fecho</title>
+<style>
+:root{--bg:#faf9f7;--card:#fff;--line:#e6e3de;--ink:#1c1a17;--dim:#6b665e;
+      --accent:#3b6ea5;--warn:#b5701f;--ok:#2f7d4f;--bad:#a8433a}
+@media(prefers-color-scheme:dark){:root{--bg:#161513;--card:#1e1d1a;--line:#33312d;
+      --ink:#eae7e1;--dim:#9a948a;--accent:#7aa7d9;--warn:#d69a4e;--ok:#6bbd8a;--bad:#d98078}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+     font:14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif}
+header{padding:20px 24px 0;max-width:1080px;margin:0 auto}
+h1{font-size:19px;margin:0 0 2px;font-weight:600}
+.sub{color:var(--dim);font-size:13px}
+main{max-width:1080px;margin:0 auto;padding:16px 24px 60px}
+section{background:var(--card);border:1px solid var(--line);border-radius:10px;
+        padding:16px 18px;margin-bottom:16px}
+h2{font-size:14px;margin:0 0 4px;font-weight:600}
+h2 .n{color:var(--dim);font-weight:400}
+.hint{color:var(--dim);font-size:12.5px;margin:0 0 12px}
+.stats{display:flex;gap:26px;flex-wrap:wrap}
+.stat b{display:block;font-size:22px;font-weight:600;line-height:1.2}
+.stat span{color:var(--dim);font-size:12px}
+.row{border-top:1px solid var(--line);padding:11px 0;display:flex;gap:12px;align-items:flex-start}
+.row:first-of-type{border-top:none}
+.txt{flex:1;min-width:0}
+.meta{color:var(--dim);font-size:12px;margin-top:3px}
+select,button{font:inherit;padding:5px 9px;border:1px solid var(--line);
+       border-radius:7px;background:var(--card);color:var(--ink);cursor:pointer}
+select{max-width:230px}
+button:hover{border-color:var(--accent)}
+button.p{background:var(--accent);color:#fff;border-color:var(--accent)}
+.tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:20px;
+     border:1px solid var(--line);color:var(--dim)}
+.tag.guess{color:var(--warn);border-color:var(--warn)}
+.tag.free{color:var(--bad);border-color:var(--bad)}
+.tag.ok{color:var(--ok);border-color:var(--ok)}
+pre{white-space:pre-wrap;font:12.5px/1.65 ui-monospace,SFMono-Regular,Menlo,monospace;
+    background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:14px;
+    max-height:460px;overflow:auto;margin:0}
+.day{margin:10px 0 0}
+.day b{color:var(--dim);font-weight:500;font-size:12px}
+.day ul{margin:3px 0 0;padding-left:18px}
+.day li{margin:2px 0}
+.grp{border-top:1px solid var(--line);padding:12px 0}
+.grp:first-of-type{border-top:none}
+a{color:var(--accent)}
+.empty{color:var(--dim);padding:6px 0}
+.bar{height:6px;border-radius:4px;background:var(--line);overflow:hidden;margin:8px 0 4px}
+.bar i{display:block;height:100%;background:var(--warn)}
+</style>
+<header>
+  <h1>fecho</h1>
+  <div class="sub" id="sub">加载中…</div>
+</header>
+<main>
+  <section>
+    <h2>今天</h2>
+    <div class="stats" id="ov"></div>
+  </section>
+
+  <section>
+    <h2>归属复核 <span class="n" id="rn"></span></h2>
+    <p class="hint">日报准不准，取决于这些条目归对没有。改完点「重新生成日报」。
+       明确写了 issue 号的不在这里。</p>
+    <div id="review"></div>
+  </section>
+
+  <section>
+    <h2>被挡掉的进展 <span class="n" id="hn"></span></h2>
+    <p class="hint">判为近似重复、没进日报的。判错了捞回来。</p>
+    <div id="hidden"></div>
+  </section>
+
+  <section>
+    <h2>日报</h2>
+    <p class="hint"><button class="p" onclick="regen()">重新生成日报</button>
+       <span id="regen"></span></p>
+    <pre id="report">—</pre>
+  </section>
+
+  <section>
+    <h2>最近 7 天 · 按任务</h2>
+    <p class="hint">写周报的原料。</p>
+    <div id="tl"></div>
+  </section>
+
+  <section>
+    <h2>归属健康度</h2>
+    <p class="hint">落自由任务的比例，是这套机制在你身上灵不灵最直接的信号——
+       它目前只在一个人一周的数据上验证过。</p>
+    <div id="health"></div>
+  </section>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => (s||'').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const get = p => fetch('/api'+p).then(r=>r.json());
+const post = (p,b) => fetch('/api'+p,{method:'POST',headers:{'Content-Type':'application/json'},
+                              body:JSON.stringify(b||{})}).then(r=>r.json());
+let ISSUES = [];
+
+const LABEL = {'task-continue':['猜的','guess'], 'new-task':['自由任务','free'],
+               'verified':['验证订正','ok'], 'project-bound':['目录绑定','']};
+
+async function boot(){
+  ISSUES = (await get('/issues')).issues;
+  const o = await get('/overview');
+  $('#sub').textContent = o.date + ' · ' + (o.has_report ? '日报已生成' : '日报未生成');
+  $('#ov').innerHTML = [
+    ['进展', o.updates], ['任务', o.tasks], ['被挡掉', o.hidden],
+  ].map(([k,v])=>`<div class="stat"><b>${v}</b><span>${k}</span></div>`).join('')
+   + `<div class="stat"><b>${o.has_report?'✓':'—'}</b><span>日报</span></div>`;
+  review(); hidden(); report(); timeline(); health();
+}
+
+async function review(){
+  const {items} = await get('/review');
+  $('#rn').textContent = items.length ? items.length + ' 条待看' : '都明确';
+  $('#review').innerHTML = items.length ? items.map(it=>{
+    const [txt,cls] = LABEL[it.method] || [it.method,''];
+    const opts = ['<option value="">— 自由任务 —</option>'].concat(
+      ISSUES.map(i=>`<option value="${i.issue_key}" ${i.issue_key===it.issue_key?'selected':''}
+        >${esc(i.issue_key+' '+i.title.slice(0,26))}</option>`)).join('');
+    return `<div class="row"><div class="txt">${esc(it.content)}
+      <div class="meta"><span class="tag ${cls}">${txt}</span>
+      现归 ${esc(it.issue_key || it.title)}</div></div>
+      <select onchange="move('${it.update_id}',this.value,this)">${opts}</select></div>`;
+  }).join('') : '<div class="empty">没有需要复核的。</div>';
+}
+
+async function move(id, key, el){
+  el.disabled = true;
+  await post('/reassign', {update_id:id, issue_key:key});
+  await review(); await timeline(); await health();
+}
+
+async function hidden(){
+  const {items} = await get('/hidden');
+  $('#hn').textContent = items.length ? items.length + ' 条' : '';
+  $('#hidden').innerHTML = items.length ? items.slice(0,30).map(it=>
+    `<div class="row"><div class="txt">${esc(it.content_md)}
+      <div class="meta">${it.date} · ${it.status==='duplicate-ignored'?'近似重复':'dedupe 清理'}
+      ${it.k?' · '+esc(it.k):''}</div></div>
+      <button onclick="restore('${it.update_id}',this)">捞回来</button></div>`).join('')
+    : '<div class="empty">没有被挡掉的。</div>';
+}
+
+async function restore(id, el){ el.disabled=true; await post('/restore',{update_id:id});
+  await hidden(); await review(); }
+
+async function report(){
+  const r = await get('/report');
+  $('#report').textContent = r.daily || '还没生成。';
+}
+
+async function regen(){
+  $('#regen').textContent = ' 生成中，要等模型…';
+  const r = await post('/regenerate', {});
+  $('#regen').textContent = ' ' + (r.status || '完成');
+  await report(); await boot();
+}
+
+async function timeline(){
+  const {groups} = await get('/timeline?days=7');
+  $('#tl').innerHTML = groups.length ? groups.map(g=>{
+    const head = g.issue_key
+      ? `<a href="https://mobius.feedmob.com/issue/${g.issue_key}" target="_blank">${g.issue_key}</a> ${esc(g.title)}`
+      : esc(g.title) + ' <span class="tag">自由任务</span>';
+    const days = Object.entries(g.days).sort().reverse().map(([d,list])=>
+      `<div class="day"><b>${d}</b><ul>${list.map(c=>`<li>${esc(c)}</li>`).join('')}</ul></div>`).join('');
+    return `<div class="grp"><div><b>${head}</b></div>${days}</div>`;
+  }).join('') : '<div class="empty">最近 7 天没有进展。</div>';
+}
+
+async function health(){
+  const h = await get('/health-stats');
+  const rows = Object.entries(h.by_method).sort((a,b)=>b[1]-a[1])
+    .map(([m,n])=>`<div class="row"><div class="txt">${(LABEL[m]||[m])[0]}</div><b>${n}</b></div>`).join('');
+  $('#health').innerHTML =
+    `<div class="bar"><i style="width:${Math.min(h.freeform_pct,100)}%"></i></div>
+     <div class="meta">最近 ${h.days} 天 ${h.total} 条，其中 ${h.freeform} 条落在自由任务
+     （${h.freeform_pct}%）</div>${rows}`;
+}
+boot();
+</script>
