@@ -1,6 +1,7 @@
 """本机 HTTP 层：一个进程托两样东西。
 
-  /mcp        —— MCP over Streamable HTTP，给连不上 stdio 的客户端（ChatGPT 等）
+  /sse/       —— MCP over SSE，ChatGPT 要的就是这个（URL 必须以 /sse/ 结尾）
+  /mcp        —— MCP over Streamable HTTP，新客户端用这个
   /           —— dashboard，看数据、改归属
 
 为什么两样放一起：都需要「有个 HTTP 服务能读到这份 SQLite」，而数据在本机、
@@ -144,6 +145,56 @@ def build_app():
         got = (authorization or "").removeprefix("Bearer ").strip()
         if not secrets.compare_digest(got, TOKEN):
             raise HTTPException(401, "token 不对")
+
+    # ---- MCP over SSE ----
+    # 老一档的 MCP 传输，但 ChatGPT 现在要的就是它，且 URL 必须以 /sse/ 结尾。
+    # 握手是两条腿：GET 开一条长连接，第一个事件告诉对方「消息往哪 POST」；
+    # 之后每次 POST 的响应不从 POST 返回，而是顺着那条长连接推回去。
+    import asyncio
+
+    sessions: Dict[str, "asyncio.Queue"] = {}
+
+    @app.get("/sse/")
+    @app.get("/sse")
+    async def sse_stream(request: Request, authorization: Optional[str] = Header(None)):
+        from fastapi.responses import StreamingResponse
+
+        guard(request, authorization)
+        sid = secrets.token_urlsafe(16)
+        q: asyncio.Queue = asyncio.Queue()
+        sessions[sid] = q
+
+        async def gen():
+            yield "event: endpoint\ndata: /sse/messages?session_id=%s\n\n" % sid
+            try:
+                while True:
+                    try:
+                        msg = await asyncio.wait_for(q.get(), timeout=15)
+                    except asyncio.TimeoutError:
+                        yield ": keep-alive\n\n"      # 挡住中间层的空闲超时
+                        continue
+                    if msg is None:
+                        break
+                    yield "event: message\ndata: %s\n\n" % json.dumps(msg, ensure_ascii=False)
+            finally:
+                sessions.pop(sid, None)
+
+        return StreamingResponse(gen(), media_type="text/event-stream", headers={
+            "Cache-Control": "no-cache", "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"})
+
+    @app.post("/sse/messages")
+    async def sse_messages(request: Request, session_id: str = Query(...),
+                           authorization: Optional[str] = Header(None)):
+        guard(request, authorization)
+        q = sessions.get(session_id)
+        if q is None:
+            raise HTTPException(404, "会话不存在或已断开，请重新连接 /sse/")
+        msg = await request.json()
+        resp = mcp_server.handle(msg)
+        if resp is not None:
+            await q.put(resp)
+        return JSONResponse(status_code=202, content={"ok": True})
 
     # ---- MCP over Streamable HTTP ----
     @app.post("/mcp")

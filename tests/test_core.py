@@ -6,6 +6,8 @@
 import contextlib
 import json
 import os
+import queue
+import time
 import shutil
 import sys
 import tempfile
@@ -322,6 +324,133 @@ class TestCrossValidation(unittest.TestCase):
         self.assertEqual(res["changed"], [])
         rows = {u["update_id"]: u for u in db.day_updates("t", D)}
         self.assertEqual(rows[r["update_id"]]["issue_key"], "AI-2541")
+
+
+class TestWebEndpoints(unittest.TestCase):
+    """HTTP 层。SSE 那套握手是两条腿（GET 开流 + POST 发消息），
+    ChatGPT 要的就是它，不实跑一遍没法确认。"""
+
+    def setUp(self):
+        reset()
+        try:
+            from fastapi.testclient import TestClient
+        except ImportError:
+            self.skipTest("没装 fastapi[server] 额外依赖")
+        from fecho import web
+        # TestClient 的来源不是 127.0.0.1，正好走鉴权那条路
+        self._orig_token, web.TOKEN = web.TOKEN, "t3st-token"
+        # 接口一律按 config.AUTHOR 取数，测试数据的作者是 "t"
+        self._orig_author, config.AUTHOR = config.AUTHOR, "t"
+        self.addCleanup(lambda: setattr(config, "AUTHOR", self._orig_author))
+        self.web = web
+        self.c = TestClient(web.build_app(),
+                            headers={"Authorization": "Bearer t3st-token"})
+        self.addCleanup(lambda: setattr(web, "TOKEN", self._orig_token))
+
+    def test_non_local_access_without_token_is_refused(self):
+        """隧道一开 /mcp 就在公网上了。宁可连不上，也不要默认裸奔。"""
+        from fastapi.testclient import TestClient
+        bare = TestClient(self.web.build_app())
+        self.assertEqual(bare.post("/mcp", json={"jsonrpc": "2.0", "id": 1,
+                                                 "method": "ping"}).status_code, 401)
+        self.web.TOKEN = ""
+        bare2 = TestClient(self.web.build_app())
+        self.assertEqual(bare2.post("/mcp", json={"jsonrpc": "2.0", "id": 1,
+                                                  "method": "ping"}).status_code, 403,
+                         "没设 token 时外部来源该被直接拒绝")
+
+    def test_mcp_over_http_lists_the_same_tools_as_stdio(self):
+        from fecho import mcp_server
+        r = self.c.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+        self.assertEqual(r.status_code, 200)
+        got = [t["name"] for t in r.json()["result"]["tools"]]
+        self.assertEqual(got, [t["name"] for t in mcp_server.TOOLS],
+                         "工具集不该按客户端分——谁连上都是同一套")
+
+    def test_sse_full_roundtrip_against_a_real_server(self):
+        """SSE 是两条腿：GET 开流拿到 POST 地址，响应再顺着流推回来。
+        ChatGPT 要的就是这套，只验一条腿等于没验。
+
+        起真的 uvicorn：/sse/ 是条无限流，同步的 TestClient 进去就出不来。
+        """
+        import json as _json
+        import re
+        import socket
+        import threading
+        import urllib.request
+
+        import uvicorn
+
+        with socket.socket() as sk:
+            sk.bind(("127.0.0.1", 0))
+            port = sk.getsockname()[1]
+
+        self.web.TOKEN = ""                      # 本机直连，走 guard 的放行分支
+        server = uvicorn.Server(uvicorn.Config(self.web.build_app(), host="127.0.0.1",
+                                               port=port, log_level="error"))
+        threading.Thread(target=server.run, daemon=True).start()
+        self.addCleanup(setattr, server, "should_exit", True)
+        base = "http://127.0.0.1:%d" % port
+        for _ in range(100):                     # 等它起来
+            try:
+                urllib.request.urlopen(base + "/healthz", timeout=1)
+                break
+            except Exception:
+                time.sleep(0.05)
+
+        events: "queue.Queue[str]" = queue.Queue()
+
+        def pump():
+            r = urllib.request.urlopen(base + "/sse/", timeout=20)
+            buf = ""
+            for chunk in r:
+                buf += chunk.decode()
+                while "\n\n" in buf:
+                    block, buf = buf.split("\n\n", 1)
+                    events.put(block)
+
+        threading.Thread(target=pump, daemon=True).start()
+
+        first = events.get(timeout=10)
+        self.assertTrue(first.startswith("event: endpoint"), first)
+        post_to = re.search(r"data: (\S+)", first).group(1)
+        self.assertIn("/sse/messages?session_id=", post_to)
+
+        req = urllib.request.Request(
+            base + post_to, headers={"Content-Type": "application/json"},
+            data=_json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}).encode())
+        self.assertEqual(urllib.request.urlopen(req, timeout=10).status, 202,
+                         "POST 只回执，真正的响应走 SSE 流")
+
+        while True:                              # keep-alive 之外的第一条消息
+            block = events.get(timeout=15)
+            if block.startswith("event: message"):
+                payload = _json.loads(block.split("data: ", 1)[1])
+                break
+        from fecho import mcp_server
+        self.assertEqual([t["name"] for t in payload["result"]["tools"]],
+                         [t["name"] for t in mcp_server.TOOLS])
+
+    def test_sse_post_to_a_dead_session_is_rejected(self):
+        r = self.c.post("/sse/messages?session_id=nope",
+                        json={"jsonrpc": "2.0", "id": 1, "method": "ping"})
+        self.assertEqual(r.status_code, 404)
+
+    def test_reassign_through_the_api(self):
+        rec = store.record_progress("t", "闲鱼抓了十六个商品", date=D, issue="AI-2541")
+        r = self.c.post("/api/reassign",
+                        json={"update_id": rec["update_id"], "issue_key": "AI-2224"})
+        self.assertTrue(r.json()["ok"])
+        rows = {u["update_id"]: u for u in db.day_updates("t", D)}
+        self.assertEqual(rows[rec["update_id"]]["issue_key"], "AI-2224")
+
+    def test_review_queue_skips_explicit_entries(self):
+        store.record_progress("t", "明确写了 AI-2541 的进展", date=D, issue="AI-2541")
+        store.record_progress("t", "没有任何线索的一条", date=D)
+        from fecho import web
+        items = web.review_queue("t", D)
+        self.assertEqual(len(items), 1, "明确写了 issue 号的没什么可复核的")
+        self.assertEqual(items[0]["method"], "new-task")
 
 
 class TestAggregation(unittest.TestCase):
