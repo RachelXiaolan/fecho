@@ -167,6 +167,44 @@ class TestScanDoesNotCascade(unittest.TestCase):
         self.assertEqual(b["task"]["task_id"], a["task"]["task_id"])
 
 
+class TestScanAssignsIssues(unittest.TestCase):
+    """扫描时归属由读得懂意思的模型判，不再靠字面相似度。"""
+
+    def setUp(self):
+        reset()
+
+    def test_parses_issue_column(self):
+        from fecho import scan
+        got = scan.parse_entries(
+            "done | AI-2541 | 配对引擎写完了\n"
+            "pitfall | - | 闲鱼 LDC 售价只是价格带映射\n"
+            "done | 内容里带 | 竖线也不该被截断")
+        self.assertEqual(got[0]["issue"], "AI-2541")
+        self.assertIsNone(got[1]["issue"], "写 - 的该归自由任务")
+        self.assertEqual(got[2]["content"], "竖线也不该被截断")
+
+    def test_ignores_issue_keys_not_in_the_candidate_list(self):
+        """模型编的 issue 号不能当真。光校验形状不够——它能吐出格式完全正确
+        但根本不存在的号，那就是凭空造归属。按真实候选列表校验。"""
+        from fecho import scan
+        got = scan.parse_entries(
+            "done | AI-2541 | 真实存在的\ndone | AI-9999 | 格式对但不存在\ndone | 不知道 | 压根不是号",
+            valid_keys={"AI-2541"})
+        self.assertEqual(got[0]["issue"], "AI-2541")
+        self.assertIsNone(got[1]["issue"], "格式合法但不在候选列表里，不能认")
+        self.assertIsNone(got[2]["issue"])
+
+    def test_prompt_lists_candidates_and_forbids_inventing(self):
+        from fecho import scan
+        p = scan._prompt([{"issue_key": "AI-2541", "title": "写一个提交工作日志的系统"}])
+        self.assertIn("AI-2541：写一个提交工作日志的系统", p)
+        self.assertIn("不许自己编", p)
+
+    def test_prompt_without_issues_still_valid(self):
+        from fecho import scan
+        self.assertIn("没有在办的 issue", scan._prompt([]))
+
+
 class TestAggregation(unittest.TestCase):
     """这一组盯的是最早那版的设计错误：把同一任务的多条进展当重复删掉。"""
 

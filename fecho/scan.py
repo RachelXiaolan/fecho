@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from . import config, db, scope, store
+from .match import ISSUE_RE
 
 CLAUDE_PROJECTS = Path.home() / ".claude" / "projects"
 
@@ -52,20 +53,43 @@ PROMPT = """你在读一段「人和 coding agent 一起干活」的对话记录
 - 忽略纯粹的来回确认、纯提问、没有结论的讨论。
 - **不许把「还在讨论/倾向于」写成「已决定」**。只有明确拍板的才用「定为/改成/确定」，
   还在比较的要写「在评估 X 和 Y」。
-- 每条一到两句话，让人三个月后还看得懂。涉及 issue 号（形如 AI-1234）的带上。
+- 每条一到两句话，让人三个月后还看得懂。
 - **必须用中文写**，无论对话本身是什么语言。技术名词（MCP、OAuth、SQLite 等）保留原文。
 
-输出格式：一行一条，`类型 | 内容`，类型是 done / pitfall / decision 三者之一。
+还要判断每条进展属于下面哪个 issue：
+- 看的是**说的是不是同一件事**，不是字面有没有重合的词。
+- 真的都不属于就写 `-`，系统会归到自由任务。**宁可写 `-` 也不要硬凑**——
+  归错了下游的日报全跟着错，归不上只是多一个自由任务。
+- 只能从下面给的列表里选，不许自己编 issue 号。
+
+{issues}
+
+输出格式：一行一条，`类型 | issue号或-| 内容`，类型是 done / pitfall / decision 三者之一。
 不要 JSON、不要代码块、不要编号、不要解释。内容里随便用什么标点都行。
 
 示例：
-done | 配对引擎写完了，拿真实 issue 测下来 11/12 命中
-pitfall | 让模型自己数中文字数会把推理预算烧穿，改成给结构性目标才出得来
-decision | 团队方案选了联邦汇总，只推成品不推原始进展
+done | AI-2541 | 配对引擎写完了，拿真实 issue 测下来 11/12 命中
+pitfall | AI-2541 | 让模型自己数中文字数会把推理预算烧穿，改成给结构性目标才出得来
+decision | - | 闲鱼选品定了强推三个品类，盗版资料类全部淘汰
 
 对话记录如下：
 
 """
+
+
+def _prompt(issues: List[Dict[str, Any]]) -> str:
+    """把候选 issue 填进提示词。
+
+    归属交给读得懂意思的模型判断，不再靠字面相似度打分——后者在
+    「做这个项目本身」的场景下天然失效（标题和干活时说的话一个词都不重合），
+    又会因为两句话都出现 agent 这种通用词而误判。
+    """
+    if issues:
+        lines = "\n".join("- %s：%s" % (i["issue_key"], i["title"]) for i in issues)
+        block = "候选 issue（只能从这里选）：\n%s" % lines
+    else:
+        block = "（当前没有在办的 issue，所有条目的 issue 号都写 `-`）"
+    return PROMPT.replace("{issues}", block)
 
 
 # ---------- 水位线 ----------
@@ -194,7 +218,7 @@ def render(rows: List[Dict[str, Any]], cap: int = 2000) -> str:
     return "\n\n".join(out)
 
 
-def parse_entries(raw: str) -> List[Dict[str, str]]:
+def parse_entries(raw: str, valid_keys: Optional[set] = None) -> List[Dict[str, str]]:
     """一行一条、竖线分隔。
 
     刻意不用 JSON：中文内容里的引号会把它打断（实测两个项目全炸在这），
@@ -204,12 +228,23 @@ def parse_entries(raw: str) -> List[Dict[str, str]]:
     out = []
     for line in raw.splitlines():
         line = line.strip().lstrip("-*0123456789. ")
-        if "|" not in line:
+        parts = [x.strip() for x in line.split("|")]
+        if len(parts) < 2:
             continue
-        kind, _, content = line.partition("|")
-        kind, content = kind.strip().lower(), content.strip()
-        if kind in ("done", "pitfall", "decision") and content:
-            out.append({"kind": kind, "content": content})
+        kind = parts[0].lower()
+        if kind not in ("done", "pitfall", "decision"):
+            continue
+        if len(parts) >= 3:
+            issue, content = parts[1], "|".join(parts[2:]).strip()
+        else:                                   # 老格式：没有 issue 段
+            issue, content = "", parts[1]
+        if not content:
+            continue
+        # 只认真实存在的 issue。光校验形状不够——模型可以吐出一个格式完全正确
+        # 但根本不存在的号，那样就成了凭空造归属。
+        issue = issue.upper()
+        ok = bool(ISSUE_RE.fullmatch(issue)) and (valid_keys is None or issue in valid_keys)
+        out.append({"kind": kind, "content": content, "issue": issue if ok else None})
     return out
 
 
@@ -234,6 +269,12 @@ def scan(days: int = 1, dry_run: bool = False, author: Optional[str] = None) -> 
         return result
 
     from . import match
+
+    # 候选 issue 取一次，所有组共用
+    from . import mobius
+    open_issues = mobius.cached_issues(author)
+    valid_keys = {i["issue_key"] for i in open_issues}
+
     blocked: Dict[str, str] = {}     # session_id -> 失败组里最早的时间戳
     for (session_id, project, date), rows in sorted(groups.items()):
         convo = render(rows)
@@ -255,7 +296,7 @@ def scan(days: int = 1, dry_run: bool = False, author: Optional[str] = None) -> 
         for part in chunks:
             try:
                 raw_parts.append(llm.chat(
-                    [{"role": "user", "content": PROMPT + render(part)}],
+                    [{"role": "user", "content": _prompt(open_issues) + render(part)}],
                     temperature=0.3, max_tokens=4000))
             except llm.LLMError as exc:
                 g["error"] = str(exc)[:200]
@@ -270,10 +311,11 @@ def scan(days: int = 1, dry_run: bool = False, author: Optional[str] = None) -> 
             blocked[session_id] = min(blocked.get(session_id, first), first)
             continue
 
-        for e in parse_entries("\n".join(raw_parts)):
+        for e in parse_entries("\n".join(raw_parts), valid_keys):
             rec = store.record_progress(
                 author, e["content"], date=date, source_agent="scan",
                 session_id=session_id, project=project,
+                issue=e.get("issue"),        # 模型判的归属，当确定信号用
                 meta={"kind": e["kind"], "source": "transcript"},
             )
             g["entries"].append({

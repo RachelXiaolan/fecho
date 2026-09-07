@@ -91,6 +91,9 @@ def _daily_prompt(author, date, tasks, persona) -> List[dict]:
         "- **不要写 URL、不要写 issue 号、不要给任务起名、不要写 emoji**——\n"
         "  这些由系统自动加，你写了反而会错。\n"
         "- 每条都要判一个状态：done=做完了 / wip=还在做或部分完成 / blocked=卡住了。\n"
+        "  出现「先不做」「待优化」「还没」「下一步」「明天」「暂缓」这类说法的是 wip；\n"
+        "  「卡住」「没装成功」「失败了还没解决」是 blocked；其余才是 done。\n"
+        "  别偷懒全标 done——一天里总有没做完的事。\n"
         "- 每个任务一句话总结，再列 1-4 条子弹点写具体做了什么、踩了什么坑。\n"
         "- To do 只写进展里明确提到还没做完的事；没有就整段不写。\n"
         "风格要求：%s\n\n"
@@ -105,11 +108,17 @@ def _daily_prompt(author, date, tasks, persona) -> List[dict]:
         "- 跟具体任务无关的待办\n"
     ) % (persona.get("display_name") or author, persona.get("daily_style", ""))
 
+    # 把扫描时判好的 kind 一起给它。之前不给，模型只能瞎猜，实测把所有条目
+    # 都标成了 done——包括「只读 UI 先不做」「准确率待优化」这种明显没完成的。
+    hint = {"pitfall": "[坑]", "decision": "[决定]"}
     blocks = []
     for i, t in enumerate(tasks, 1):
-        body = "\n".join("  - %s" % u["content_md"].strip().replace("\n", " ")
-                          for u in t["updates"])
-        blocks.append("[%d]\n%s" % (i, body))
+        lines = []
+        for u in t["updates"]:
+            k = (u.get("meta") or {}).get("kind")
+            lines.append("  - %s%s" % (hint.get(k, ""),
+                                       u["content_md"].strip().replace("\n", " ")))
+        blocks.append("[%d]\n%s" % (i, "\n".join(lines)))
     user = "日期：%s\n\n今天推进了 %d 个任务：\n\n%s" % (date, len(tasks), "\n\n".join(blocks))
     return [{"role": "system", "content": sys}, {"role": "user", "content": user}]
 
@@ -281,10 +290,21 @@ def generate(author: str, date: str, force: bool = False,
 
     # 日报和口播稿各自独立降级：一个挂了不该把另一个也拖成兜底稿。
     try:
-        raw = llm.chat(_daily_prompt(author, date, tasks, persona), max_tokens=4000)
+        # 预算按任务数给。上一版固定 4000，28 条进展的日报被截断在半句话上，
+        # 后两个任务只剩标题。宁可给多，llm.chat 那边本来就有截断重试。
+        budget = max(4000, 1200 * len(tasks) + 2000)
+        raw = llm.chat(_daily_prompt(author, date, tasks, persona), max_tokens=budget)
         items, todos = _parse_daily(raw, len(tasks))
+        if len(items) < len(tasks):
+            # 少解析出任务块，多半是被 max_tokens 截断了——翻倍再来一次。
+            raw = llm.chat(_daily_prompt(author, date, tasks, persona),
+                           max_tokens=min(budget * 2, llm.MAX_TOKEN_CEILING))
+            items, todos = _parse_daily(raw, len(tasks))
         if not items:
             raise llm.LLMError("没解析出任何任务块，原样片段：%s" % raw[:200])
+        if len(items) < len(tasks):
+            warnings.append("只整理出 %d/%d 个任务，其余可能因长度被截断"
+                            % (len(items), len(tasks)))
         # 链接和结构在这里拼死，模型碰不到——它写错 URL 的账已经吃过一次了。
         daily = _assemble_daily(date, tasks, items, todos, persona)
         daily_gen = "llm"
