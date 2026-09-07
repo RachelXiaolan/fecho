@@ -56,22 +56,6 @@ def _session_last_task(session_id: Optional[str], author: str) -> Optional[str]:
     return row["task_id"] if row else None
 
 
-def _recent_texts(author: str, limit_per_task: int = 3) -> Dict[str, str]:
-    """每个任务最近几条进展拼起来，配对时和标题一起比。"""
-    out: Dict[str, List[str]] = {}
-    with db.cursor() as conn:
-        rows = conn.execute(
-            "SELECT task_id, content_md FROM updates WHERE author=? AND status='active'"
-            " ORDER BY created_at DESC",
-            (author,),
-        ).fetchall()
-    for r in rows:
-        bucket = out.setdefault(r["task_id"], [])
-        if len(bucket) < limit_per_task:
-            bucket.append(r["content_md"])
-    return {k: " ".join(v) for k, v in out.items()}
-
-
 def _get_or_create_mobius_task(author: str, issue_key: str, title: Optional[str]) -> Dict[str, Any]:
     with db.cursor() as conn:
         row = conn.execute(
@@ -126,15 +110,10 @@ def record_progress(
     if not re.match(r"^\d{4}-\d{2}-\d{2}$", date):
         raise ValueError("date 必须是 YYYY-MM-DD")
 
-    from . import mobius
-
-    issues = mobius.cached_issues(author)
     tasks = db.list_tasks(author=author, status="open")
     decision = match.decide(
         content_md,
-        issues=issues,
         tasks=tasks,
-        recent_texts=_recent_texts(author),
         session_task_id=_session_last_task(session_id, author),
         explicit_issue=issue,
         explicit_task_id=task_id,
@@ -176,7 +155,7 @@ def record_progress(
                 (task["task_id"], date),
             ).fetchall()
             for row in near:
-                if match.score(content_md, row["content_md"]) >= config.SCAN_DEDUPE_SIMILARITY:
+                if match.similarity(content_md, row["content_md"]) >= config.SCAN_DEDUPE_SIMILARITY:
                     return _result(task, row["update_id"], "duplicate", decision, date, author,
                                    note="同一任务下已有内容几乎相同的扫描进展，未重复写入。")
 
@@ -217,6 +196,32 @@ def _result(task, update_id, verdict, decision, date, author, note=None) -> Dict
     if note:
         out["note"] = note
     return out
+
+
+def reassign(update_id: str, author: str, issue_key: Optional[str]) -> bool:
+    """把一条进展挪到另一个 issue（或挪回自由任务）。交叉验证纠错用。
+
+    原来那个任务可能因此变空——不删，留着；它可能还挂着别的日期的进展，
+    而且留着比悄悄消失更容易看出发生过什么。
+    """
+    with db.cursor() as conn:
+        row = conn.execute(
+            "SELECT u.*, t.issue_key FROM updates u JOIN tasks t ON t.task_id=u.task_id"
+            " WHERE u.update_id=? AND u.author=?", (update_id, author)).fetchone()
+    if row is None or row["issue_key"] == issue_key:
+        return False
+
+    if issue_key:
+        task = _get_or_create_mobius_task(author, issue_key, None)
+    else:
+        task = _create_freeform_task(author, row["content_md"])
+
+    ts = now_iso()
+    with db.cursor() as conn:
+        conn.execute("UPDATE updates SET task_id=?, match_method=? WHERE update_id=?",
+                     (task["task_id"], "verified", update_id))
+        conn.execute("UPDATE tasks SET last_update=? WHERE task_id=?", (ts, task["task_id"]))
+    return True
 
 
 def close_task(task_id: str, author: str) -> Dict[str, Any]:

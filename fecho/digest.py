@@ -252,6 +252,84 @@ def _clip(text: str, hi: int) -> str:
 
 # ---------- 主流程 ----------
 
+_VERIFY_PROMPT = """下面是同一个人一天里记下的工作进展。请判断每一条属于哪个 issue。
+
+规则：
+- 看的是**说的是不是同一件事**，不是字面有没有重合的词。
+  比如「闲鱼选品调研」和「有关 Linux.do 积分、开小店」字面零重合，但很可能是同一件事。
+- 每条独立判断。**不要因为相邻的几条归了同一个 issue 就跟着归**。
+- 真的都不属于就写 `-`。**宁可写 `-` 也不要硬凑**——归错了日报全跟着错。
+- 只能从下面给的列表里选，不许自己编 issue 号。
+
+{issues}
+
+进展列表：
+{entries}
+
+输出格式：一行一条，`序号 | issue号或-`。不要 JSON、不要代码块、不要解释。
+必须每条都给，序号和上面一一对应。
+"""
+
+
+def verify_assignments(author: str, date: str) -> Dict[str, Any]:
+    """把当天所有进展的归属重判一次，不管它当初是怎么归的。
+
+    为什么连 explicit 也要重判：那个 issue 号是调用方 agent 填的，**它也是模型的
+    判断**，一样会错——记的时候手上只有当前这一条的上下文，这里能看到一整天。
+    两边不一致时以这里为准，但把改动如实报出来，不闷声改。
+    """
+    from . import mobius
+
+    out: Dict[str, Any] = {"checked": 0, "changed": [], "error": None}
+    if not config.llm_configured():
+        out["error"] = "没配 LLM，跳过交叉验证"
+        return out
+
+    rows = db.day_updates(author, date)
+    if not rows:
+        return out
+    issues = mobius.cached_issues(author)
+    valid = {i["issue_key"] for i in issues}
+
+    listing = ("候选 issue（只能从这里选）：\n"
+               + "\n".join("- %s：%s" % (i["issue_key"], i["title"]) for i in issues)
+               ) if issues else "（当前没有在办的 issue，全部写 `-`）"
+    body = "\n".join("%d | %s" % (n, r["content_md"].strip().replace("\n", " "))
+                      for n, r in enumerate(rows, 1))
+    prompt = _VERIFY_PROMPT.replace("{issues}", listing).replace("{entries}", body)
+
+    try:
+        raw = llm.chat([{"role": "user", "content": prompt}],
+                       temperature=0.1, max_tokens=max(2000, 60 * len(rows)))
+    except llm.LLMError as exc:
+        out["error"] = str(exc)[:160]
+        return out
+
+    verdicts: Dict[int, Optional[str]] = {}
+    for line in re.sub(r"^```\w*\s*|\s*```$", "", raw.strip()).splitlines():
+        m = re.match(r"^\s*(\d+)\s*\|\s*(\S+)", line)
+        if not m:
+            continue
+        key = m.group(2).strip().upper()
+        verdicts[int(m.group(1))] = key if key in valid else None
+
+    out["checked"] = len(verdicts)
+    for n, row in enumerate(rows, 1):
+        if n not in verdicts:
+            continue                      # 模型没给这条，保持原样
+        want, have = verdicts[n], row["issue_key"]
+        if want == have:
+            continue
+        moved = store.reassign(row["update_id"], author, want)
+        if moved:
+            out["changed"].append({
+                "content": row["content_md"][:40],
+                "from": have or "自由任务", "to": want or "自由任务",
+                "was": row["match_method"],
+            })
+    return out
+
+
 def generate(author: str, date: str, force: bool = False,
              persona_name: Optional[str] = None) -> Dict[str, Any]:
     from . import auth
@@ -260,6 +338,10 @@ def generate(author: str, date: str, force: bool = False,
     persona = personas.load(persona_name or ident.get("persona") or author)
     if not persona.get("display_name"):
         persona["display_name"] = ident.get("display_name") or author
+
+    # 出稿前先把归属重判一次。记的时候手上只有当前那一条的上下文，这里能看到
+    # 一整天——连 agent 明确填的 issue 号也重判，那同样是模型的判断，一样会错。
+    verified = verify_assignments(author, date)
 
     tasks = db.day_tasks(author, date)
     n_updates = sum(len(t["updates"]) for t in tasks)
@@ -286,6 +368,12 @@ def generate(author: str, date: str, force: bool = False,
 
     lo, hi = persona.get("voice_target_chars", [config.VOICE_MIN_CHARS, config.VOICE_MAX_CHARS])
     warnings: List[str] = []
+    # 改了归属就说出来，不闷声改
+    for c in verified["changed"]:
+        warnings.append("归属订正：%s → %s（原为 %s）「%s」"
+                        % (c["from"], c["to"], c["was"], c["content"]))
+    if verified.get("error"):
+        warnings.append("交叉验证未执行：%s" % verified["error"])
     model = config.LLM_MODEL
 
     # 日报和口播稿各自独立降级：一个挂了不该把另一个也拖成兜底稿。

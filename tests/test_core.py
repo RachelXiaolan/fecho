@@ -3,6 +3,7 @@
 不依赖 pytest：python3 tests/test_core.py
 不碰生产库、不联网：全部指向临时目录，Mobius issue 用假缓存。
 """
+import contextlib
 import json
 import os
 import shutil
@@ -30,13 +31,27 @@ with open(os.environ["FECHO_PTO_FILE"], "w") as f:
     json.dump({"t": ["2030-01-02"]}, f)
 
 sys.path.insert(0, ROOT)
-from fecho import db, digest, llm, match, store  # noqa: E402
+from fecho import config, db, digest, llm, match, store  # noqa: E402
 
 D = "2030-01-01"
+
+
+@contextlib.contextmanager
+def mock_llm(reply):
+    """让 llm.chat 返回固定内容。测归属验证这类逻辑时不该真去打模型。"""
+    orig_chat, orig_cfg = llm.chat, config.llm_configured
+    llm.chat = lambda *a, **k: reply
+    config.llm_configured = lambda: True
+    try:
+        yield
+    finally:
+        llm.chat, config.llm_configured = orig_chat, orig_cfg
 ISSUES = [
     {"issue_key": "AI-2541", "title": "写一个提交工作日志的系统（给agent专用）"},
     {"issue_key": "AI-2539", "title": "本地试用 awesome-gpt-image-2 并评估复用价值"},
     {"issue_key": "AI-2460", "title": "申请新lu3服务器 8G 部署产品级的QM"},
+    # 字面上和「闲鱼选品」零重合，但说的是同一件事——语义归属的典型案例
+    {"issue_key": "AI-2224", "title": "与小Lu商量，有关Linux.do积分的事情（例如开小店等）"},
 ]
 
 
@@ -67,10 +82,12 @@ class TestMatching(unittest.TestCase):
         self.assertEqual(r["match"]["method"], "explicit")
         self.assertEqual(r["task"]["issue_key"], "AI-2541")
 
-    def test_content_is_matched_to_a_mobius_issue_without_naming_it(self):
+    def test_never_guesses_an_issue_from_wording(self):
+        """字面像不代表是同一件事。归属交给读得懂意思的模型（scan 里的 m3、
+        或调用方 agent 自己），这一层配不上就老实走自由任务。"""
         r = store.record_progress("t", "本地试了下 awesome-gpt-image-2，出图质量一般", date=D)
-        self.assertEqual(r["match"]["method"], "mobius-auto")
-        self.assertEqual(r["task"]["issue_key"], "AI-2539")
+        self.assertEqual(r["match"]["method"], "new-task")
+        self.assertIsNone(r["task"]["issue_key"])
 
     def test_unrelated_work_becomes_a_freeform_task(self):
         r = store.record_progress("t", "帮同事看了下他那个爬虫为什么超时", date=D)
@@ -91,12 +108,11 @@ class TestMatching(unittest.TestCase):
         b = store.record_progress("t", "帮同事看了下他那个爬虫为什么超时", date=D, session_id="s2")
         self.assertEqual(b["task"]["source"], "freeform")
 
-    def test_strong_signal_beats_session_inertia(self):
-        """会话惯性只是默认值：正文里有明确证据时必须让位。"""
+    def test_explicit_issue_beats_session_inertia(self):
+        """会话惯性只是默认值：正文里写了 issue 号时必须让位。"""
         s = "sess-2"
-        store.record_progress("t", "开始做 AI-2541 的工作日志系统", date=D, session_id=s)
-        b = store.record_progress("t", "本地试了下 awesome-gpt-image-2，出图一般",
-                                  date=D, session_id=s)
+        store.record_progress("t", "开始做工作日志系统", date=D, session_id=s)
+        b = store.record_progress("t", "顺手把 AI-2539 那个也试了", date=D, session_id=s)
         self.assertEqual(b["task"]["issue_key"], "AI-2539")
 
     def test_session_fallback_is_marked_low_confidence(self):
@@ -117,30 +133,30 @@ class TestMatching(unittest.TestCase):
         self.assertEqual(b["task"]["issue_key"], "AI-2460")
 
 
-class TestFalsePositives(unittest.TestCase):
-    """打分器的伪相关。真实翻车：闲鱼选品的内容被配进「写一个提交工作日志的系统」，
-    唯一的共同点是两句话里都出现了 agent 这个词。"""
+class TestNoSemanticGuessing(unittest.TestCase):
+    """真实翻车：闲鱼选品的内容被配进「写一个提交工作日志的系统」，唯一的共同点
+    是两句话里都出现了 agent。字面相似度不该用来判归属——这条路已经删掉了。"""
 
     def setUp(self):
         reset()
 
-    def test_common_token_alone_does_not_match(self):
-        c = "LDC 建议售价只是基于价格带规律的映射，非精确利润测算，agent 无这部分数据"
-        t = "写一个提交工作日志的系统（给agent专用）"
-        self.assertEqual(match._cjk_bigrams(c) & match._cjk_bigrams(t), set(),
-                         "前提：这两句中文毫无重合")
-        self.assertLess(match.score(c, t), 0.30, "光靠 agent 一个通用词不该过线")
+    def test_decide_never_returns_a_keyword_matched_issue(self):
+        for text in ("本地试了下 awesome-gpt-image-2，出图一般",
+                     "LDC 建议售价只是价格带映射，agent 无这部分数据",
+                     "读完 PRD，把工作日志系统的 V0 边界定下来了"):
+            d = match.decide(text, tasks=[])
+            self.assertEqual(d["method"], "new-task",
+                             "%r 不该被字面猜出归属" % text[:16])
 
-    def test_distinctive_token_still_matches(self):
-        """但罕见词该继续单独定案——awesome-gpt-image-2 撞上就是同一件事。"""
+    def test_similarity_still_serves_dedupe(self):
+        """similarity 干的是另一件事：比两条**进展之间**像不像，用来挡扫描
+        重跑产生的近似重复。文本对文本正是字符串相似度擅长的。"""
+        a = "反向链路 catch_up 做完了，agent 开工时自己拉回昨日日报"
         self.assertGreaterEqual(
-            match.score("本地试了下 awesome-gpt-image-2，出图一般",
-                        "本地试用 awesome-gpt-image-2 并评估复用价值"), 0.30)
-
-    def test_chinese_overlap_still_matches(self):
-        self.assertGreaterEqual(
-            match.score("读完 PRD，把工作日志系统的 V0 边界定下来了",
-                        "写一个提交工作日志的系统（给agent专用）"), 0.30)
+            match.similarity(a, "catch_up 反向链路做完，agent 开工时自己拉回昨天的日报"),
+            config.SCAN_DEDUPE_SIMILARITY, "同一件事的两种说法应判为近似重复")
+        self.assertLess(match.similarity(a, "闲鱼那边抓了十六个商品的详情"),
+                        config.SCAN_DEDUPE_SIMILARITY, "不同的事不该被当成重复")
 
 
 class TestScanDoesNotCascade(unittest.TestCase):
@@ -203,6 +219,58 @@ class TestScanAssignsIssues(unittest.TestCase):
     def test_prompt_without_issues_still_valid(self):
         from fecho import scan
         self.assertIn("没有在办的 issue", scan._prompt([]))
+
+
+class TestCrossValidation(unittest.TestCase):
+    """出稿前把归属重判一次。连 agent 明确填的 issue 号也要重判——那同样是模型的
+    判断，记的时候手上只有当前那一条的上下文。"""
+
+    def setUp(self):
+        reset()
+
+    def test_reassign_moves_an_update_between_issues(self):
+        r = store.record_progress("t", "抓了十六个商品详情", date=D, issue="AI-2541")
+        self.assertEqual(r["task"]["issue_key"], "AI-2541")
+        self.assertTrue(store.reassign(r["update_id"], "t", "AI-2224"))
+        rows = {u["update_id"]: u for u in db.day_updates("t", D)}
+        self.assertEqual(rows[r["update_id"]]["issue_key"], "AI-2224")
+        self.assertEqual(rows[r["update_id"]]["match_method"], "verified")
+
+    def test_reassign_can_send_it_back_to_freeform(self):
+        r = store.record_progress("t", "帮同事看爬虫超时", date=D, issue="AI-2541")
+        self.assertTrue(store.reassign(r["update_id"], "t", None))
+        rows = {u["update_id"]: u for u in db.day_updates("t", D)}
+        self.assertIsNone(rows[r["update_id"]]["issue_key"])
+
+    def test_reassign_is_a_noop_when_already_right(self):
+        r = store.record_progress("t", "配对引擎写完了", date=D, issue="AI-2541")
+        self.assertFalse(store.reassign(r["update_id"], "t", "AI-2541"))
+
+    def test_verify_corrects_a_wrong_explicit_issue(self):
+        """agent 把闲鱼的活填成了 AI-2541，验证那步该纠回来。"""
+        r = store.record_progress("t", "闲鱼抓了十六个商品详情", date=D, issue="AI-2541")
+        with mock_llm("1 | AI-2224"):
+            res = digest.verify_assignments("t", D)
+        self.assertEqual(len(res["changed"]), 1)
+        self.assertEqual(res["changed"][0]["to"], "AI-2224")
+        rows = {u["update_id"]: u for u in db.day_updates("t", D)}
+        self.assertEqual(rows[r["update_id"]]["issue_key"], "AI-2224")
+
+    def test_verify_ignores_issue_keys_that_do_not_exist(self):
+        r = store.record_progress("t", "配对引擎写完了", date=D, issue="AI-2541")
+        with mock_llm("1 | AI-9999"):
+            digest.verify_assignments("t", D)
+        rows = {u["update_id"]: u for u in db.day_updates("t", D)}
+        self.assertIsNone(rows[r["update_id"]]["issue_key"],
+                          "不存在的 issue 号该当作「都不属于」，落自由任务")
+
+    def test_verify_leaves_entries_the_model_skipped(self):
+        r = store.record_progress("t", "配对引擎写完了", date=D, issue="AI-2541")
+        with mock_llm("（模型没按格式给）"):
+            res = digest.verify_assignments("t", D)
+        self.assertEqual(res["changed"], [])
+        rows = {u["update_id"]: u for u in db.day_updates("t", D)}
+        self.assertEqual(rows[r["update_id"]]["issue_key"], "AI-2541")
 
 
 class TestAggregation(unittest.TestCase):
@@ -495,11 +563,11 @@ class TestProjectBinding(unittest.TestCase):
                                   project="/home/me/work/scripe")
         self.assertEqual(r["task"]["issue_key"], "AI-2460")
 
-    def test_strong_keyword_match_beats_binding(self):
-        """在 fecho 仓库里干别的 issue 的活时，正文的具体信号该赢。"""
-        r = store.record_progress("t", "本地试了下 awesome-gpt-image-2，出图一般", date=D,
+    def test_explicit_issue_beats_binding(self):
+        """在绑定的仓库里干别的 issue 的活时，正文里写明的 issue 号该赢。"""
+        r = store.record_progress("t", "顺手把 AI-2539 那个也试了", date=D,
                                   project="/home/me/work/scripe")
-        self.assertEqual(r["match"]["method"], "mobius-auto")
+        self.assertEqual(r["match"]["method"], "explicit")
         self.assertEqual(r["task"]["issue_key"], "AI-2539")
 
     def test_unbound_project_still_records_as_freeform(self):

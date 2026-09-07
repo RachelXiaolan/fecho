@@ -246,7 +246,7 @@ def cmd_dedupe(args) -> int:
     for r in rows:
         key = (r["task_id"], r["date"])
         for k in kept.setdefault(key, []):
-            if match.score(r["content_md"], k["content_md"]) >= config.SCAN_DEDUPE_SIMILARITY:
+            if match.similarity(r["content_md"], k["content_md"]) >= config.SCAN_DEDUPE_SIMILARITY:
                 drop.append((r, k))
                 break
         else:

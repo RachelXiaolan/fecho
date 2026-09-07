@@ -1,14 +1,21 @@
-"""把一条进展配到一个任务上。
+"""把一条进展配到一个任务上，以及判断两条进展是不是同一件事。
 
-优先级从确定到模糊，先命中先赢：
-  1. explicit        —— 正文里写了 issue 号，或调用时直接指定
-  2. mobius-auto     —— 和「我名下在办的 Mobius issue」标题够像
-  3. task-continue   —— 接着同一个对话里刚才那个任务，或近期的自由任务
-  4. new-task        —— 都不是，新立一个自由任务
+**归属不在这里判。** 拿进展的字面和 issue 标题比重合度这条路已经废掉了：
+做 AI-2541 时说的是「配对引擎」「单测」，和标题「写一个提交工作日志的系统」
+一个词都不重合；反过来，两句话都出现 agent 就能把闲鱼选品配进日志系统。
+「这句话说的是不是这件事」交给读得懂意思的模型判（scan 里的 m3、或调用方
+agent 自己），这里只认不会错的信号：
 
-打分对中英混排做了区分：中文比 bigram 的**包含度**（不是 Jaccard——进展句通常
-比 issue 标题短很多，Jaccard 会被长度差压死）；英文和带数字的 token 单独算，
-像 awesome-gpt-image-2 / lu3 / MCP 这种词一旦对上就是强信号。
+  1. explicit      —— 正文里写了 issue 号，或调用时直接指定
+  2. project-bound —— 这个工作目录绑过 issue（人主动配的）
+  3. same-session  —— 都没有时，跟着同一对话里刚才那个任务，标记为「猜的」
+  4. new-task      —— 新立一个自由任务
+
+写进库之后还会被 verify 那一步重判一次（见 digest.verify_assignments）——
+上面第 1 条看着确定，其实也是 agent 的判断，一样会错。
+
+`similarity` 是另一件事：比两条**进展之间**像不像，用来挡扫描重跑产生的近似
+重复。文本对文本正是字符串相似度擅长的，和拿它去猜语义归属不是一回事。
 """
 import re
 from typing import Any, Dict, List, Optional, Tuple
@@ -93,53 +100,25 @@ def _longest_common_run(a: str, b: str) -> int:
     return best
 
 
-def score(content: str, title: str) -> float:
-    tb, cb = _cjk_bigrams(title), _cjk_bigrams(content)
+def similarity(a: str, b: str) -> float:
+    """两段文本有多像。只用于近似重复判断，不要拿来猜语义归属。"""
+    tb, cb = _cjk_bigrams(b), _cjk_bigrams(a)
     cjk = len(tb & cb) / min(len(tb), len(cb)) if tb and cb else 0.0
 
-    tt, ct = _tokens(title), _tokens(content)
+    tt, ct = _tokens(b), _tokens(a)
     shared = tt & ct
     tok = len(shared) / len(tt) if tt else 0.0
 
     base = 0.65 * cjk + 0.35 * tok
-    # 光靠普通 token 命中不足以定案——中文那边必须也有一点关联，否则就是
-    # 「两句话都出现过 agent」这种伪相关。罕见词（见下）才有单独定案的资格。
-    if cjk == 0.0 and not any(_distinctive(t) for t in shared):
-        base = min(base, config.MATCH_THRESHOLD - 0.01)
     if any(_distinctive(t) for t in shared):
         base = max(base, 0.55)          # 罕见词命中，单独就够定案
 
-    run = _longest_common_run(_cjk_seq(content), _cjk_seq(title))
+    run = _longest_common_run(_cjk_seq(a), _cjk_seq(b))
     if run >= 4:
         base = max(base, 0.55)          # 四字连续共现，基本可以定案
     elif run == 3:
         base = max(base, 0.38)          # 三字，够过线但仍留给上下文纠正
     return round(min(base, 1.0), 3)
-
-
-def best_issue(
-    content: str, issues: List[Dict[str, Any]]
-) -> Tuple[Optional[Dict[str, Any]], float]:
-    best, best_s = None, 0.0
-    for i in issues:
-        s = score(content, i["title"])
-        if s > best_s:
-            best, best_s = i, s
-    return best, best_s
-
-
-def best_task(
-    content: str,
-    tasks: List[Dict[str, Any]],
-    recent_texts: Dict[str, str],
-) -> Tuple[Optional[Dict[str, Any]], float]:
-    """和已有任务比：既比任务标题，也比这个任务下最近的进展原文。"""
-    best, best_s = None, 0.0
-    for t in tasks:
-        s = max(score(content, t["title"]), score(content, recent_texts.get(t["task_id"], "")))
-        if s > best_s:
-            best, best_s = t, s
-    return best, best_s
 
 
 def project_binding(project: Optional[str]) -> Optional[str]:
@@ -153,16 +132,17 @@ def project_binding(project: Optional[str]) -> Optional[str]:
 
 def decide(
     content: str,
-    issues: List[Dict[str, Any]],
     tasks: List[Dict[str, Any]],
-    recent_texts: Dict[str, str],
     session_task_id: Optional[str] = None,
     explicit_issue: Optional[str] = None,
     explicit_task_id: Optional[str] = None,
     project: Optional[str] = None,
     allow_session_fallback: bool = True,
 ) -> Dict[str, Any]:
-    """返回 {method, issue_key?, task_id?, score, runner_up?}。"""
+    """只认不会错的信号。语义归属由模型判，不在这里猜。
+
+    返回 {method, issue_key?, task_id?, score, confidence?}。
+    """
     if explicit_task_id:
         return {"method": "explicit", "task_id": explicit_task_id, "score": 1.0}
 
@@ -170,56 +150,19 @@ def decide(
     if keys:
         return {"method": "explicit", "issue_key": keys[0], "score": 1.0}
 
-    issue, s_issue = best_issue(content, issues)
-    if issue and s_issue >= config.MATCH_THRESHOLD:
-        return {
-            "method": "mobius-auto",
-            "issue_key": issue["issue_key"],
-            "title": issue["title"],
-            "score": s_issue,
-        }
-
-    # 工作目录绑了 issue —— 用它。
-    # 位置是刻意的：排在关键词证据**之后**（正文里明确提到别的 issue 时，那个更
-    # 具体的信号该赢），但排在「接续已有任务」**之前**。后者是启发式打分，实测会
-    # 被一个碰巧标题相近的旧自由任务截胡；绑定是人主动配的，更可信。
+    # 工作目录绑了 issue —— 人主动配的，比任何猜测都可信。
     bound = project_binding(project)
     if bound:
         return {"method": "project-bound", "issue_key": bound, "score": None,
                 "via": "project:%s" % project}
 
-    task, s_task = best_task(content, tasks, recent_texts)
-
-    if task and s_task >= config.TASK_CONTINUE_THRESHOLD:
-        return {"method": "task-continue", "task_id": task["task_id"], "score": s_task}
-
-    # 到这里说明：正文里没有 issue 号，也配不到任何 issue 或已有任务。
-    # 这种「接口跑通了」式的句子靠关键词永远判不出归属，只有一个信号可用——
-    # 刚才在这个对话里推进的是哪个任务。所以同一对话的任务是**默认归属**，
-    # 不再要求相似度（要求了就等于把这条路堵死）。
-    #
-    # 代价说清楚：同一个对话里换了话题、新话题又没有特征词时会错归。
-    # V0 不假装能解决，只保证归属对 agent 可见（返回值里写明配对方式），
-    # agent 判断错了可以带 issue 或 task_id 重记。
-    # 扫描来源关掉这条路（allow_session_fallback=False）：批量抽出来的进展共用
-    # 同一个 session_id，一条配错会顺着惯性把后面全带偏。实测闲鱼的内容先被
-    # 误判进 AI-2541，紧跟着那条 0.0 分的也跟着进去了。
-    # 交互式 log_progress 保留——那里「刚才在聊什么」是真实的上下文。
+    # 什么线索都没有时，跟着同一对话里刚才那个任务。这是**猜的**，
+    # 但至少能把一段对话里的进展聚在一起，之后 verify 会重判。
+    # 扫描来源关掉：批量抽取的条目共用一个 session_id，彼此没有先后关系，
+    # 一条错会顺着惯性把后面全带偏。
     if allow_session_fallback and session_task_id and any(
             t["task_id"] == session_task_id for t in tasks):
-        st = next(t for t in tasks if t["task_id"] == session_task_id)
-        return {
-            "method": "task-continue",
-            "task_id": session_task_id,
-            "score": max(score(content, st["title"]),
-                         score(content, recent_texts.get(session_task_id, ""))),
-            "via": "same-session",
-            "confidence": "low",
-        }
+        return {"method": "task-continue", "task_id": session_task_id, "score": None,
+                "via": "same-session", "confidence": "low"}
 
-
-    return {
-        "method": "new-task",
-        "score": max(s_issue, s_task),
-        "runner_up": (issue or {}).get("issue_key") if s_issue >= s_task else None,
-    }
+    return {"method": "new-task", "score": None}

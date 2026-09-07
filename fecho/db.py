@@ -184,6 +184,17 @@ def day_tasks(author: str, date: str) -> List[Dict[str, Any]]:
     return out
 
 
+def day_updates(author: str, date: str) -> List[Dict[str, Any]]:
+    """当天的进展平铺一列，带上各自现在归到哪个 issue。给交叉验证用。"""
+    with cursor() as conn:
+        rows = conn.execute(
+            "SELECT u.update_id, u.content_md, u.match_method, u.task_id, t.issue_key"
+            " FROM updates u JOIN tasks t ON t.task_id = u.task_id"
+            " WHERE u.author=? AND u.date=? AND u.status='active'"
+            " ORDER BY u.created_at", (author, date)).fetchall()
+    return [dict(r) for r in rows]
+
+
 def get_report(author: str, date: str, kind: str) -> Optional[Dict[str, Any]]:
     with cursor() as conn:
         r = conn.execute(
