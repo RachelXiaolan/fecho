@@ -221,6 +221,57 @@ class TestScanAssignsIssues(unittest.TestCase):
         self.assertIn("没有在办的 issue", scan._prompt([]))
 
 
+class TestDedupeKeepsData(unittest.TestCase):
+    """判为近似重复的照样写进库，只是不进日报。
+
+    相似度是纯字符串判断，没有后续环节能纠错——直接不写就等于这条内容从没
+    存在过，日报看不到、人也翻不到。留一行几乎没成本，丢一条真实进展成本很高。
+    """
+
+    def setUp(self):
+        reset()
+
+    def _pair(self):
+        a = "反向链路 catch_up 做完了，agent 开工时自己拉回昨日日报"
+        b = "catch_up 反向链路做完，agent 开工时自己拉回昨天的日报"
+        return (store.record_progress("t", a, date=D, source_agent="scan", issue="AI-2541"),
+                store.record_progress("t", b, date=D, source_agent="scan", issue="AI-2541"))
+
+    def test_near_duplicate_is_stored_not_dropped(self):
+        first, second = self._pair()
+        self.assertEqual(second["verdict"], "duplicate")
+        with db.cursor() as c:
+            row = c.execute("SELECT status, meta FROM updates WHERE update_id=?",
+                            (second["update_id"],)).fetchone()
+        self.assertIsNotNone(row, "判为重复的进展必须还在库里")
+        self.assertEqual(row["status"], "duplicate-ignored")
+        self.assertEqual(json.loads(row["meta"])["duplicate_of"], first["update_id"],
+                         "要记下它被判成了谁的重复，才能复查")
+
+    def test_duplicates_stay_out_of_the_report(self):
+        self._pair()
+        tasks = db.day_tasks("t", D)
+        self.assertEqual(sum(len(t["updates"]) for t in tasks), 1,
+                         "日报只看 active，重复的不该出现")
+
+    def test_exact_duplicate_still_written_once(self):
+        """逐字相同的是 agent 重试，不是新进展——那种确实不必存第二份。"""
+        a = store.record_progress("t", "配对引擎写完了", date=D, issue="AI-2541")
+        b = store.record_progress("t", "配对引擎写完了", date=D, issue="AI-2541")
+        self.assertEqual(b["verdict"], "duplicate")
+        self.assertEqual(b["update_id"], a["update_id"])
+
+    def test_agent_recorded_similar_entries_are_all_kept(self):
+        """只有扫描来源才做近似去重。agent 主动记的相似内容可能是真实的不同
+        进展（措辞碰巧像），一条都不能少。"""
+        store.record_progress("t", "反向链路 catch_up 做完了，agent 开工时拉回昨日日报",
+                              date=D, issue="AI-2541")
+        store.record_progress("t", "catch_up 反向链路做完，agent 开工时拉回昨天的日报",
+                              date=D, issue="AI-2541")
+        tasks = db.day_tasks("t", D)
+        self.assertEqual(sum(len(t["updates"]) for t in tasks), 2)
+
+
 class TestCrossValidation(unittest.TestCase):
     """出稿前把归属重判一次。连 agent 明确填的 issue 号也要重判——那同样是模型的
     判断，记的时候手上只有当前那一条的上下文。"""

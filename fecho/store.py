@@ -148,6 +148,11 @@ def record_progress(
         # agent 主动记的相似内容可能是真实的不同进展（措辞碰巧像），必须全留；
         # 但扫描是把同一段对话重新总结一遍，措辞变了信息量没变，留着只是噪音。
         # 重跑（比如上次某组失败后补跑）会大量产生这种，实测一天能堆出 85 条里 158 对。
+        #
+        # 判为重复的**照样写进库**，只是标成 duplicate-ignored。相似度是纯字符串
+        # 判断，没有后续环节能纠错——真判错了，直接不写就等于这条内容从没存在过，
+        # 日报看不到、人也翻不到。留一行的成本几乎为零，丢一条真实进展的成本很高。
+        dup_of = None
         if (source_agent or "") == "scan":
             near = conn.execute(
                 "SELECT update_id, content_md FROM updates WHERE task_id=? AND date=?"
@@ -156,8 +161,8 @@ def record_progress(
             ).fetchall()
             for row in near:
                 if match.similarity(content_md, row["content_md"]) >= config.SCAN_DEDUPE_SIMILARITY:
-                    return _result(task, row["update_id"], "duplicate", decision, date, author,
-                                   note="同一任务下已有内容几乎相同的扫描进展，未重复写入。")
+                    dup_of = row["update_id"]
+                    break
 
         update_id = str(uuid.uuid4())
         ts = now_iso()
@@ -166,11 +171,18 @@ def record_progress(
             " session_id, match_method, match_score, pto_status, created_at, content_hash,"
             " status, meta) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (update_id, task["task_id"], author, date, content_md, source_agent or "manual",
-             session_id, decision["method"], decision.get("score"), None, ts, h, "active",
-             json.dumps(meta or {}, ensure_ascii=False)),
+             session_id, decision["method"], decision.get("score"), None, ts, h,
+             "duplicate-ignored" if dup_of else "active",
+             json.dumps(dict(meta or {}, **({"duplicate_of": dup_of} if dup_of else {})),
+                        ensure_ascii=False)),
         )
-        conn.execute("UPDATE tasks SET last_update=? WHERE task_id=?", (ts, task["task_id"]))
+        if not dup_of:
+            conn.execute("UPDATE tasks SET last_update=? WHERE task_id=?", (ts, task["task_id"]))
 
+    if dup_of:
+        return _result(task, update_id, "duplicate", decision, date, author,
+                       note="内容和同任务下已有的扫描进展几乎相同，已存库但不进日报"
+                            "（status=duplicate-ignored，判错了还能找回来）。")
     return _result(task, update_id, decision["method"], decision, date, author)
 
 

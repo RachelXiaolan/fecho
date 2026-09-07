@@ -274,6 +274,46 @@ def cmd_dedupe(args) -> int:
     return 0
 
 
+def cmd_hidden(args) -> int:
+    """看被去重挡掉的进展，必要时捞回来。
+
+    去重是纯字符串判断，没有后续环节能纠错。所以判为重复的照样存库、只是不进
+    日报——但存了没人看得见等于没存，这个命令就是那个入口。
+    """
+    db.init()
+    sql = ("SELECT u.update_id, u.date, u.content_md, u.status, u.meta,"
+           " COALESCE(t.issue_key,'自由任务') AS belongs FROM updates u"
+           " JOIN tasks t ON t.task_id=u.task_id"
+           " WHERE u.status IN ('duplicate-ignored','superseded')")
+    params = []
+    if args.date:
+        sql += " AND u.date=?"
+        params.append(args.date)
+    sql += " ORDER BY u.date, u.created_at"
+    with db.cursor() as conn:
+        rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
+
+    if args.restore:
+        with db.cursor() as conn:
+            n = conn.execute("UPDATE updates SET status='active' WHERE update_id=?",
+                             (args.restore,)).rowcount
+        print("已恢复 %d 条，下次出日报会带上它。" % n if n else "没找到这条：%s" % args.restore)
+        return 0 if n else 1
+
+    if not rows:
+        print("没有被挡掉的进展。")
+        return 0
+
+    print("被挡掉的进展（存着，但不进日报）：\n")
+    for r in rows:
+        why = "近似重复" if r["status"] == "duplicate-ignored" else "dedupe 清理"
+        print("  %s  %s  [%s]" % (r["date"], r["belongs"], why))
+        print("    %s" % r["content_md"][:76].replace("\n", " "))
+        print("    id=%s\n" % r["update_id"])
+    print("判错了就捞回来：fecho hidden --restore <id>")
+    return 0
+
+
 def cmd_digest(args) -> int:
     db.init()
     r = service.end_of_day(args.date, force=args.force)
@@ -398,6 +438,11 @@ def main() -> int:
     p.add_argument("--date", help="只处理某天")
     p.add_argument("--apply", action="store_true", help="真的执行，不加就只预览")
     p.set_defaults(fn=cmd_dedupe)
+
+    p = sub.add_parser("hidden", help="看被去重挡掉的进展（判错了可以捞回来）")
+    p.add_argument("--date", help="只看某天")
+    p.add_argument("--restore", metavar="ID", help="把某条恢复成正常进展")
+    p.set_defaults(fn=cmd_hidden)
 
     p = sub.add_parser("digest", help="日终整理（cron 入口，配了 collector 会顺带推送）")
     p.add_argument("--date")
