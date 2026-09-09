@@ -41,6 +41,17 @@ class TestDashboardContract(unittest.TestCase):
     def test_task_view_applies_the_same_global_filters(self):
         self.assertIn('t.updates.some(matches)', self.html)
 
+    def test_visible_dashboard_refreshes_after_nightly_automation(self):
+        self.assertIn("visibilitychange", self.html)
+        self.assertIn("window.addEventListener('focus'", self.html)
+        self.assertIn("setInterval", self.html)
+        self.assertIn("document.visibilityState==='visible'", self.html)
+
+    def test_system_view_renders_beijing_schedule_and_last_result(self):
+        self.assertIn('id="automation-status"', self.html)
+        self.assertIn("daily_time", self.html)
+        self.assertIn("last_result", self.html)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

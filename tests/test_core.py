@@ -640,6 +640,17 @@ class TestWebEndpoints(unittest.TestCase):
         self.assertEqual(payload["review"]["items"][0]["source_agent"], "codex")
         self.assertRegex(payload["system"]["doctor"]["version"], r"^\d+\.\d+\.\d+$")
 
+    def test_dashboard_payload_exposes_redacted_automation_status(self):
+        state = {
+            "enabled": True, "daily_time": "21:00", "timezone": "Asia/Shanghai",
+            "dashboard_url": "http://127.0.0.1:8900/",
+            "last_result": {"status": "succeeded", "date": D},
+        }
+        with mock.patch("fecho.automation.status", return_value=state):
+            payload = self.c.get("/api/dashboard", params={"date": D}).json()
+        self.assertEqual(payload["system"]["automation"], state)
+        self.assertNotIn("api_key", json.dumps(payload["system"]["automation"]))
+
     def test_mutation_returns_refreshed_dashboard_and_marks_report_dirty(self):
         rec = store.record_progress("t", "闲鱼抓了十六个商品", date=D, issue="AI-2541")
         digest.generate("t", D, force=True)
