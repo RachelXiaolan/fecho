@@ -11,13 +11,23 @@ import json
 import os
 import sys
 import uuid
+from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
 from . import __version__, config, db, service
 
-SESSION_ID = os.getenv("FECHO_SESSION_ID") or str(uuid.uuid4())
 PROTOCOL = "2024-11-05"
-_client_name = "unknown-agent"
+
+
+@dataclass
+class MCPContext:
+    """Connection-local identity used by every MCP transport."""
+
+    session_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    client_name: str = "unknown-agent"
+
+
+DEFAULT_CONTEXT = MCPContext(session_id=os.getenv("FECHO_SESSION_ID") or str(uuid.uuid4()))
 
 
 def log(msg: str) -> None:
@@ -43,8 +53,7 @@ TOOLS = [
             "content": {"type": "string", "description": "做成了什么、进展到哪"},
             "issue": {"type": "string", "description": "可选。确定是哪个 issue 就直接写，如 AI-2541"},
             "task_id": {"type": "string", "description": "可选。强制挂到某个已有任务"},
-            "date": {"type": "string", "description": "可选，YYYY-MM-DD，补记往日时用"},
-            "agent": {"type": "string", "description": "可选，覆盖来源 agent 名"}},
+            "date": {"type": "string", "description": "可选，YYYY-MM-DD，补记往日时用"}},
             "required": ["content"]},
     },
     {
@@ -139,11 +148,12 @@ def _fmt_report(r: Dict[str, Any]) -> str:
     return "\n".join(out)
 
 
-def call_tool(name: str, args: Dict[str, Any]) -> str:
+def call_tool(name: str, args: Dict[str, Any], context: Optional[MCPContext] = None) -> str:
+    context = context or DEFAULT_CONTEXT
     if name == "log_progress":
         res = service.record(
             args["content"], date=args.get("date"),
-            source_agent=args.get("agent") or _client_name, session_id=SESSION_ID,
+            source_agent=context.client_name, session_id=context.session_id,
             issue=args.get("issue"), task_id=args.get("task_id"))
         t, m = res["task"], res["match"]
         head = ("重复，未写入 → %s" if res["verdict"] == "duplicate" else "已记录 → **%s**") \
@@ -268,14 +278,15 @@ def call_tool(name: str, args: Dict[str, Any]) -> str:
     raise RuntimeError("未知工具: %s" % name)
 
 
-def handle(msg: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    global _client_name
+def handle(msg: Dict[str, Any], context: Optional[MCPContext] = None) -> Optional[Dict[str, Any]]:
+    context = context or DEFAULT_CONTEXT
     method, mid = msg.get("method"), msg.get("id")
 
     if method == "initialize":
         info = (msg.get("params") or {}).get("clientInfo") or {}
-        _client_name = info.get("name") or _client_name
-        log("client=%s session=%s home=%s" % (_client_name, SESSION_ID[:8], config.HOME))
+        context.client_name = info.get("name") or context.client_name
+        log("client=%s session=%s home=%s" % (
+            context.client_name, context.session_id[:8], config.HOME))
         return {"jsonrpc": "2.0", "id": mid, "result": {
             "protocolVersion": (msg.get("params") or {}).get("protocolVersion", PROTOCOL),
             "capabilities": {"tools": {}},
@@ -290,7 +301,7 @@ def handle(msg: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if method == "tools/call":
         params = msg.get("params") or {}
         try:
-            text = call_tool(params.get("name"), params.get("arguments") or {})
+            text = call_tool(params.get("name"), params.get("arguments") or {}, context)
             return {"jsonrpc": "2.0", "id": mid,
                     "result": {"content": [{"type": "text", "text": text}], "isError": False}}
         except Exception as exc:
@@ -307,7 +318,8 @@ def handle(msg: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 def main() -> None:
     db.init()
     config.LOGS_DIR.mkdir(parents=True, exist_ok=True)
-    log("started pid=%d session=%s" % (os.getpid(), SESSION_ID[:8]))
+    context = MCPContext(session_id=os.getenv("FECHO_SESSION_ID") or str(uuid.uuid4()))
+    log("started pid=%d session=%s" % (os.getpid(), context.session_id[:8]))
     for line in sys.stdin:
         line = line.strip()
         if not line:
@@ -316,7 +328,7 @@ def main() -> None:
             msg = json.loads(line)
         except json.JSONDecodeError:
             continue
-        resp = handle(msg)
+        resp = handle(msg, context)
         if resp is not None:
             sys.stdout.write(json.dumps(resp, ensure_ascii=False) + "\n")
             sys.stdout.flush()

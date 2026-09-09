@@ -152,7 +152,8 @@ def build_app():
     # 之后每次 POST 的响应不从 POST 返回，而是顺着那条长连接推回去。
     import asyncio
 
-    sessions: Dict[str, "asyncio.Queue"] = {}
+    sessions: Dict[str, Dict[str, Any]] = {}
+    http_contexts: Dict[str, mcp_server.MCPContext] = {}
 
     @app.get("/sse/")
     @app.get("/sse")
@@ -162,7 +163,7 @@ def build_app():
         guard(request, authorization)
         sid = secrets.token_urlsafe(16)
         q: asyncio.Queue = asyncio.Queue()
-        sessions[sid] = q
+        sessions[sid] = {"queue": q, "context": mcp_server.MCPContext(session_id=sid)}
 
         async def gen():
             yield "event: endpoint\ndata: /sse/messages?session_id=%s\n\n" % sid
@@ -187,11 +188,12 @@ def build_app():
     async def sse_messages(request: Request, session_id: str = Query(...),
                            authorization: Optional[str] = Header(None)):
         guard(request, authorization)
-        q = sessions.get(session_id)
-        if q is None:
+        session = sessions.get(session_id)
+        if session is None:
             raise HTTPException(404, "会话不存在或已断开，请重新连接 /sse/")
+        q = session["queue"]
         msg = await request.json()
-        resp = mcp_server.handle(msg)
+        resp = mcp_server.handle(msg, session["context"])
         if resp is not None:
             await q.put(resp)
         return JSONResponse(status_code=202, content={"ok": True})
@@ -199,13 +201,22 @@ def build_app():
     # ---- MCP over Streamable HTTP ----
     @app.post("/mcp")
     async def mcp_endpoint(request: Request,
-                           authorization: Optional[str] = Header(None)):
+                           authorization: Optional[str] = Header(None),
+                           mcp_session_id: Optional[str] = Header(None,
+                                                                  alias="Mcp-Session-Id")):
         guard(request, authorization)
         msg = await request.json()
-        resp = mcp_server.handle(msg)
+        method = msg.get("method")
+        sid = mcp_session_id
+        if method == "initialize" and (not sid or sid not in http_contexts):
+            sid = secrets.token_urlsafe(18)
+            http_contexts[sid] = mcp_server.MCPContext(session_id=sid)
+        context = http_contexts.get(sid) if sid else mcp_server.MCPContext()
+        resp = mcp_server.handle(msg, context)
+        headers = {"Mcp-Session-Id": sid} if sid else {}
         if resp is None:                       # 通知类消息没有响应体
-            return JSONResponse(status_code=202, content=None)
-        return JSONResponse(resp)
+            return JSONResponse(status_code=202, content=None, headers=headers)
+        return JSONResponse(resp, headers=headers)
 
     @app.get("/healthz")
     def healthz():

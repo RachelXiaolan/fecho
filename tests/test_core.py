@@ -367,6 +367,43 @@ class TestWebEndpoints(unittest.TestCase):
         self.assertEqual(got, [t["name"] for t in mcp_server.TOOLS],
                          "工具集不该按客户端分——谁连上都是同一套")
 
+    def test_http_clients_keep_separate_agent_and_session_context(self):
+        from fastapi.testclient import TestClient
+
+        a = TestClient(self.web.build_app(), headers={"Authorization": "Bearer t3st-token"})
+        b = TestClient(self.web.build_app(), headers={"Authorization": "Bearer t3st-token"})
+
+        def initialize(client, name):
+            r = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1,
+                                           "method": "initialize", "params": {
+                                               "protocolVersion": "2024-11-05",
+                                               "clientInfo": {"name": name}}})
+            self.assertEqual(r.status_code, 200)
+            return r.headers["Mcp-Session-Id"]
+
+        def log(client, sid, content, issue=None):
+            args = {"content": content, "date": D}
+            if issue:
+                args["issue"] = issue
+            return client.post("/mcp", headers={"Mcp-Session-Id": sid}, json={
+                "jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
+                    "name": "log_progress", "arguments": args}})
+
+        sid_a = initialize(a, "codex")
+        sid_b = initialize(b, "claude-code")
+        self.assertNotEqual(sid_a, sid_b)
+        self.assertFalse(log(a, sid_a, "Fecho 接口完成", "AI-2541").json()["result"]["isError"])
+        self.assertFalse(log(b, sid_b, "闲鱼调研完成", "AI-2224").json()["result"]["isError"])
+
+        updates = db.list_updates(date=D, author="t")
+        self.assertEqual({u["source_agent"] for u in updates}, {"codex", "claude-code"})
+        self.assertEqual(len({u["session_id"] for u in updates}), 2)
+
+    def test_log_progress_does_not_allow_callers_to_spoof_agent(self):
+        from fecho import mcp_server
+        schema = next(t for t in mcp_server.TOOLS if t["name"] == "log_progress")
+        self.assertNotIn("agent", schema["inputSchema"]["properties"])
+
     def test_sse_full_roundtrip_against_a_real_server(self):
         """SSE 是两条腿：GET 开流拿到 POST 地址，响应再顺着流推回来。
         ChatGPT 要的就是这套，只验一条腿等于没验。
