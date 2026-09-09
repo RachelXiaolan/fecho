@@ -42,5 +42,80 @@ class TestBeijingClock(unittest.TestCase):
                     clock.validate_daily_time(value)
 
 
+class TestDailyAutomation(unittest.TestCase):
+    def setUp(self):
+        from fecho import automation
+
+        self.automation = automation
+        self.state = {"enabled": True, "daily_time": "21:00"}
+
+    def test_tick_runs_once_during_beijing_grace_window(self):
+        instant = datetime(2030, 1, 1, 13, 7, tzinfo=timezone.utc)  # 21:07 Beijing
+        saved = []
+        runner = mock.Mock(return_value={"ok": True, "date": "2030-01-01"})
+
+        first = self.automation.tick(
+            instant=instant, state=dict(self.state), runner=runner,
+            save=lambda value: saved.append(value))
+        second = self.automation.tick(
+            instant=instant, state=saved[-1], runner=runner,
+            save=lambda value: saved.append(value))
+
+        self.assertEqual(first["status"], "succeeded")
+        self.assertEqual(second["status"], "already-run")
+        runner.assert_called_once_with("2030-01-01")
+
+    def test_tick_does_not_run_before_or_long_after_selected_time(self):
+        runner = mock.Mock()
+        for instant in (
+            datetime(2030, 1, 1, 12, 59, tzinfo=timezone.utc),
+            datetime(2030, 1, 1, 13, 10, tzinfo=timezone.utc),
+        ):
+            result = self.automation.tick(
+                instant=instant, state=dict(self.state), runner=runner,
+                save=lambda value: None)
+            self.assertEqual(result["status"], "not-due")
+        runner.assert_not_called()
+
+    def test_failed_tick_is_visible_and_does_not_mark_day_complete(self):
+        instant = datetime(2030, 1, 1, 13, 0, tzinfo=timezone.utc)
+        saved = []
+        result = self.automation.tick(
+            instant=instant, state=dict(self.state),
+            runner=lambda date: {"ok": False, "date": date, "error": "scan failed"},
+            save=lambda value: saved.append(value))
+
+        self.assertEqual(result["status"], "failed")
+        self.assertNotIn("last_run_date", saved[-1])
+        self.assertEqual(saved[-1]["last_result"]["error"], "scan failed")
+
+    def test_daily_pipeline_continues_when_mobius_sync_fails(self):
+        scan = mock.Mock(return_value={"ok": True, "recorded": 2})
+        digest = mock.Mock(return_value={"status": "generated", "update_count": 2})
+
+        result = self.automation.run_daily(
+            "2030-01-01",
+            sync=lambda: (_ for _ in ()).throw(RuntimeError("offline")),
+            scan_func=scan,
+            digest_func=digest,
+        )
+
+        self.assertTrue(result["ok"])
+        self.assertIn("offline", result["warnings"][0])
+        scan.assert_called_once_with(days=2)
+        digest.assert_called_once_with("2030-01-01", force=False)
+
+    def test_daily_pipeline_stops_when_scan_fails(self):
+        digest = mock.Mock()
+        result = self.automation.run_daily(
+            "2030-01-01", sync=lambda: {"count": 1},
+            scan_func=lambda **kw: {"ok": False, "error": "bad transcript"},
+            digest_func=digest,
+        )
+        self.assertFalse(result["ok"])
+        self.assertIn("bad transcript", result["error"])
+        digest.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
