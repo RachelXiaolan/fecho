@@ -144,6 +144,7 @@ CREATE TABLE IF NOT EXISTS reports (
     model         TEXT,
     entry_count   INTEGER NOT NULL DEFAULT 0,
     char_count    INTEGER NOT NULL DEFAULT 0,
+    warnings      TEXT NOT NULL DEFAULT '[]',
     created_at    TEXT NOT NULL,
     UNIQUE(author, date, kind)
 );
@@ -192,6 +193,9 @@ def init() -> None:
             conn.execute("ALTER TABLE updates ADD COLUMN completion_status TEXT NOT NULL DEFAULT 'unknown'")
         if "content_kind" not in columns:
             conn.execute("ALTER TABLE updates ADD COLUMN content_kind TEXT NOT NULL DEFAULT 'progress'")
+        report_columns = {r["name"] for r in conn.execute("PRAGMA table_info(reports)").fetchall()}
+        if "warnings" not in report_columns:
+            conn.execute("ALTER TABLE reports ADD COLUMN warnings TEXT NOT NULL DEFAULT '[]'")
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_updates_source_event"
                      " ON updates(source_event_key) WHERE source_event_key IS NOT NULL")
 
@@ -287,4 +291,20 @@ def get_report(author: str, date: str, kind: str) -> Optional[Dict[str, Any]]:
         r = conn.execute(
             "SELECT * FROM reports WHERE author=? AND date=? AND kind=?", (author, date, kind)
         ).fetchone()
-    return dict(r) if r else None
+    if not r:
+        return None
+    out = dict(r)
+    try:
+        out["warnings"] = json.loads(out.get("warnings") or "[]")
+    except ValueError:
+        out["warnings"] = []
+    return out
+
+
+def report_history(author: str, date: str) -> List[Dict[str, Any]]:
+    with cursor() as conn:
+        rows = conn.execute(
+            "SELECT * FROM report_history WHERE author=? AND date=?"
+            " ORDER BY created_at DESC, id DESC", (author, date)
+        ).fetchall()
+    return [dict(r) for r in rows]

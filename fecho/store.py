@@ -351,7 +351,10 @@ def correct_progress(
         if target is None or target["author"] != author:
             raise ValueError("任务不存在: %s" % task_id)
     elif freeform or issue_key is None:
-        target = _create_freeform_task(author, new_content)
+        if row["issue_key"] is None:
+            target = db.get_task(row["task_id"])
+        else:
+            target = _create_freeform_task(author, new_content)
     elif issue_key is not _UNSET:
         key = _validate_issue(author, issue_key)
         target = _get_or_create_mobius_task(author, key, None)

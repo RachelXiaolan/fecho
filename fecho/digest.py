@@ -550,9 +550,9 @@ def generate(author: str, date: str, force: bool = False,
         warnings.append("当日为 PTO，日报已降级标注")
 
     _persist(author, date, "daily", daily, fp, daily_gen,
-             model if daily_gen == "llm" else None, n_updates)
+             model if daily_gen == "llm" else None, n_updates, warnings)
     _persist(author, date, "voice", voice, fp, voice_gen,
-             model if voice_gen == "llm" else None, n_updates)
+             model if voice_gen == "llm" else None, n_updates, warnings)
     paths = _write_files(author, date, daily, voice, persona)
     _stamp_pto(author, date, pto_status)
 
@@ -576,7 +576,8 @@ def _stamp_pto(author: str, date: str, status: str) -> None:
                      (status, author, date))
 
 
-def _persist(author, date, kind, content, fp, generator, model, n) -> None:
+def _persist(author, date, kind, content, fp, generator, model, n,
+             warnings: Optional[List[str]] = None) -> None:
     prev = db.get_report(author, date, kind)
     with db.cursor() as conn:
         if prev:
@@ -586,13 +587,15 @@ def _persist(author, date, kind, content, fp, generator, model, n) -> None:
                 (author, date, kind, prev["content_md"], prev["generator"], prev["created_at"]))
         conn.execute(
             "INSERT INTO reports (report_id,author,date,kind,content_md,fingerprint,"
-            "generator,model,entry_count,char_count,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)"
+            "generator,model,entry_count,char_count,warnings,created_at)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)"
             " ON CONFLICT(author,date,kind) DO UPDATE SET content_md=excluded.content_md,"
             " fingerprint=excluded.fingerprint, generator=excluded.generator,"
             " model=excluded.model, entry_count=excluded.entry_count,"
-            " char_count=excluded.char_count, created_at=excluded.created_at",
+            " char_count=excluded.char_count, warnings=excluded.warnings,"
+            " created_at=excluded.created_at",
             (str(uuid.uuid4()), author, date, kind, content, fp, generator, model,
-             n, _cjk_len(content), store.now_iso()))
+             n, _cjk_len(content), json.dumps(warnings or [], ensure_ascii=False), store.now_iso()))
 
 
 def _write_files(author, date, daily, voice, persona) -> Dict[str, str]:

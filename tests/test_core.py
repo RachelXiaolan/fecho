@@ -589,13 +589,49 @@ class TestWebEndpoints(unittest.TestCase):
         rows = {u["update_id"]: u for u in db.day_updates("t", D)}
         self.assertEqual(rows[rec["update_id"]]["issue_key"], "AI-2224")
 
-    def test_review_queue_skips_explicit_entries(self):
+    def test_review_queue_includes_explicit_entries_until_a_human_confirms_them(self):
         store.record_progress("t", "明确写了 AI-2541 的进展", date=D, issue="AI-2541")
         store.record_progress("t", "没有任何线索的一条", date=D)
         from fecho import web
         items = web.review_queue("t", D)
-        self.assertEqual(len(items), 1, "明确写了 issue 号的没什么可复核的")
-        self.assertEqual(items[0]["method"], "new-task")
+        self.assertEqual(len(items), 2, "agent 明确填的 issue 也可能错，人工确认前必须可见")
+        self.assertEqual({item["method"] for item in items}, {"explicit", "new-task"})
+
+    def test_dashboard_payload_is_complete_and_honors_historical_date(self):
+        store.record_progress("t", "AI-2541 历史进展", date=D,
+                              source_agent="codex", completion_status="done")
+        store.record_progress("t", "AI-2224 今天进展", date="2030-01-02")
+        r = self.c.get("/api/dashboard", params={"date": D})
+        self.assertEqual(r.status_code, 200)
+        payload = r.json()
+        self.assertEqual(payload["date"], D)
+        self.assertEqual(payload["overview"]["updates"], 1)
+        self.assertTrue({"overview", "review", "tasks", "reports", "hidden",
+                         "timeline", "issues", "system", "filters"} <= set(payload))
+        self.assertEqual(payload["review"]["items"][0]["source_agent"], "codex")
+
+    def test_mutation_returns_refreshed_dashboard_and_marks_report_dirty(self):
+        rec = store.record_progress("t", "闲鱼抓了十六个商品", date=D, issue="AI-2541")
+        digest.generate("t", D, force=True)
+        r = self.c.post("/api/reassign", json={
+            "update_id": rec["update_id"], "issue_key": "AI-2224", "date": D})
+        self.assertEqual(r.status_code, 200)
+        payload = r.json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["dashboard"]["date"], D)
+        self.assertTrue(payload["dashboard"]["reports"]["dirty"])
+
+    def test_bad_mutation_is_a_clear_client_error_not_a_500(self):
+        r = self.c.post("/api/reassign", json={
+            "update_id": "missing", "issue_key": "AI-2541", "date": D})
+        self.assertEqual(r.status_code, 400)
+        self.assertFalse(r.json()["ok"])
+        self.assertIn("不存在", r.json()["error"])
+
+    def test_healthz_does_not_leak_author(self):
+        r = self.c.get("/healthz")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json(), {"ok": True})
 
 
 class TestAggregation(unittest.TestCase):
