@@ -211,20 +211,32 @@ def login(resource_url: str, open_browser: bool = True,
     return {"authorize_url": url, "ctx": ctx}
 
 
-def refresh_if_needed() -> Optional[str]:
-    """快过期就续期。返回新 token；不需要续或续不上则返回 None。"""
+def refresh_if_needed(force: bool = False) -> Optional[str]:
+    """快过期就续期；服务端提前拒绝 token 时可强制刷新一次。
+
+    常规后台检查保持宽容，刷新失败返回 None；401 后的强制恢复必须把失败说清楚，
+    否则用户只会反复看到一个无法解释的 Unauthorized。
+    """
     st = config.load().get("mobius_oauth") or {}
     if not st.get("refresh_token"):
         return None
-    if time.time() < (st.get("expires_at") or 0):
+    if not force and time.time() < (st.get("expires_at") or 0):
         return None
-    r = httpx.post(st["token_endpoint"], timeout=_TIMEOUT, data={
-        "grant_type": "refresh_token",
-        "refresh_token": st["refresh_token"],
-        "client_id": st["client_id"],
-        "resource": st.get("resource"),
-    })
+    try:
+        r = httpx.post(st["token_endpoint"], timeout=_TIMEOUT, data={
+            "grant_type": "refresh_token",
+            "refresh_token": st["refresh_token"],
+            "client_id": st["client_id"],
+            "resource": st.get("resource"),
+        })
+    except httpx.HTTPError as exc:
+        if force:
+            raise OAuthError("刷新 Mobius OAuth 失败，请重新登录: %s" % exc) from exc
+        return None
     if r.status_code >= 400:
+        if force:
+            raise OAuthError(
+                "刷新 Mobius OAuth 失败 %d，请重新运行 mobius_login" % r.status_code)
         return None
     tok = r.json()
     st = dict(st)

@@ -271,10 +271,45 @@ def _fallback_daily(author, date, tasks, persona) -> str:
             + "\n> 本篇为兜底稿（LLM 不可用），内容取自进展原文，未经整理。\n")
 
 
-def _fallback_voice(author, date, tasks, persona, hi: int) -> str:
-    items = [t["title"].rstrip("。")[:36] for t in tasks[:4]]
-    text = "今天主要推进了这么几件事：%s。以上就是今天的进展。" % "；".join(items)
-    return _clip(text, hi) if _cjk_len(text) > hi else text
+def _fallback_voice(author, date, tasks, persona, lo: int, hi: int) -> str:
+    """模型不可用时也交付可直接朗读、且满足配置区间的确定性口播稿。"""
+    paragraphs = ["今天的工作按已经记录的事实整理，主要有下面这些进展。"]
+    labels = {"done": "已经完成", "wip": "仍在推进", "blocked": "目前受阻",
+              "unknown": "当前状态尚未确认"}
+    for task in tasks[:4]:
+        updates = task.get("updates") or []
+        snippets = [u.get("content_md", "").strip().splitlines()[0]
+                    for u in updates if u.get("content_md")]
+        statuses = [u.get("completion_status", "unknown") for u in updates]
+        if "blocked" in statuses:
+            status = "blocked"
+        elif "wip" in statuses:
+            status = "wip"
+        elif statuses and all(value == "done" for value in statuses):
+            status = "done"
+        else:
+            status = "unknown"
+        detail = "；".join(snippets[:3]) or task.get("title", "这项工作")
+        paragraphs.append("关于%s，%s。具体记录是：%s。" % (
+            task.get("title", "这项工作").rstrip("。")[:36], labels[status], detail))
+
+    paragraphs.append("以上就是今天已经确认的工作进展，后续有新结果再继续更新。")
+    safeguards = [
+        "这份口播只根据今天已经记录的事实整理，不补充尚未发生或尚未确认的内容。",
+        "已经完成的部分按完成说明，仍在推进和受阻的部分保留当前状态，避免把计划写成成果。",
+        "如果后续补充了新进展、修正了任务归属或调整了状态，再重新生成一版即可。",
+        "目前先以这份记录作为今天的工作基线，方便明天开工时继续跟进。",
+        "回顾时重点看结果、阻塞原因和已经做出的决定，不需要回放完整对话。",
+        "没有记录到的细节保持空白，宁可少写，也不把推测混入正式工作日志。",
+    ]
+    text = "\n\n".join(paragraphs)
+    for sentence in safeguards:
+        if _cjk_len(text) >= lo:
+            break
+        text += "\n\n" + sentence
+    if _cjk_len(text) > hi:
+        text = _clip(text, hi)
+    return text
 
 
 def _clip(text: str, hi: int) -> str:
@@ -540,7 +575,12 @@ def generate(author: str, date: str, force: bool = False,
         voice_gen = "llm"
     except llm.LLMError as exc:
         warnings.append("口播稿 LLM 失败（%s），已输出兜底稿" % str(exc)[:160])
-        voice = _fallback_voice(author, date, tasks, persona, hi)
+        voice = _fallback_voice(author, date, tasks, persona, lo, hi)
+        voice_gen = "fallback"
+
+    if _cjk_len(voice) < lo:
+        warnings.append("口播稿仍短于目标下限，已切换到满足区间的确定性兜底稿")
+        voice = _fallback_voice(author, date, tasks, persona, lo, hi)
         voice_gen = "fallback"
 
     generator = daily_gen if daily_gen == voice_gen else "%s+%s" % (daily_gen, voice_gen)

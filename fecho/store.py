@@ -185,7 +185,7 @@ def record_progress(
             project=project,
             # 扫描是批量抽取，同一个 session 下的条目彼此没有对话上的先后关系，
             # 用会话惯性兜底只会把一条错误扩散成一片。
-            allow_session_fallback=(source_agent or "") != "scan",
+            allow_session_fallback=ingestion_method != "transcript-scan",
         )
 
     if decision.get("task_id"):

@@ -226,14 +226,14 @@ def cmd_scan(args) -> int:
 def cmd_dedupe(args) -> int:
     """清理扫描重跑留下的复述条目。默认只看不删，加 --apply 才动手。
 
-    只处理 source_agent='scan' 的条目——agent 主动记的内容里，措辞相似可能
-    是真实的不同进展，不在这个命令的射程内。
+    只处理 ingestion_method='transcript-scan' 的条目——agent 主动记的内容里，
+    措辞相似可能是真实的不同进展，不在这个命令的射程内。
     """
     from . import match
 
     db.init()
     sql = ("SELECT update_id, task_id, date, content_md, created_at FROM updates"
-           " WHERE source_agent='scan' AND status='active'")
+           " WHERE ingestion_method='transcript-scan' AND status='active'")
     params = []
     if args.date:
         sql += " AND date=?"

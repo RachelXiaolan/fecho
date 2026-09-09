@@ -195,6 +195,16 @@ class TestScanDoesNotCascade(unittest.TestCase):
         self.assertNotEqual(b["task"]["task_id"], a["task"]["task_id"])
         self.assertEqual(b["match"]["method"], "new-task")
 
+    def test_named_scan_producer_does_not_inherit_session_task(self):
+        a = store.record_progress(
+            "t", "开始做 AI-2541 的工作日志系统", date=D, session_id="codex:s1",
+            source_agent="codex", ingestion_method="transcript-scan")
+        b = store.record_progress(
+            "t", "闲鱼那边抓了十六个商品的详情", date=D, session_id="codex:s1",
+            source_agent="codex", ingestion_method="transcript-scan")
+        self.assertNotEqual(b["task"]["task_id"], a["task"]["task_id"])
+        self.assertEqual(b["match"]["method"], "new-task")
+
     def test_interactive_entry_still_inherits(self):
         """但交互式记录保留会话兜底——那里「刚才在聊什么」是真实上下文。"""
         a = store.record_progress("t", "开始做 AI-2541 的工作日志系统", date=D,
@@ -291,6 +301,25 @@ class TestDedupeKeepsData(unittest.TestCase):
                               date=D, issue="AI-2541")
         tasks = db.day_tasks("t", D)
         self.assertEqual(sum(len(t["updates"]) for t in tasks), 2)
+
+    def test_cli_dedupe_finds_named_transcript_producers(self):
+        from argparse import Namespace
+        from fecho import cli
+
+        a = store.record_progress(
+            "t", "反向链路 catch_up 做完了，agent 开工时拉回昨日日报", date=D,
+            issue="AI-2541", source_agent="codex", ingestion_method="transcript-scan")
+        b = store.record_progress(
+            "t", "catch_up 反向链路做完，agent 开工时拉回昨天的日报", date=D,
+            issue="AI-2541", source_agent="codex", ingestion_method="transcript-scan")
+        with db.cursor() as conn:
+            conn.execute("UPDATE updates SET status='active' WHERE update_id=?", (b["update_id"],))
+        with contextlib.redirect_stdout(__import__("io").StringIO()):
+            cli.cmd_dedupe(Namespace(date=D, apply=True))
+        with db.cursor() as conn:
+            status = conn.execute("SELECT status FROM updates WHERE update_id=?",
+                                  (b["update_id"],)).fetchone()["status"]
+        self.assertEqual(status, "superseded")
 
 
 class TestCrossValidation(unittest.TestCase):
@@ -609,6 +638,7 @@ class TestWebEndpoints(unittest.TestCase):
         self.assertTrue({"overview", "review", "tasks", "reports", "hidden",
                          "timeline", "issues", "system", "filters"} <= set(payload))
         self.assertEqual(payload["review"]["items"][0]["source_agent"], "codex")
+        self.assertRegex(payload["system"]["doctor"]["version"], r"^\d+\.\d+\.\d+$")
 
     def test_mutation_returns_refreshed_dashboard_and_marks_report_dirty(self):
         rec = store.record_progress("t", "闲鱼抓了十六个商品", date=D, issue="AI-2541")
@@ -665,6 +695,32 @@ class TestWebEndpoints(unittest.TestCase):
         r = self.c.get("/healthz")
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.json(), {"ok": True})
+
+
+class TestOAuthRecovery(unittest.TestCase):
+    def test_sync_refreshes_and_retries_once_when_server_rejects_access_token(self):
+        from fecho import mobius, oauth, service
+
+        success = {"author": "t", "count": 11}
+        with mock.patch.object(oauth, "refresh_if_needed", side_effect=[None, "new-token"]) as refresh, \
+             mock.patch.object(config, "load", return_value={"mobius_auth": "oauth"}), \
+             mock.patch.object(config, "reload_module"), \
+             mock.patch.object(mobius, "sync", side_effect=[
+                 mobius.MobiusError("Mobius 401: Unauthorized"), success]) as sync:
+            self.assertEqual(service.sync_issues(author="t"), success)
+        self.assertEqual(refresh.call_args_list, [mock.call(), mock.call(force=True)])
+        self.assertEqual(sync.call_count, 2)
+
+    def test_sync_does_not_retry_non_auth_failures(self):
+        from fecho import mobius, oauth, service
+
+        with mock.patch.object(oauth, "refresh_if_needed") as refresh, \
+             mock.patch.object(mobius, "sync",
+                               side_effect=mobius.MobiusError("Mobius 请求失败: timeout")) as sync:
+            with self.assertRaisesRegex(mobius.MobiusError, "timeout"):
+                service.sync_issues(author="t")
+        refresh.assert_called_once_with()
+        self.assertEqual(sync.call_count, 1)
 
 
 class TestAggregation(unittest.TestCase):
@@ -777,6 +833,8 @@ class TestDigest(unittest.TestCase):
         self.assertEqual(r["generator"], "llm+fallback")
         self.assertEqual(db.get_report("t", D, "daily")["generator"], "llm")
         self.assertEqual(db.get_report("t", D, "voice")["generator"], "fallback")
+        self.assertGreaterEqual(r["voice_chars"], config.VOICE_MIN_CHARS)
+        self.assertLessEqual(r["voice_chars"], config.VOICE_MAX_CHARS)
 
     def test_voice_that_is_short_twice_gets_one_structural_expansion_retry(self):
         store.record_progress("t", "AI-2541 接口跑通并完成验收", date=D,

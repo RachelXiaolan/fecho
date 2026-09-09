@@ -7,7 +7,7 @@ import os
 from datetime import date as _date, timedelta
 from typing import Any, Dict, List, Optional
 
-from . import config, db, digest, mobius, store
+from . import __version__, config, db, digest, mobius, store
 
 
 def whoami() -> str:
@@ -89,7 +89,24 @@ def sync_issues(assignee: Optional[str] = None, author: Optional[str] = None) ->
 
     oauth.refresh_if_needed()          # token 快过期就先续，别让用户看见一次失败
     config.reload_module()
-    return mobius.sync(author or whoami(), assignee or config.MOBIUS_ASSIGNEE)
+    who = author or whoami()
+    target = assignee or config.MOBIUS_ASSIGNEE
+    try:
+        return mobius.sync(who, target)
+    except mobius.MobiusError as exc:
+        # access token 可能在本地到期时间之前被服务端撤销。只对明确的认证失败
+        # 强制刷新并重试一次；超时、协议错误等不能伪装成 OAuth 问题。
+        if "401" not in str(exc) or config.load().get("mobius_auth") != "oauth":
+            raise
+        try:
+            token = oauth.refresh_if_needed(force=True)
+        except oauth.OAuthError as refresh_exc:
+            raise mobius.MobiusError(str(refresh_exc)) from refresh_exc
+        if not token:
+            raise mobius.MobiusError(
+                "Mobius OAuth access token 已失效且没有可用 refresh token，请重新运行 mobius_login")
+        config.reload_module()
+        return mobius.sync(who, target)
 
 
 def catch_up(date: Optional[str] = None, author: Optional[str] = None) -> Dict[str, Any]:
@@ -175,6 +192,7 @@ def doctor() -> Dict[str, Any]:
     })
 
     return {
+        "version": __version__,
         "config": cfg,
         "checks": checks,
         "ready_to_log": True,
