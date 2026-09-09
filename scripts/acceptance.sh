@@ -2,7 +2,7 @@
 # Fecho 验收剧本。全程真机：真 Mobius、真 LLM、真 MCP stdio。
 # 用独立 FECHO_HOME，不碰你日常的 ~/.fecho。
 #   ./scripts/acceptance.sh
-set -uo pipefail
+set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$PWD"
 [ -f .env ] && set -a && . ./.env && set +a

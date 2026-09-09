@@ -885,6 +885,6 @@ class TestCollector(unittest.TestCase):
 
 if __name__ == "__main__":
     try:
-        unittest.main(verbosity=2, exit=False)
+        unittest.main(verbosity=2)
     finally:
         shutil.rmtree(TMP, ignore_errors=True)
