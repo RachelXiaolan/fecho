@@ -8,3 +8,4 @@ dist/
 scribe.db*
 logs/
 .acceptance/
+.worktrees/
