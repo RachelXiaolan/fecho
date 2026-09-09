@@ -29,7 +29,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from . import config, db, scope, store
+from . import clock, config, db, scope, store
 from .match import ISSUE_RE
 
 # 单次请求的输入上限（字符）。实测 24K tokens 打推理模型会超时。
@@ -220,8 +220,8 @@ def collect(days: int = 1) -> Tuple[Dict[Tuple[str, str, str, str], List[Dict]],
     分组的键是 (session_id, project, 本地日期)——三者决定了这批进展归谁、
     归哪个 issue、归哪天。
     """
-    tz = datetime.now().astimezone().tzinfo
-    floor = (datetime.now(tz) - timedelta(days=days)).replace(
+    tz = clock.BEIJING
+    floor = (clock.now() - timedelta(days=days)).replace(
         hour=0, minute=0, second=0, microsecond=0)
 
     groups: Dict[Tuple[str, str, str], List[Dict]] = {}
@@ -239,7 +239,7 @@ def collect(days: int = 1) -> Tuple[Dict[Tuple[str, str, str, str], List[Dict]],
                 continue
             if mark and ts <= mark:            # 水位线之前的，已经处理过
                 continue
-            when = datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(tz)
+            when = clock.from_iso(ts)
             if when < floor:                   # 太老的不追，避免首次扫描炸开
                 continue
 

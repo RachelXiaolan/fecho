@@ -14,7 +14,7 @@ import uuid
 from datetime import date as calendar_date, datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from . import config, db, match
+from . import clock, config, db, match
 
 
 _UNSET = object()
@@ -25,7 +25,7 @@ def now_iso() -> str:
 
 
 def today() -> str:
-    return datetime.now().strftime("%Y-%m-%d")
+    return clock.today()
 
 
 def content_hash(text: str) -> str:
