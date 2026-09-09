@@ -266,5 +266,81 @@ class TestSharedProvisioning(unittest.TestCase):
         return path
 
 
+class _Result:
+    def __init__(self, code=0, stdout="", stderr=""):
+        self.returncode = code
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+class TestHostInstallation(unittest.TestCase):
+    def setUp(self):
+        from fecho import hosts
+
+        self.hosts = hosts
+        self.home = Path(tempfile.mkdtemp(prefix="fecho-hosts-test-"))
+        self.command = "/private/fecho/bin/fecho-mcp"
+
+    def test_host_specs_use_supported_user_level_commands(self):
+        specs = self.hosts.host_specs(self.command, self.home)
+        self.assertEqual(specs["codex"]["add"], [
+            "codex", "mcp", "add", "fecho", "--", self.command])
+        self.assertEqual(specs["claude-code"]["add"], [
+            "claude", "mcp", "add", "--scope", "user", "fecho", "--", self.command])
+        self.assertEqual(specs["hermes"]["add"], [
+            "hermes", "mcp", "add", "fecho", "--command", self.command])
+        self.assertEqual(specs["codex"]["skill"], self.home / ".codex" / "skills" / "fecho")
+
+    def test_install_all_registers_detected_hosts_and_copies_skill(self):
+        calls = []
+
+        def runner(args, **kwargs):
+            calls.append(args)
+            if args in (["codex", "mcp", "get", "fecho", "--json"],
+                        ["claude", "mcp", "get", "fecho"],
+                        ["hermes", "mcp", "list"]):
+                return _Result(1, "", "not found")
+            return _Result()
+
+        result = self.hosts.install_all(
+            home=self.home, mcp_command=self.command, runner=runner,
+            which=lambda name: "/usr/bin/" + name,
+        )
+
+        self.assertEqual(set(result), {"codex", "claude-code", "hermes"})
+        self.assertTrue(all(item["mcp"] == "installed" for item in result.values()))
+        for item in result.values():
+            skill = Path(item["skill"]) / "SKILL.md"
+            self.assertTrue(skill.exists())
+            self.assertIn("log_progress", skill.read_text(encoding="utf-8"))
+        self.assertIn(["hermes", "mcp", "add", "fecho", "--command", self.command], calls)
+
+    def test_matching_registration_is_kept_and_conflict_is_not_overwritten(self):
+        adds = []
+
+        def runner(args, **kwargs):
+            if args == ["codex", "mcp", "get", "fecho", "--json"]:
+                return _Result(0, json.dumps({"command": self.command}))
+            if args == ["claude", "mcp", "get", "fecho"]:
+                return _Result(0, "Command: /another/fecho-mcp")
+            adds.append(args)
+            return _Result()
+
+        result = self.hosts.install_all(
+            home=self.home, mcp_command=self.command, runner=runner,
+            which=lambda name: "/usr/bin/" + name if name in ("codex", "claude") else None,
+        )
+        self.assertEqual(result["codex"]["mcp"], "existing")
+        self.assertEqual(result["claude-code"]["mcp"], "conflict")
+        self.assertFalse(adds)
+
+    def test_missing_hosts_are_reported_without_creating_directories(self):
+        result = self.hosts.install_all(
+            home=self.home, mcp_command=self.command,
+            runner=lambda *a, **k: _Result(), which=lambda name: None)
+        self.assertTrue(all(item["mcp"] == "not-installed" for item in result.values()))
+        self.assertFalse((self.home / ".codex").exists())
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
