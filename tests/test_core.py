@@ -621,12 +621,45 @@ class TestWebEndpoints(unittest.TestCase):
         self.assertEqual(payload["dashboard"]["date"], D)
         self.assertTrue(payload["dashboard"]["reports"]["dirty"])
 
+    def test_fresh_report_is_not_marked_dirty_by_dashboard_persona_loading(self):
+        store.record_progress("t", "AI-2541 完成可靠性复验", date=D)
+        digest.generate("t", D, force=True)
+        r = self.c.get("/api/dashboard", params={"date": D})
+        self.assertEqual(r.status_code, 200)
+        self.assertFalse(r.json()["reports"]["dirty"])
+
+    def test_dashboard_tasks_include_updates_for_global_filters(self):
+        store.record_progress(
+            "t", "AI-2541 Codex 完成测试", date=D, source_agent="codex",
+            ingestion_method="transcript-scan", completion_status="done")
+        task = self.c.get("/api/dashboard", params={"date": D}).json()["tasks"]["items"][0]
+        self.assertEqual(task["updates"][0]["source_agent"], "codex")
+        self.assertEqual(task["updates"][0]["ingestion_method"], "transcript-scan")
+
     def test_bad_mutation_is_a_clear_client_error_not_a_500(self):
         r = self.c.post("/api/reassign", json={
             "update_id": "missing", "issue_key": "AI-2541", "date": D})
         self.assertEqual(r.status_code, 400)
         self.assertFalse(r.json()["ok"])
         self.assertIn("不存在", r.json()["error"])
+
+    def test_correct_endpoint_edits_content_and_returns_selected_date(self):
+        rec = store.record_progress("t", "原正文", date=D, issue="AI-2541")
+        r = self.c.post("/api/correct", json={
+            "update_id": rec["update_id"], "issue_key": "AI-2224",
+            "content": "修正后的正文", "date": D})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["dashboard"]["date"], D)
+        row = db.list_updates(date=D, author="t")[0]
+        self.assertEqual(row["content_md"], "修正后的正文")
+        self.assertEqual(row["assignment_locked"], 1)
+
+    def test_task_mutation_keeps_historical_dashboard_date(self):
+        rec = store.record_progress("t", "AI-2541 历史进展", date=D)
+        r = self.c.post("/api/tasks/%s/complete" % rec["task"]["task_id"],
+                        json={"date": D})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["dashboard"]["date"], D)
 
     def test_healthz_does_not_leak_author(self):
         r = self.c.get("/healthz")

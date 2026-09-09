@@ -137,6 +137,7 @@ def task_list(author: str) -> List[Dict[str, Any]]:
     tasks = db.list_tasks(author=author)
     for task in tasks:
         updates = db.list_updates(task_id=task["task_id"])
+        task["updates"] = updates
         task["update_count"] = len(updates)
         task["last_progress"] = updates[-1]["content_md"] if updates else None
     return tasks
@@ -149,6 +150,8 @@ def report_payload(author: str, date: str) -> Dict[str, Any]:
     voice = db.get_report(author, date, "voice")
     ident = auth.all_authors().get(author, {})
     persona = personas.load(ident.get("persona") or author)
+    if not persona.get("display_name"):
+        persona["display_name"] = ident.get("display_name") or author
     current_fp = digest.fingerprint(db.day_tasks(author, date), persona, pto.status(author, date))
     return {
         "daily": (daily or {}).get("content_md"),
@@ -175,6 +178,7 @@ def dashboard_payload(author: str, date: str) -> Dict[str, Any]:
     return {
         "date": date,
         "overview": overview(author, date),
+        "today": service.day(author, date),
         "review": {"items": review_queue(author, date)},
         "tasks": {"items": task_list(author)},
         "reports": report_payload(author, date),
@@ -338,23 +342,47 @@ def build_app():
         return {"ok": True, "changed": result["changed"],
                 "message": "归属已确认", "dashboard": dashboard_payload(config.AUTHOR, date_)}
 
+    @app.post("/api/correct")
+    def api_correct(request: Request, body: Dict[str, Any] = Body(...),
+                    authorization: Optional[str] = Header(None)):
+        guard(request, authorization)
+        update_id = body["update_id"]
+        with db.cursor() as conn:
+            row = conn.execute("SELECT date FROM updates WHERE update_id=? AND author=?",
+                               (update_id, config.AUTHOR)).fetchone()
+        if row is None:
+            raise ValueError("进展不存在: %s" % update_id)
+        kw: Dict[str, Any] = {}
+        if "content" in body:
+            kw["content_md"] = body["content"]
+        if body.get("issue_key"):
+            kw["issue_key"] = body["issue_key"]
+        elif "issue_key" in body:
+            kw["freeform"] = True
+        result = store.correct_progress(update_id, config.AUTHOR, **kw)
+        date_ = body.get("date") or row["date"]
+        return {"ok": True, "changed": result["changed"], "message": "进展已修订",
+                "dashboard": dashboard_payload(config.AUTHOR, date_)}
+
     @app.post("/api/tasks/{task_id}/complete")
     def api_complete_task(task_id: str, request: Request,
+                          body: Dict[str, Any] = Body(default={}),
                           authorization: Optional[str] = Header(None)):
         guard(request, authorization)
         from . import service
         result = service.complete_task(task_id)
         return {"ok": True, **result,
-                "dashboard": dashboard_payload(config.AUTHOR, store.today())}
+                "dashboard": dashboard_payload(config.AUTHOR, body.get("date") or store.today())}
 
     @app.post("/api/tasks/{task_id}/reopen")
     def api_reopen_task(task_id: str, request: Request,
+                        body: Dict[str, Any] = Body(default={}),
                         authorization: Optional[str] = Header(None)):
         guard(request, authorization)
         from . import service
         result = service.reopen_task(task_id)
         return {"ok": True, **result,
-                "dashboard": dashboard_payload(config.AUTHOR, store.today())}
+                "dashboard": dashboard_payload(config.AUTHOR, body.get("date") or store.today())}
 
     @app.post("/api/tasks/merge")
     def api_merge_tasks(request: Request, body: Dict[str, Any] = Body(...),
