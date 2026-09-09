@@ -1,5 +1,6 @@
 """Onboarding and unattended automation contracts."""
 import os
+import json
 import plistlib
 import tempfile
 import unittest
@@ -184,6 +185,85 @@ class TestLaunchAgents(unittest.TestCase):
         self.assertEqual(saved[-1]["daily_time"], "20:45")
         self.assertTrue(saved[-1]["enabled"])
         self.assertEqual(result["daily_time"], "20:45")
+
+
+class TestSharedProvisioning(unittest.TestCase):
+    def setUp(self):
+        from fecho import onboarding
+
+        self.onboarding = onboarding
+        self.shared = {
+            "llm_base_url": "https://llm.example.test/v1",
+            "llm_api_key": "shared-secret",
+            "llm_model": "minimax-m3",
+            "llm_reasoning_effort": "low",
+        }
+
+    def test_existing_valid_config_wins_without_fetching(self):
+        fetch = mock.Mock()
+        result = self.onboarding.resolve_shared_llm(
+            current=self.shared, shared_url="https://config.example.test/fecho.json",
+            fetch=fetch)
+        self.assertEqual(result["source"], "existing")
+        self.assertEqual(result["values"]["llm_model"], "minimax-m3")
+        fetch.assert_not_called()
+
+    def test_private_json_file_accepts_only_llm_fields(self):
+        path = self.home_file({**self.shared, "mobius_token": "must-not-copy", "author": "owner"})
+        result = self.onboarding.resolve_shared_llm(current={}, shared_file=path)
+        self.assertEqual(result["source"], "file")
+        self.assertNotIn("mobius_token", result["values"])
+        self.assertNotIn("author", result["values"])
+
+    def test_https_shared_config_is_supported_but_plain_http_is_rejected(self):
+        fetch = mock.Mock(return_value=self.shared)
+        result = self.onboarding.resolve_shared_llm(
+            current={}, shared_url="https://config.example.test/fecho.json", fetch=fetch)
+        self.assertEqual(result["source"], "url")
+        fetch.assert_called_once()
+        with self.assertRaisesRegex(ValueError, "HTTPS"):
+            self.onboarding.resolve_shared_llm(
+                current={}, shared_url="http://config.example.test/fecho.json", fetch=fetch)
+
+    def test_missing_shared_config_stops_onboarding(self):
+        with self.assertRaisesRegex(RuntimeError, "共享 LLM"):
+            self.onboarding.resolve_shared_llm(current={})
+
+    def test_persisted_shared_key_is_0600_and_result_is_redacted(self):
+        home = Path(tempfile.mkdtemp(prefix="fecho-shared-config-test-"))
+        config_file = home / "config.json"
+        from fecho import config
+
+        with mock.patch.object(config, "HOME", home), \
+                mock.patch.object(config, "CONFIG_FILE", config_file), \
+                mock.patch.object(config, "_cache", {}):
+            result = self.onboarding.persist_shared_llm(self.shared)
+        self.assertEqual(config_file.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(result, {"configured": True, "model": "minimax-m3"})
+        self.assertNotIn("shared-secret", json.dumps(result))
+
+    def test_onboard_orders_configuration_hosts_oauth_then_schedule(self):
+        events = []
+        result = self.onboarding.onboard(
+            author="rachel", display_name="Rachel",
+            work_prefixes=["/work"], ignores=["/work/private"],
+            mobius_assignee="rachel@example.test", daily_time="21:00",
+            shared_file=self.home_file(self.shared),
+            configure=lambda values: events.append(("configure", values)),
+            scope_add=lambda kind, value: events.append(("scope", kind, value)),
+            install_hosts=lambda: events.append(("hosts",)) or {"codex": "installed"},
+            connect_mobius=lambda email: events.append(("oauth", email)) or {"count": 2},
+            install_schedule=lambda when: events.append(("schedule", when)) or {"installed": True},
+        )
+        self.assertEqual([event[0] for event in events], [
+            "configure", "scope", "scope", "hosts", "oauth", "schedule"])
+        self.assertTrue(result["ok"])
+        self.assertNotIn("shared-secret", json.dumps(result))
+
+    def home_file(self, content):
+        path = Path(tempfile.mkdtemp(prefix="fecho-shared-source-")) / "shared.json"
+        path.write_text(json.dumps(content), encoding="utf-8")
+        return path
 
 
 if __name__ == "__main__":

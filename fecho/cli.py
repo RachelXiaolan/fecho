@@ -409,6 +409,26 @@ def cmd_schedule(args) -> int:
     return 0
 
 
+def cmd_onboard(args) -> int:
+    from . import onboarding
+
+    result = onboarding.onboard(
+        author=args.author or config.AUTHOR,
+        display_name=args.display_name,
+        work_prefixes=args.work_prefix or (),
+        ignores=args.ignore or (),
+        mobius_assignee=args.mobius_assignee,
+        daily_time=args.time,
+        shared_file=args.shared_config,
+        shared_url=args.shared_config_url,
+        skip_mobius=args.skip_mobius,
+        skip_schedule=args.skip_schedule,
+        dry_run=args.dry_run,
+    )
+    _p(result)
+    return 0
+
+
 def cmd_serve(args) -> int:
     """起团队 collector：只收日报/口播稿成品，不是共享的原始数据库。
 
@@ -497,6 +517,20 @@ def main() -> int:
     p.set_defaults(fn=cmd_team)
 
     sub.add_parser("install", help="打印 MCP 配置片段").set_defaults(fn=cmd_install)
+
+    p = sub.add_parser("onboard", help="一次完成共享配置、白名单、Agent、Mobius 和自动任务")
+    p.add_argument("--author", help="稳定英文标识；默认使用当前 Fecho 身份")
+    p.add_argument("--display-name", help="Dashboard 和日报展示名")
+    p.add_argument("--work-prefix", action="append", help="允许扫描的工作目录前缀，可重复")
+    p.add_argument("--ignore", action="append", help="明确禁止扫描的目录，可重复")
+    p.add_argument("--mobius-assignee", help="Mobius 邮箱")
+    p.add_argument("--time", default="21:00", help="每日北京时间 HH:MM，必须早于 22:00")
+    p.add_argument("--shared-config", help="管理员提供的共享 LLM JSON 文件")
+    p.add_argument("--shared-config-url", help="管理员提供的共享 LLM HTTPS 地址")
+    p.add_argument("--skip-mobius", action="store_true", help="暂不进行浏览器 OAuth")
+    p.add_argument("--skip-schedule", action="store_true", help="暂不安装自动任务")
+    p.add_argument("--dry-run", action="store_true", help="只校验并展示计划，不修改配置")
+    p.set_defaults(fn=cmd_onboard)
 
     p = sub.add_parser("schedule", help="管理北京时间日终任务和本地 Dashboard 后台服务")
     schedule_sub = p.add_subparsers(dest="action", required=True)
