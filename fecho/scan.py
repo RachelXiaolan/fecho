@@ -435,6 +435,8 @@ def scan(days: int = 1, dry_run: bool = False, author: Optional[str] = None) -> 
             rec = store.record_progress(
                 author, e["content"], date=date, source_agent=producer,
                 ingestion_method="transcript-scan",
+                completion_status="done" if e["kind"] in ("done", "decision") else "unknown",
+                content_kind=e["kind"] if e["kind"] in ("pitfall", "decision") else "progress",
                 session_id=session_id, project=project,
                 issue=e.get("issue"),        # 模型判的归属，当确定信号用
                 source_event_key=source_event_key,

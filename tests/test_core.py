@@ -65,7 +65,8 @@ def seed_issues(author="t"):
         for i in ISSUES:
             c.execute("INSERT INTO mobius_issues (issue_key,author,title,state,url,"
                       "updated_at,synced_at,raw) VALUES (?,?,?,?,?,?,?,?)",
-                      (i["issue_key"], author, i["title"], "In Progress", "", "", "now", "{}"))
+                      (i["issue_key"], author, i["title"], "In Progress", "", "",
+                       store.now_iso(), "{}"))
 
 
 def reset():
@@ -76,6 +77,7 @@ def reset():
         c.execute("DELETE FROM tasks")
         c.execute("DELETE FROM reports")
         c.execute("DELETE FROM scan_runs")
+        c.execute("DELETE FROM assignment_verifications")
     seed_issues()
 
 
@@ -370,6 +372,39 @@ class TestCrossValidation(unittest.TestCase):
         self.assertEqual(res["checked"], 0, "人工锁定的归属不应再交给模型重判")
         rows = {u["update_id"]: u for u in db.day_updates("t", D)}
         self.assertEqual(rows[r["update_id"]]["issue_key"], "AI-2224")
+
+    def test_empty_issue_cache_skips_verification_without_erasing_assignment(self):
+        r = store.record_progress("t", "配对引擎写完了", date=D, issue="AI-2541")
+        with db.cursor() as conn:
+            conn.execute("DELETE FROM mobius_issues WHERE author='t'")
+        with mock.patch.object(config, "llm_configured", return_value=True), \
+             mock.patch("fecho.llm.chat") as chat:
+            res = digest.verify_assignments("t", D)
+        chat.assert_not_called()
+        self.assertIn("缓存为空", res["error"])
+        rows = {u["update_id"]: u for u in db.day_updates("t", D)}
+        self.assertEqual(rows[r["update_id"]]["issue_key"], "AI-2541")
+
+    def test_stale_issue_cache_skips_verification(self):
+        store.record_progress("t", "配对引擎写完了", date=D, issue="AI-2541")
+        with db.cursor() as conn:
+            conn.execute("UPDATE mobius_issues SET synced_at='2000-01-01T00:00:00+00:00'"
+                         " WHERE author='t'")
+        with mock.patch.object(config, "llm_configured", return_value=True), \
+             mock.patch("fecho.llm.chat") as chat:
+            res = digest.verify_assignments("t", D)
+        chat.assert_not_called()
+        self.assertIn("已过期", res["error"])
+
+    def test_unchanged_verification_uses_fingerprint_cache(self):
+        store.record_progress("t", "配对引擎写完了", date=D, issue="AI-2541")
+        with mock.patch.object(config, "llm_configured", return_value=True), \
+             mock.patch("fecho.llm.chat", return_value="1 | AI-2541") as chat:
+            first = digest.verify_assignments("t", D)
+            second = digest.verify_assignments("t", D)
+        self.assertEqual(chat.call_count, 1)
+        self.assertFalse(first.get("cached", False))
+        self.assertTrue(second["cached"])
 
 
 class TestWebEndpoints(unittest.TestCase):
@@ -673,6 +708,24 @@ class TestDigest(unittest.TestCase):
         self.assertEqual(db.get_report("t", D, "daily")["generator"], "llm")
         self.assertEqual(db.get_report("t", D, "voice")["generator"], "fallback")
 
+    def test_voice_that_is_short_twice_gets_one_structural_expansion_retry(self):
+        store.record_progress("t", "AI-2541 接口跑通并完成验收", date=D,
+                              completion_status="done")
+        calls = {"n": 0}
+
+        def replies(messages, **kw):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return "[1] done | 接口和验收都已完成\n- done | 核心链路跑通"
+            if calls["n"] in (2, 3):
+                return "今天把核心接口跑通了。"
+            return "今天把核心接口、数据写入和验收链路都完整跑通了。" * 9
+
+        with mock.patch("fecho.llm.chat", side_effect=replies):
+            result = digest.generate("t", D, force=True)
+        self.assertEqual(calls["n"], 4)
+        self.assertGreaterEqual(result["voice_chars"], config.VOICE_MIN_CHARS)
+
     def test_regeneration_is_skipped_when_inputs_unchanged(self):
         store.record_progress("t", "AI-2541 接口跑通了", date=D)
         digest.generate("t", D)
@@ -690,6 +743,20 @@ class TestDigest(unittest.TestCase):
 
     def test_empty_day_produces_nothing(self):
         self.assertEqual(digest.generate("t", "2030-01-03")["status"], "empty")
+
+    def test_report_fingerprint_changes_when_an_update_is_revised_in_place(self):
+        r = store.record_progress("t", "第一版正文", date=D, issue="AI-2541")
+        persona = __import__("fecho.personas", fromlist=["load"]).load("default")
+        before = digest.fingerprint(db.day_tasks("t", D), persona, "workday")
+        store.correct_progress(r["update_id"], "t", content_md="修正后的正文")
+        after = digest.fingerprint(db.day_tasks("t", D), persona, "workday")
+        self.assertNotEqual(before, after)
+
+    def test_fallback_does_not_claim_unknown_progress_is_done(self):
+        store.record_progress("t", "接口完成一部分，明天继续", date=D, issue="AI-2541")
+        result = digest.generate("t", D, force=True)
+        self.assertIn("## Updates", result["daily_md"])
+        self.assertNotIn("✅ [**", result["daily_md"])
 
 
 class TestScoping(unittest.TestCase):
@@ -749,10 +816,17 @@ class TestDailyFormat(unittest.TestCase):
         self.assertIn("* ✅ 这条做完了", md)
         self.assertIn("* ❌ 这条卡住了", md)
 
-    def test_missing_status_defaults_to_done(self):
+    def test_missing_status_defaults_to_unknown(self):
         items, _ = digest._parse_daily("[1] 没写状态的总结\n- 也没写状态的子弹点", 1)
-        self.assertEqual(items[1]["status"], "done")
-        self.assertEqual(items[1]["bullets"][0][0], "done")
+        self.assertEqual(items[1]["status"], "unknown")
+        self.assertEqual(items[1]["bullets"][0][0], "unknown")
+
+    def test_daily_groups_tasks_into_status_sections(self):
+        items = {1: {"status": "done", "summary": "完成", "bullets": []},
+                 2: {"status": "blocked", "summary": "受阻", "bullets": []}}
+        md = digest._assemble_daily("2026-09-04", self._tasks(), items, [], self.persona)
+        self.assertIn("## Done", md)
+        self.assertIn("## Blocked", md)
 
     def test_header_uses_slash_date(self):
         md = digest._assemble_daily("2026-09-04", self._tasks(), {}, [], self.persona)

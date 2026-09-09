@@ -43,6 +43,8 @@ CREATE TABLE IF NOT EXISTS updates (
     assignment_locked INTEGER NOT NULL DEFAULT 0,     -- 人工确认后模型不得覆盖
     revision      INTEGER NOT NULL DEFAULT 1,
     source_event_key TEXT,              -- transcript chunk/item 的稳定幂等键
+    completion_status TEXT NOT NULL DEFAULT 'unknown', -- done / wip / blocked / unknown
+    content_kind  TEXT NOT NULL DEFAULT 'progress',    -- progress / pitfall / decision
     pto_status    TEXT,
     created_at    TEXT NOT NULL,
     content_hash  TEXT NOT NULL,
@@ -109,6 +111,16 @@ CREATE TABLE IF NOT EXISTS scan_runs (
 );
 CREATE INDEX IF NOT EXISTS idx_scan_runs_session ON scan_runs(session_id, started_at);
 
+CREATE TABLE IF NOT EXISTS assignment_verifications (
+    author       TEXT NOT NULL,
+    date         TEXT NOT NULL,
+    fingerprint  TEXT NOT NULL,
+    model        TEXT,
+    prompt_version TEXT NOT NULL,
+    verified_at  TEXT NOT NULL,
+    PRIMARY KEY (author, date)
+);
+
 CREATE TABLE IF NOT EXISTS reports (
     report_id     TEXT PRIMARY KEY,
     author        TEXT NOT NULL,
@@ -164,6 +176,10 @@ def init() -> None:
             conn.execute("ALTER TABLE updates ADD COLUMN ingestion_method TEXT NOT NULL DEFAULT 'direct'")
             conn.execute("UPDATE updates SET ingestion_method='transcript-scan'"
                          " WHERE source_agent='scan'")
+        if "completion_status" not in columns:
+            conn.execute("ALTER TABLE updates ADD COLUMN completion_status TEXT NOT NULL DEFAULT 'unknown'")
+        if "content_kind" not in columns:
+            conn.execute("ALTER TABLE updates ADD COLUMN content_kind TEXT NOT NULL DEFAULT 'progress'")
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_updates_source_event"
                      " ON updates(source_event_key) WHERE source_event_key IS NOT NULL")
 

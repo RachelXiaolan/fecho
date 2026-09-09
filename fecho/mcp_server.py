@@ -60,6 +60,10 @@ TOOLS = [
             "issue": {"type": "string", "description": "可选。确定是哪个 issue 就直接写，如 AI-2541"},
             "task_id": {"type": "string", "description": "可选。强制挂到某个已有任务"},
             "freeform": {"type": "boolean", "description": "明确不属于任何 issue；可覆盖项目目录绑定"},
+            "completion_status": {"type": "string", "enum": ["done", "wip", "blocked", "unknown"],
+                                  "description": "这项工作的完成状态；不确定就用 unknown"},
+            "kind": {"type": "string", "enum": ["progress", "pitfall", "decision"],
+                     "description": "内容类型，默认 progress"},
             "date": {"type": "string", "description": "可选，YYYY-MM-DD，补记往日时用"}},
             "required": ["content"]},
     },
@@ -177,7 +181,9 @@ def call_tool(name: str, args: Dict[str, Any], context: Optional[MCPContext] = N
             args["content"], date=args.get("date"),
             source_agent=context.client_name, session_id=context.session_id,
             issue=args.get("issue"), task_id=args.get("task_id"),
-            freeform=bool(args.get("freeform")))
+            freeform=bool(args.get("freeform")),
+            completion_status=args.get("completion_status", "unknown"),
+            content_kind=args.get("kind", "progress"))
         t, m = res["task"], res["match"]
         head = ("重复，未写入 → %s" if res["verdict"] == "duplicate" else "已记录 → **%s**") \
             % _task_line(t)

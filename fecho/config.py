@@ -145,6 +145,8 @@ SCAN_SOURCES = _scan_sources()
 # 合并掉就丢信息）。中间这条缝很干净。
 SCAN_DEDUPE_SIMILARITY = float(get("scan_dedupe_similarity",
                                    "FECHO_SCAN_DEDUPE_SIMILARITY", 0.62))
+MOBIUS_CACHE_MAX_AGE_HOURS = float(get("mobius_cache_max_age_hours",
+                                       "FECHO_MOBIUS_CACHE_MAX_AGE_HOURS", 24))
 VOICE_MIN_CHARS = int(get("voice_min", "FECHO_VOICE_MIN", 200))
 VOICE_MAX_CHARS = int(get("voice_max", "FECHO_VOICE_MAX", 1000))
 

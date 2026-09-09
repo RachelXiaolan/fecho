@@ -114,6 +114,8 @@ def record_progress(
     date: Optional[str] = None,
     source_agent: str = "manual",
     ingestion_method: str = "direct",
+    completion_status: str = "unknown",
+    content_kind: str = "progress",
     session_id: Optional[str] = None,
     issue: Optional[str] = None,
     task_id: Optional[str] = None,
@@ -134,6 +136,10 @@ def record_progress(
         raise ValueError("freeform 不能和 issue/task_id 同时指定")
     if source_agent == "scan" and ingestion_method == "direct":
         ingestion_method = "transcript-scan"  # 兼容老调用方
+    if completion_status not in ("done", "wip", "blocked", "unknown"):
+        raise ValueError("completion_status 必须是 done/wip/blocked/unknown")
+    if content_kind not in ("progress", "pitfall", "decision"):
+        raise ValueError("content_kind 必须是 progress/pitfall/decision")
 
     # Transcript 重跑时模型措辞可能变化，不能只靠正文 hash 去重。稳定事件键在创建
     # task 之前判断，避免重复回放留下空任务。
@@ -217,11 +223,13 @@ def record_progress(
         conn.execute(
             "INSERT INTO updates (update_id, task_id, author, date, content_md, source_agent,"
             " ingestion_method, session_id, match_method, match_score, assignment_source, assignment_locked,"
-            " revision, source_event_key, pto_status, created_at, content_hash, status, meta)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            " revision, source_event_key, completion_status, content_kind, pto_status,"
+            " created_at, content_hash, status, meta)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (update_id, task["task_id"], author, date, content_md, source_agent or "manual",
              ingestion_method, session_id, decision["method"], decision.get("score"),
-             _assignment_source(decision["method"]), 0, 1, source_event_key, None, ts, h,
+             _assignment_source(decision["method"]), 0, 1, source_event_key,
+             completion_status, content_kind, None, ts, h,
              "duplicate-ignored" if dup_of else "active",
              json.dumps(dict(meta or {}, **({"duplicate_of": dup_of} if dup_of else {})),
                         ensure_ascii=False)),
