@@ -285,7 +285,8 @@ def verify_assignments(author: str, date: str) -> Dict[str, Any]:
         out["error"] = "没配 LLM，跳过交叉验证"
         return out
 
-    rows = db.day_updates(author, date)
+    # 人工在 Review 页确认/改过的归属已经是最终判断，模型不得覆盖。
+    rows = [r for r in db.day_updates(author, date) if not r.get("assignment_locked")]
     if not rows:
         return out
     issues = mobius.cached_issues(author)

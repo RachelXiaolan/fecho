@@ -38,6 +38,9 @@ CREATE TABLE IF NOT EXISTS updates (
     session_id    TEXT,                 -- 哪个对话（审计用；任务与对话是多对多）
     match_method  TEXT NOT NULL,        -- explicit / mobius-auto / task-continue / new-task
     match_score   REAL,
+    assignment_source TEXT NOT NULL DEFAULT 'system', -- agent / project / session / model / human
+    assignment_locked INTEGER NOT NULL DEFAULT 0,     -- 人工确认后模型不得覆盖
+    revision      INTEGER NOT NULL DEFAULT 1,
     pto_status    TEXT,
     created_at    TEXT NOT NULL,
     content_hash  TEXT NOT NULL,
@@ -46,6 +49,23 @@ CREATE TABLE IF NOT EXISTS updates (
 );
 CREATE INDEX IF NOT EXISTS idx_updates_task ON updates(task_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_updates_author_date ON updates(author, date);
+
+-- 归属和正文纠错审计。update 本身原地修订，避免“重记一次”制造两条互相冲突的进展。
+CREATE TABLE IF NOT EXISTS assignment_events (
+    event_id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    update_id      TEXT NOT NULL REFERENCES updates(update_id),
+    author         TEXT NOT NULL,
+    actor          TEXT NOT NULL,
+    from_task_id   TEXT,
+    to_task_id     TEXT,
+    from_issue_key TEXT,
+    to_issue_key   TEXT,
+    from_content_md TEXT NOT NULL,
+    to_content_md   TEXT NOT NULL,
+    created_at     TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_assignment_events_update
+    ON assignment_events(update_id, created_at);
 
 -- Mobius issue 本地缓存：配对在本地做，不每次去问 Mobius
 CREATE TABLE IF NOT EXISTS mobius_issues (
@@ -108,6 +128,16 @@ def connect() -> sqlite3.Connection:
 def init() -> None:
     with connect() as conn:
         conn.executescript(SCHEMA)
+        # 老库增量升级。CREATE TABLE IF NOT EXISTS 不会替已有表补列，必须显式迁移。
+        columns = {r["name"] for r in conn.execute("PRAGMA table_info(updates)").fetchall()}
+        if "assignment_source" not in columns:
+            conn.execute("ALTER TABLE updates ADD COLUMN assignment_source TEXT")
+            conn.execute("UPDATE updates SET assignment_source=match_method"
+                         " WHERE assignment_source IS NULL")
+        if "assignment_locked" not in columns:
+            conn.execute("ALTER TABLE updates ADD COLUMN assignment_locked INTEGER NOT NULL DEFAULT 0")
+        if "revision" not in columns:
+            conn.execute("ALTER TABLE updates ADD COLUMN revision INTEGER NOT NULL DEFAULT 1")
 
 
 @contextmanager
@@ -188,7 +218,8 @@ def day_updates(author: str, date: str) -> List[Dict[str, Any]]:
     """当天的进展平铺一列，带上各自现在归到哪个 issue。给交叉验证用。"""
     with cursor() as conn:
         rows = conn.execute(
-            "SELECT u.update_id, u.content_md, u.match_method, u.task_id, t.issue_key"
+            "SELECT u.update_id, u.content_md, u.match_method, u.assignment_source,"
+            " u.assignment_locked, u.revision, u.task_id, t.issue_key"
             " FROM updates u JOIN tasks t ON t.task_id = u.task_id"
             " WHERE u.author=? AND u.date=? AND u.status='active'"
             " ORDER BY u.created_at", (author, date)).fetchall()

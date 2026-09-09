@@ -69,6 +69,7 @@ def seed_issues(author="t"):
 def reset():
     db.init()
     with db.cursor() as c:
+        c.execute("DELETE FROM assignment_events")
         c.execute("DELETE FROM updates")
         c.execute("DELETE FROM tasks")
         c.execute("DELETE FROM reports")
@@ -133,6 +134,18 @@ class TestMatching(unittest.TestCase):
                                   issue="AI-2460")
         self.assertEqual(b["match"]["method"], "explicit")
         self.assertEqual(b["task"]["issue_key"], "AI-2460")
+
+    def test_invalid_calendar_date_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "有效日期"):
+            store.record_progress("t", "一条进展", date="2030-99-99")
+
+    def test_unknown_explicit_issue_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "不在已同步的 Mobius issue"):
+            store.record_progress("t", "一条进展", date=D, issue="AI-999999")
+
+    def test_unknown_issue_mentioned_in_content_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "不在已同步的 Mobius issue"):
+            store.record_progress("t", "完成了 AI-999999", date=D)
 
 
 class TestNoSemanticGuessing(unittest.TestCase):
@@ -325,6 +338,36 @@ class TestCrossValidation(unittest.TestCase):
         rows = {u["update_id"]: u for u in db.day_updates("t", D)}
         self.assertEqual(rows[r["update_id"]]["issue_key"], "AI-2541")
 
+    def test_human_correction_updates_the_same_row_and_writes_audit_event(self):
+        r = store.record_progress("t", "闲鱼抓了十六个商品详情", date=D, issue="AI-2541")
+        changed = store.correct_progress(
+            r["update_id"], "t", issue_key="AI-2224",
+            content_md="闲鱼抓取并整理了十六个商品详情")
+
+        self.assertTrue(changed["changed"])
+        rows = db.list_updates(date=D, author="t")
+        self.assertEqual(len(rows), 1, "纠错必须原地修订，不能靠重记制造重复进展")
+        self.assertEqual(rows[0]["update_id"], r["update_id"])
+        self.assertEqual(rows[0]["content_md"], "闲鱼抓取并整理了十六个商品详情")
+        self.assertEqual(rows[0]["assignment_source"], "human")
+        self.assertEqual(rows[0]["assignment_locked"], 1)
+        self.assertEqual(rows[0]["revision"], 2)
+        with db.cursor() as conn:
+            event = conn.execute(
+                "SELECT * FROM assignment_events WHERE update_id=?", (r["update_id"],)
+            ).fetchone()
+        self.assertEqual(event["from_issue_key"], "AI-2541")
+        self.assertEqual(event["to_issue_key"], "AI-2224")
+
+    def test_human_correction_is_not_overwritten_by_llm_verification(self):
+        r = store.record_progress("t", "闲鱼抓了十六个商品详情", date=D, issue="AI-2541")
+        store.correct_progress(r["update_id"], "t", issue_key="AI-2224")
+        with mock_llm("1 | AI-2541"):
+            res = digest.verify_assignments("t", D)
+        self.assertEqual(res["checked"], 0, "人工锁定的归属不应再交给模型重判")
+        rows = {u["update_id"]: u for u in db.day_updates("t", D)}
+        self.assertEqual(rows[r["update_id"]]["issue_key"], "AI-2224")
+
 
 class TestWebEndpoints(unittest.TestCase):
     """HTTP 层。SSE 那套握手是两条腿（GET 开流 + POST 发消息），
@@ -403,6 +446,32 @@ class TestWebEndpoints(unittest.TestCase):
         from fecho import mcp_server
         schema = next(t for t in mcp_server.TOOLS if t["name"] == "log_progress")
         self.assertNotIn("agent", schema["inputSchema"]["properties"])
+
+    def test_log_progress_returns_update_id_and_assignment_as_structured_data(self):
+        r = self.c.post("/mcp", json={
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {
+                "name": "log_progress", "arguments": {
+                    "content": "Fecho MCP 结构化返回完成", "issue": "AI-2541", "date": D}}})
+        result = r.json()["result"]
+        self.assertFalse(result["isError"])
+        self.assertRegex(result["structuredContent"]["update_id"], r"^[0-9a-f-]{36}$")
+        self.assertEqual(result["structuredContent"]["issue_key"], "AI-2541")
+        self.assertEqual(result["structuredContent"]["match_method"], "explicit")
+
+    def test_correct_progress_tool_revises_in_place_and_locks_assignment(self):
+        rec = store.record_progress("t", "最初归错的进展", date=D, issue="AI-2541")
+        r = self.c.post("/mcp", json={
+            "jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
+                "name": "correct_progress", "arguments": {
+                    "update_id": rec["update_id"], "issue": "AI-2224",
+                    "content": "修正后的闲鱼进展"}}})
+        result = r.json()["result"]
+        self.assertFalse(result["isError"])
+        self.assertEqual(result["structuredContent"]["update_id"], rec["update_id"])
+        rows = db.list_updates(date=D, author="t")
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["assignment_locked"], 1)
+        self.assertEqual(db.get_task(rows[0]["task_id"])["issue_key"], "AI-2224")
 
     def test_sse_full_roundtrip_against_a_real_server(self):
         """SSE 是两条腿：GET 开流拿到 POST 地址，响应再顺着流推回来。
@@ -791,6 +860,14 @@ class TestProjectBinding(unittest.TestCase):
         """没绑 issue 的工作项目照样记，只是走自由任务——不硬塞给任何 issue。"""
         r = store.record_progress("t", "整理了一版选品汇总表", date=D,
                                   project="/home/me/work/some-research")
+        self.assertEqual(r["task"]["source"], "freeform")
+        self.assertIsNone(r["task"]["issue_key"])
+
+    def test_explicit_freeform_overrides_project_binding(self):
+        r = store.record_progress(
+            "t", "帮同事查了一个与本项目无关的问题", date=D,
+            project="/home/me/work/scripe", freeform=True)
+        self.assertEqual(r["match"]["method"], "explicit-freeform")
         self.assertEqual(r["task"]["source"], "freeform")
         self.assertIsNone(r["task"]["issue_key"])
 

@@ -11,10 +11,13 @@
 import json
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import date as calendar_date, datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from . import config, db, match
+
+
+_UNSET = object()
 
 
 def now_iso() -> str:
@@ -79,6 +82,19 @@ def _get_or_create_mobius_task(author: str, issue_key: str, title: Optional[str]
     return db.get_task(task_id)
 
 
+def _validate_issue(author: str, issue_key: str) -> str:
+    key = (issue_key or "").strip().upper()
+    if not match.ISSUE_RE.fullmatch(key):
+        raise ValueError("issue 格式无效: %s" % issue_key)
+    with db.cursor() as conn:
+        known = conn.execute(
+            "SELECT 1 FROM mobius_issues WHERE author=? AND issue_key=?", (author, key)
+        ).fetchone()
+    if not known:
+        raise ValueError("issue %s 不在已同步的 Mobius issue 中；请先 sync_issues" % key)
+    return key
+
+
 def _create_freeform_task(author: str, content: str) -> Dict[str, Any]:
     task_id = str(uuid.uuid4())
     ts = now_iso()
@@ -101,33 +117,43 @@ def record_progress(
     issue: Optional[str] = None,
     task_id: Optional[str] = None,
     project: Optional[str] = None,
+    freeform: bool = False,
     meta: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     content_md = (content_md or "").strip()
     if not content_md:
         raise ValueError("进展内容不能为空")
     date = date or today()
-    if not re.match(r"^\d{4}-\d{2}-\d{2}$", date):
-        raise ValueError("date 必须是 YYYY-MM-DD")
+    try:
+        calendar_date.fromisoformat(date)
+    except (TypeError, ValueError):
+        raise ValueError("date 必须是 YYYY-MM-DD 格式的有效日期")
+    if freeform and (issue or task_id):
+        raise ValueError("freeform 不能和 issue/task_id 同时指定")
 
     tasks = db.list_tasks(author=author, status="open")
-    decision = match.decide(
-        content_md,
-        tasks=tasks,
-        session_task_id=_session_last_task(session_id, author),
-        explicit_issue=issue,
-        explicit_task_id=task_id,
-        project=project,
-        # 扫描是批量抽取，同一个 session 下的条目彼此没有对话上的先后关系，
-        # 用会话惯性兜底只会把一条错误扩散成一片。
-        allow_session_fallback=(source_agent or "") != "scan",
-    )
+    if freeform:
+        decision = {"method": "explicit-freeform", "score": 1.0,
+                    "confidence": "high", "via": "caller"}
+    else:
+        decision = match.decide(
+            content_md,
+            tasks=tasks,
+            session_task_id=_session_last_task(session_id, author),
+            explicit_issue=issue,
+            explicit_task_id=task_id,
+            project=project,
+            # 扫描是批量抽取，同一个 session 下的条目彼此没有对话上的先后关系，
+            # 用会话惯性兜底只会把一条错误扩散成一片。
+            allow_session_fallback=(source_agent or "") != "scan",
+        )
 
     if decision.get("task_id"):
         task = db.get_task(decision["task_id"])
-        if task is None:
+        if task is None or task["author"] != author:
             raise ValueError("任务不存在: %s" % decision["task_id"])
     elif decision.get("issue_key"):
+        decision["issue_key"] = _validate_issue(author, decision["issue_key"])
         task = _get_or_create_mobius_task(author, decision["issue_key"], decision.get("title"))
     else:
         task = _create_freeform_task(author, content_md)
@@ -168,10 +194,12 @@ def record_progress(
         ts = now_iso()
         conn.execute(
             "INSERT INTO updates (update_id, task_id, author, date, content_md, source_agent,"
-            " session_id, match_method, match_score, pto_status, created_at, content_hash,"
-            " status, meta) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            " session_id, match_method, match_score, assignment_source, assignment_locked,"
+            " revision, pto_status, created_at, content_hash, status, meta)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (update_id, task["task_id"], author, date, content_md, source_agent or "manual",
-             session_id, decision["method"], decision.get("score"), None, ts, h,
+             session_id, decision["method"], decision.get("score"),
+             _assignment_source(decision["method"]), 0, 1, None, ts, h,
              "duplicate-ignored" if dup_of else "active",
              json.dumps(dict(meta or {}, **({"duplicate_of": dup_of} if dup_of else {})),
                         ensure_ascii=False)),
@@ -184,6 +212,16 @@ def record_progress(
                        note="内容和同任务下已有的扫描进展几乎相同，已存库但不进日报"
                             "（status=duplicate-ignored，判错了还能找回来）。")
     return _result(task, update_id, decision["method"], decision, date, author)
+
+
+def _assignment_source(method: str) -> str:
+    if method in ("explicit", "explicit-freeform"):
+        return "agent"
+    if method == "project-bound":
+        return "project"
+    if method == "task-continue":
+        return "session"
+    return "system"
 
 
 def _result(task, update_id, verdict, decision, date, author, note=None) -> Dict[str, Any]:
@@ -220,20 +258,86 @@ def reassign(update_id: str, author: str, issue_key: Optional[str]) -> bool:
         row = conn.execute(
             "SELECT u.*, t.issue_key FROM updates u JOIN tasks t ON t.task_id=u.task_id"
             " WHERE u.update_id=? AND u.author=?", (update_id, author)).fetchone()
-    if row is None or row["issue_key"] == issue_key:
+    if row is None or row["assignment_locked"] or row["issue_key"] == issue_key:
         return False
 
     if issue_key:
+        issue_key = _validate_issue(author, issue_key)
         task = _get_or_create_mobius_task(author, issue_key, None)
     else:
         task = _create_freeform_task(author, row["content_md"])
 
     ts = now_iso()
     with db.cursor() as conn:
-        conn.execute("UPDATE updates SET task_id=?, match_method=? WHERE update_id=?",
-                     (task["task_id"], "verified", update_id))
+        conn.execute("UPDATE updates SET task_id=?, match_method=?, assignment_source=?,"
+                     " revision=revision+1 WHERE update_id=?",
+                     (task["task_id"], "verified", "model", update_id))
         conn.execute("UPDATE tasks SET last_update=? WHERE task_id=?", (ts, task["task_id"]))
     return True
+
+
+def correct_progress(
+    update_id: str,
+    author: str,
+    issue_key: Any = _UNSET,
+    task_id: Optional[str] = None,
+    content_md: Optional[str] = None,
+    freeform: bool = False,
+    actor: str = "human",
+) -> Dict[str, Any]:
+    """原地修订一条进展，并锁住人工确认的归属，保留完整审计记录。"""
+    if task_id and (issue_key is not _UNSET or freeform):
+        raise ValueError("task_id、issue_key、freeform 只能指定一个")
+    if freeform and issue_key is not _UNSET:
+        raise ValueError("freeform 和 issue_key 不能同时指定")
+
+    with db.cursor() as conn:
+        row = conn.execute(
+            "SELECT u.*, t.issue_key FROM updates u JOIN tasks t ON t.task_id=u.task_id"
+            " WHERE u.update_id=? AND u.author=?", (update_id, author)
+        ).fetchone()
+    if row is None:
+        raise ValueError("进展不存在: %s" % update_id)
+
+    new_content = row["content_md"] if content_md is None else (content_md or "").strip()
+    if not new_content:
+        raise ValueError("进展内容不能为空")
+
+    target = db.get_task(row["task_id"])
+    if task_id:
+        target = db.get_task(task_id)
+        if target is None or target["author"] != author:
+            raise ValueError("任务不存在: %s" % task_id)
+    elif freeform or issue_key is None:
+        target = _create_freeform_task(author, new_content)
+    elif issue_key is not _UNSET:
+        key = _validate_issue(author, issue_key)
+        target = _get_or_create_mobius_task(author, key, None)
+
+    assignment_changed = target["task_id"] != row["task_id"]
+    content_changed = new_content != row["content_md"]
+    already_confirmed = bool(row["assignment_locked"] and row["assignment_source"] == "human")
+    if not assignment_changed and not content_changed and already_confirmed:
+        return {"changed": False, "update_id": update_id, "task": target}
+
+    ts = now_iso()
+    with db.cursor() as conn:
+        conn.execute(
+            "UPDATE updates SET task_id=?, content_md=?, content_hash=?, match_method=?,"
+            " assignment_source='human', assignment_locked=1, revision=revision+1"
+            " WHERE update_id=?",
+            (target["task_id"], new_content, content_hash(new_content),
+             "human-corrected", update_id),
+        )
+        conn.execute(
+            "INSERT INTO assignment_events (update_id, author, actor, from_task_id, to_task_id,"
+            " from_issue_key, to_issue_key, from_content_md, to_content_md, created_at)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (update_id, author, actor, row["task_id"], target["task_id"], row["issue_key"],
+             target["issue_key"], row["content_md"], new_content, ts),
+        )
+        conn.execute("UPDATE tasks SET last_update=? WHERE task_id=?", (ts, target["task_id"]))
+    return {"changed": True, "update_id": update_id, "task": db.get_task(target["task_id"])}
 
 
 def close_task(task_id: str, author: str) -> Dict[str, Any]:
