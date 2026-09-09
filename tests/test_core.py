@@ -72,6 +72,7 @@ def seed_issues(author="t"):
 def reset():
     db.init()
     with db.cursor() as c:
+        c.execute("DELETE FROM task_events")
         c.execute("DELETE FROM assignment_events")
         c.execute("DELETE FROM updates")
         c.execute("DELETE FROM tasks")
@@ -768,6 +769,48 @@ class TestScoping(unittest.TestCase):
         store.record_progress("other", "别人的事", date=D)
         self.assertEqual(len(db.day_tasks("t", D)), 1)
         self.assertEqual(len(db.list_updates(date=D)), 2)
+
+
+class TestTaskLifecycle(unittest.TestCase):
+    def setUp(self):
+        reset()
+
+    def test_complete_hides_task_from_my_tasks_and_new_progress_reopens_it(self):
+        from fecho import service
+        rec = store.record_progress("t", "AI-2541 第一阶段完成", date=D)
+        result = service.complete_task(rec["task"]["task_id"], author="t")
+        self.assertTrue(result["changed"])
+        self.assertEqual(service.open_tasks("t"), [])
+
+        store.record_progress("t", "AI-2541 后续又有新进展", date=D)
+        self.assertEqual(len(service.open_tasks("t")), 1)
+
+    def test_reopen_completed_task(self):
+        from fecho import service
+        rec = store.record_progress("t", "AI-2541 完成", date=D)
+        service.complete_task(rec["task"]["task_id"], author="t")
+        result = service.reopen_task(rec["task"]["task_id"], author="t")
+        self.assertTrue(result["changed"])
+        self.assertEqual(db.get_task(rec["task"]["task_id"])["status"], "open")
+
+    def test_merge_moves_updates_and_keeps_source_as_auditable_tombstone(self):
+        from fecho import service
+        source = store.record_progress("t", "临时自由任务进展", date=D, freeform=True)
+        target = store.record_progress("t", "AI-2541 正式任务进展", date=D)
+        result = service.merge_tasks(
+            source["task"]["task_id"], target["task"]["task_id"], author="t")
+        self.assertEqual(result["moved_updates"], 1)
+        self.assertEqual(db.get_task(source["task"]["task_id"])["status"], "merged")
+        self.assertEqual(len(db.list_updates(task_id=target["task"]["task_id"])), 2)
+        with db.cursor() as conn:
+            event = conn.execute("SELECT * FROM task_events WHERE event_type='merge'").fetchone()
+        self.assertEqual(event["from_task_id"], source["task"]["task_id"])
+        self.assertEqual(event["to_task_id"], target["task"]["task_id"])
+
+    def test_lifecycle_tools_are_exposed_by_mcp(self):
+        from fecho import mcp_server
+        names = {tool["name"] for tool in mcp_server.TOOLS}
+        self.assertTrue({"complete_task", "reopen_task", "merge_tasks"} <= names)
 
 
 class TestDailyFormat(unittest.TestCase):

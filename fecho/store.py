@@ -65,7 +65,19 @@ def _get_or_create_mobius_task(author: str, issue_key: str, title: Optional[str]
             "SELECT * FROM tasks WHERE author=? AND issue_key=?", (author, issue_key)
         ).fetchone()
         if row:
-            return db._row(row)
+            task = db._row(row)
+            if task["status"] == "done":
+                conn.execute("UPDATE tasks SET status='open' WHERE task_id=?", (task["task_id"],))
+                task["status"] = "open"
+            elif task["status"] == "merged":
+                target_id = (task.get("meta") or {}).get("merged_into")
+                target = db.get_task(target_id) if target_id else None
+                if target and target["author"] == author:
+                    if target["status"] == "done":
+                        conn.execute("UPDATE tasks SET status='open' WHERE task_id=?", (target_id,))
+                        target["status"] = "open"
+                    return target
+            return task
         if not title:
             cached = conn.execute(
                 "SELECT title FROM mobius_issues WHERE author=? AND issue_key=?",
@@ -370,12 +382,76 @@ def correct_progress(
     return {"changed": True, "update_id": update_id, "task": db.get_task(target["task_id"])}
 
 
-def close_task(task_id: str, author: str) -> Dict[str, Any]:
+def set_task_status(task_id: str, author: str, status: str,
+                    actor: str = "human") -> Dict[str, Any]:
+    if status not in ("open", "done"):
+        raise ValueError("任务状态必须是 open/done")
     with db.cursor() as conn:
+        row = conn.execute("SELECT * FROM tasks WHERE task_id=? AND author=?",
+                           (task_id, author)).fetchone()
+        if row is None:
+            raise ValueError("任务不存在: %s" % task_id)
+        if row["status"] == "merged":
+            raise ValueError("已合并任务不能直接修改状态")
+        changed = row["status"] != status
+        if changed:
+            conn.execute("UPDATE tasks SET status=? WHERE task_id=?", (status, task_id))
+            conn.execute(
+                "INSERT INTO task_events (author,actor,event_type,from_task_id,details,created_at)"
+                " VALUES (?,?,?,?,?,?)",
+                (author, actor, "complete" if status == "done" else "reopen", task_id,
+                 json.dumps({"from": row["status"], "to": status}), now_iso()),
+            )
+    return {"changed": changed, "task": db.get_task(task_id)}
+
+
+def close_task(task_id: str, author: str) -> Dict[str, Any]:
+    return set_task_status(task_id, author, "done")["task"]
+
+
+def merge_tasks(source_task_id: str, target_task_id: str, author: str,
+                actor: str = "human") -> Dict[str, Any]:
+    if source_task_id == target_task_id:
+        raise ValueError("不能把任务合并到它自己")
+    source, target = db.get_task(source_task_id), db.get_task(target_task_id)
+    if not source or source["author"] != author:
+        raise ValueError("源任务不存在: %s" % source_task_id)
+    if not target or target["author"] != author:
+        raise ValueError("目标任务不存在: %s" % target_task_id)
+    if source["status"] == "merged":
+        raise ValueError("源任务已经合并")
+
+    ts = now_iso()
+    with db.cursor() as conn:
+        updates = conn.execute("SELECT * FROM updates WHERE task_id=?", (source_task_id,)).fetchall()
+        for row in updates:
+            conn.execute(
+                "UPDATE updates SET task_id=?,match_method='human-merged',"
+                "assignment_source='human',assignment_locked=1,revision=revision+1"
+                " WHERE update_id=?", (target_task_id, row["update_id"]),
+            )
+            conn.execute(
+                "INSERT INTO assignment_events (update_id,author,actor,from_task_id,to_task_id,"
+                "from_issue_key,to_issue_key,from_content_md,to_content_md,created_at)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (row["update_id"], author, actor, source_task_id, target_task_id,
+                 source.get("issue_key"), target.get("issue_key"), row["content_md"],
+                 row["content_md"], ts),
+            )
+        source_meta = dict(source.get("meta") or {})
+        source_meta["merged_into"] = target_task_id
+        conn.execute("UPDATE tasks SET status='merged',meta=? WHERE task_id=?",
+                     (json.dumps(source_meta, ensure_ascii=False), source_task_id))
+        conn.execute("UPDATE tasks SET status='open',last_update=? WHERE task_id=?",
+                     (ts, target_task_id))
         conn.execute(
-            "UPDATE tasks SET status='done' WHERE task_id=? AND author=?", (task_id, author)
+            "INSERT INTO task_events (author,actor,event_type,from_task_id,to_task_id,details,created_at)"
+            " VALUES (?,?,?,?,?,?,?)",
+            (author, actor, "merge", source_task_id, target_task_id,
+             json.dumps({"moved_updates": len(updates)}, ensure_ascii=False), ts),
         )
-    return db.get_task(task_id)
+    return {"source_task_id": source_task_id, "target_task_id": target_task_id,
+            "moved_updates": len(updates), "task": db.get_task(target_task_id)}
 
 
 def day_page(author: str, date: str) -> str:

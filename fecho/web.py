@@ -248,6 +248,27 @@ def build_app():
         ok = store.reassign(body["update_id"], config.AUTHOR, body.get("issue_key") or None)
         return {"ok": ok}
 
+    @app.post("/api/tasks/{task_id}/complete")
+    def api_complete_task(task_id: str, request: Request,
+                          authorization: Optional[str] = Header(None)):
+        guard(request, authorization)
+        from . import service
+        return service.complete_task(task_id)
+
+    @app.post("/api/tasks/{task_id}/reopen")
+    def api_reopen_task(task_id: str, request: Request,
+                        authorization: Optional[str] = Header(None)):
+        guard(request, authorization)
+        from . import service
+        return service.reopen_task(task_id)
+
+    @app.post("/api/tasks/merge")
+    def api_merge_tasks(request: Request, body: Dict[str, Any] = Body(...),
+                        authorization: Optional[str] = Header(None)):
+        guard(request, authorization)
+        from . import service
+        return service.merge_tasks(body["source_task_id"], body["target_task_id"])
+
     @app.get("/api/hidden")
     def api_hidden(request: Request, date: Optional[str] = None,
                    authorization: Optional[str] = Header(None)):

@@ -94,6 +94,26 @@ TOOLS = [
         "inputSchema": {"type": "object", "properties": {}},
     },
     {
+        "name": "complete_task",
+        "description": "把一个本地任务标为已完成；不会回写 Mobius。后续有新进展时会自动重开。",
+        "inputSchema": {"type": "object", "properties": {
+            "task_id": {"type": "string"}}, "required": ["task_id"]},
+    },
+    {
+        "name": "reopen_task",
+        "description": "重新打开一个已完成的本地任务。",
+        "inputSchema": {"type": "object", "properties": {
+            "task_id": {"type": "string"}}, "required": ["task_id"]},
+    },
+    {
+        "name": "merge_tasks",
+        "description": "把误拆出来的源任务合并进目标任务；进展原地移动并保留审计记录。",
+        "inputSchema": {"type": "object", "properties": {
+            "source_task_id": {"type": "string"},
+            "target_task_id": {"type": "string"}},
+            "required": ["source_task_id", "target_task_id"]},
+    },
+    {
         "name": "get_my_log",
         "description": "我今天推进了哪些任务、推到哪了，以及已生成的日报/口播稿（若有）。",
         "inputSchema": {"type": "object", "properties": {"date": {"type": "string"}}},
@@ -258,6 +278,24 @@ def call_tool(name: str, args: Dict[str, Any], context: Optional[MCPContext] = N
             if t.get("last_progress"):
                 out.append("    最近：%s" % t["last_progress"].splitlines()[0])
         return "\n".join(out)
+
+    if name in ("complete_task", "reopen_task"):
+        result = (service.complete_task(args["task_id"])
+                  if name == "complete_task" else service.reopen_task(args["task_id"]))
+        task = result["task"]
+        label = "已完成" if name == "complete_task" else "已重新打开"
+        return ToolReply("%s → **%s**" % (label, _task_line(task)), {
+            "changed": result["changed"], "task_id": task["task_id"],
+            "status": task["status"], "issue_key": task.get("issue_key")})
+
+    if name == "merge_tasks":
+        result = service.merge_tasks(args["source_task_id"], args["target_task_id"])
+        task = result["task"]
+        return ToolReply("已合并 %d 条进展 → **%s**" % (
+            result["moved_updates"], _task_line(task)), {
+                "source_task_id": result["source_task_id"],
+                "target_task_id": result["target_task_id"],
+                "moved_updates": result["moved_updates"]})
 
     if name == "get_my_log":
         data = service.day(service.whoami(), args.get("date"))

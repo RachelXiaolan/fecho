@@ -27,6 +27,18 @@ CREATE INDEX IF NOT EXISTS idx_tasks_author ON tasks(author, status);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_issue ON tasks(author, issue_key)
     WHERE issue_key IS NOT NULL;
 
+CREATE TABLE IF NOT EXISTS task_events (
+    event_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    author        TEXT NOT NULL,
+    actor         TEXT NOT NULL,
+    event_type    TEXT NOT NULL,       -- complete / reopen / merge
+    from_task_id  TEXT NOT NULL,
+    to_task_id    TEXT,
+    details       TEXT NOT NULL DEFAULT '{}',
+    created_at    TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_task_events_task ON task_events(from_task_id, created_at);
+
 -- 进展：某个任务在某个时刻推进了什么。同一任务下的多条进展全部保留。
 CREATE TABLE IF NOT EXISTS updates (
     update_id     TEXT PRIMARY KEY,

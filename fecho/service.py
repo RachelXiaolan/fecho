@@ -44,6 +44,19 @@ def open_tasks(author: Optional[str] = None) -> List[Dict[str, Any]]:
     return tasks
 
 
+def complete_task(task_id: str, author: Optional[str] = None) -> Dict[str, Any]:
+    return store.set_task_status(task_id, author or whoami(), "done")
+
+
+def reopen_task(task_id: str, author: Optional[str] = None) -> Dict[str, Any]:
+    return store.set_task_status(task_id, author or whoami(), "open")
+
+
+def merge_tasks(source_task_id: str, target_task_id: str,
+                author: Optional[str] = None) -> Dict[str, Any]:
+    return store.merge_tasks(source_task_id, target_task_id, author or whoami())
+
+
 def report(date: str, author: Optional[str] = None) -> Dict[str, Any]:
     who = author or whoami()
     return {"author": who, "date": date,
