@@ -393,6 +393,22 @@ def cmd_install(args) -> int:
     return 0
 
 
+def cmd_schedule(args) -> int:
+    from . import automation
+
+    if args.action == "install":
+        _p(automation.install_schedule(args.time))
+    elif args.action == "status":
+        _p(automation.status())
+    elif args.action == "run-now":
+        _p(automation.run_now())
+    elif args.action == "tick":
+        _p(automation.tick())
+    elif args.action == "uninstall":
+        _p(automation.uninstall_schedule())
+    return 0
+
+
 def cmd_serve(args) -> int:
     """起团队 collector：只收日报/口播稿成品，不是共享的原始数据库。
 
@@ -481,6 +497,19 @@ def main() -> int:
     p.set_defaults(fn=cmd_team)
 
     sub.add_parser("install", help="打印 MCP 配置片段").set_defaults(fn=cmd_install)
+
+    p = sub.add_parser("schedule", help="管理北京时间日终任务和本地 Dashboard 后台服务")
+    schedule_sub = p.add_subparsers(dest="action", required=True)
+    q = schedule_sub.add_parser("install", help="安装自动任务和 Dashboard 服务")
+    q.add_argument("--time", default="21:00", help="北京时间 HH:MM，必须早于 22:00")
+    for action, help_text in (
+        ("status", "查看调度与后台服务状态"),
+        ("run-now", "立即执行一次完整日终流水线"),
+        ("tick", "由系统每分钟调用的到点检查"),
+        ("uninstall", "卸载自动任务和 Dashboard 服务，不删除日志"),
+    ):
+        schedule_sub.add_parser(action, help=help_text)
+    p.set_defaults(fn=cmd_schedule)
 
     p = sub.add_parser("serve", help="起团队 collector（只收成品，不是共享数据库）")
     p.add_argument("--host", default=config.HOST)

@@ -1,5 +1,6 @@
 """Onboarding and unattended automation contracts."""
 import os
+import plistlib
 import tempfile
 import unittest
 from datetime import datetime, timezone
@@ -115,6 +116,74 @@ class TestDailyAutomation(unittest.TestCase):
         self.assertFalse(result["ok"])
         self.assertIn("bad transcript", result["error"])
         digest.assert_not_called()
+
+
+class TestLaunchAgents(unittest.TestCase):
+    def setUp(self):
+        from fecho import automation
+
+        self.automation = automation
+        self.home = Path(tempfile.mkdtemp(prefix="fecho-launchagent-test-"))
+
+    def test_daily_agent_ticks_each_minute_and_dashboard_is_loopback_keepalive(self):
+        specs = self.automation.launch_agent_specs(
+            python="/private/fecho/bin/python", home=self.home)
+        daily = plistlib.loads(specs[self.automation.DAILY_LABEL])
+        dashboard = plistlib.loads(specs[self.automation.DASHBOARD_LABEL])
+
+        self.assertEqual(daily["StartInterval"], 60)
+        self.assertTrue(daily["RunAtLoad"])
+        self.assertEqual(
+            daily["ProgramArguments"],
+            ["/private/fecho/bin/python", "-m", "fecho.cli", "schedule", "tick"],
+        )
+        self.assertTrue(dashboard["KeepAlive"])
+        self.assertIn("127.0.0.1", dashboard["ProgramArguments"])
+        self.assertIn("8900", dashboard["ProgramArguments"])
+        self.assertIn("--no-browser", dashboard["ProgramArguments"])
+
+    def test_install_writes_only_owned_plists_and_loads_them(self):
+        calls = []
+        result = self.automation.install_launch_agents(
+            home=self.home, python="/private/fecho/bin/python",
+            runner=lambda args, **kw: calls.append(args) or 0,
+            uid=501,
+        )
+
+        expected = {
+            self.home / "Library" / "LaunchAgents" / "com.feedmob.fecho.daily.plist",
+            self.home / "Library" / "LaunchAgents" / "com.feedmob.fecho.dashboard.plist",
+        }
+        self.assertEqual({Path(p) for p in result["files"]}, expected)
+        self.assertTrue(all(p.exists() for p in expected))
+        self.assertTrue(any(call[:2] == ["launchctl", "bootstrap"] for call in calls))
+
+    def test_uninstall_removes_only_fecho_owned_plists(self):
+        agents = self.home / "Library" / "LaunchAgents"
+        agents.mkdir(parents=True)
+        owned = [agents / (label + ".plist") for label in (
+            self.automation.DAILY_LABEL, self.automation.DASHBOARD_LABEL)]
+        unrelated = agents / "com.example.keep.plist"
+        for path in owned + [unrelated]:
+            path.write_text("test", encoding="utf-8")
+
+        self.automation.uninstall_launch_agents(
+            home=self.home, runner=lambda args, **kw: 0, uid=501)
+
+        self.assertFalse(any(path.exists() for path in owned))
+        self.assertTrue(unrelated.exists())
+
+    def test_install_schedule_rejects_2200_and_persists_valid_time(self):
+        with self.assertRaisesRegex(ValueError, "22:00"):
+            self.automation.install_schedule("22:00", installer=lambda: {})
+
+        saved = []
+        result = self.automation.install_schedule(
+            "20:45", state={}, save=lambda state: saved.append(state),
+            installer=lambda: {"files": ["daily", "dashboard"]})
+        self.assertEqual(saved[-1]["daily_time"], "20:45")
+        self.assertTrue(saved[-1]["enabled"])
+        self.assertEqual(result["daily_time"], "20:45")
 
 
 if __name__ == "__main__":
