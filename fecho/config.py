@@ -110,6 +110,34 @@ MOBIUS_ASSIGNEE = get("mobius_assignee", "FECHO_MOBIUS_ASSIGNEE", "")
 # 形如 {"work/scripe": "AI-2541"}，键是路径片段，匹配 cwd 或 transcript 的项目目录。
 PROJECT_BINDINGS: Dict[str, str] = load().get("project_bindings") or {}
 
+# ---- 会话扫描来源 ----
+# 可在 config.json 里用 scan_sources 覆盖任一来源；值是 glob 列表。
+_DEFAULT_SCAN_SOURCES = {
+    "claude-code": [str(Path.home() / ".claude" / "projects" / "*" / "*.jsonl")],
+    "codex": [str(Path.home() / ".codex" / "sessions" / "*" / "*" / "*" / "*.jsonl")],
+    "hermes": [str(Path.home() / ".hermes" / "sessions" / "**" / "*.jsonl")],
+}
+
+
+def _scan_sources() -> Dict[str, list]:
+    raw = get("scan_sources", "FECHO_SCAN_SOURCES", {})
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except ValueError:
+            raw = {}
+    out = {k: list(v) for k, v in _DEFAULT_SCAN_SOURCES.items()}
+    if isinstance(raw, dict):
+        for name, patterns in raw.items():
+            if isinstance(patterns, str):
+                patterns = [patterns]
+            if isinstance(patterns, list):
+                out[str(name)] = [str(p) for p in patterns]
+    return out
+
+
+SCAN_SOURCES = _scan_sources()
+
 # ---- 调参 ----
 # 扫描来源的近似重复门槛。只作用于机器复述，不动 agent 主动记的内容。
 # 0.62 是拿真实重跑数据标出来的：0.62-0.75 那一档 8 对全是同一件事的两种说法，

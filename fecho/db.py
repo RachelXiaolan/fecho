@@ -35,12 +35,14 @@ CREATE TABLE IF NOT EXISTS updates (
     date          TEXT NOT NULL,        -- YYYY-MM-DD
     content_md    TEXT NOT NULL,        -- 做成了什么、进展到哪
     source_agent  TEXT NOT NULL DEFAULT 'manual',
+    ingestion_method TEXT NOT NULL DEFAULT 'direct', -- direct / transcript-scan
     session_id    TEXT,                 -- 哪个对话（审计用；任务与对话是多对多）
     match_method  TEXT NOT NULL,        -- explicit / mobius-auto / task-continue / new-task
     match_score   REAL,
     assignment_source TEXT NOT NULL DEFAULT 'system', -- agent / project / session / model / human
     assignment_locked INTEGER NOT NULL DEFAULT 0,     -- 人工确认后模型不得覆盖
     revision      INTEGER NOT NULL DEFAULT 1,
+    source_event_key TEXT,              -- transcript chunk/item 的稳定幂等键
     pto_status    TEXT,
     created_at    TEXT NOT NULL,
     content_hash  TEXT NOT NULL,
@@ -88,6 +90,24 @@ CREATE TABLE IF NOT EXISTS scan_marks (
     last_scan_at  TEXT NOT NULL,
     entries       INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS scan_runs (
+    run_id          TEXT PRIMARY KEY,
+    author          TEXT NOT NULL,
+    producer_agent  TEXT NOT NULL,
+    session_id      TEXT NOT NULL,
+    project         TEXT NOT NULL,
+    date            TEXT NOT NULL,
+    group_start_ts  TEXT NOT NULL,
+    group_end_ts    TEXT NOT NULL,
+    status          TEXT NOT NULL,       -- running / succeeded / failed
+    chunks          INTEGER NOT NULL DEFAULT 0,
+    entries         INTEGER NOT NULL DEFAULT 0,
+    error           TEXT,
+    started_at      TEXT NOT NULL,
+    finished_at     TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_scan_runs_session ON scan_runs(session_id, started_at);
 
 CREATE TABLE IF NOT EXISTS reports (
     report_id     TEXT PRIMARY KEY,
@@ -138,6 +158,14 @@ def init() -> None:
             conn.execute("ALTER TABLE updates ADD COLUMN assignment_locked INTEGER NOT NULL DEFAULT 0")
         if "revision" not in columns:
             conn.execute("ALTER TABLE updates ADD COLUMN revision INTEGER NOT NULL DEFAULT 1")
+        if "source_event_key" not in columns:
+            conn.execute("ALTER TABLE updates ADD COLUMN source_event_key TEXT")
+        if "ingestion_method" not in columns:
+            conn.execute("ALTER TABLE updates ADD COLUMN ingestion_method TEXT NOT NULL DEFAULT 'direct'")
+            conn.execute("UPDATE updates SET ingestion_method='transcript-scan'"
+                         " WHERE source_agent='scan'")
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_updates_source_event"
+                     " ON updates(source_event_key) WHERE source_event_key IS NOT NULL")
 
 
 @contextmanager

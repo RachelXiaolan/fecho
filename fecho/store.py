@@ -113,11 +113,13 @@ def record_progress(
     content_md: str,
     date: Optional[str] = None,
     source_agent: str = "manual",
+    ingestion_method: str = "direct",
     session_id: Optional[str] = None,
     issue: Optional[str] = None,
     task_id: Optional[str] = None,
     project: Optional[str] = None,
     freeform: bool = False,
+    source_event_key: Optional[str] = None,
     meta: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     content_md = (content_md or "").strip()
@@ -130,6 +132,26 @@ def record_progress(
         raise ValueError("date 必须是 YYYY-MM-DD 格式的有效日期")
     if freeform and (issue or task_id):
         raise ValueError("freeform 不能和 issue/task_id 同时指定")
+    if source_agent == "scan" and ingestion_method == "direct":
+        ingestion_method = "transcript-scan"  # 兼容老调用方
+
+    # Transcript 重跑时模型措辞可能变化，不能只靠正文 hash 去重。稳定事件键在创建
+    # task 之前判断，避免重复回放留下空任务。
+    if source_event_key:
+        with db.cursor() as conn:
+            old = conn.execute(
+                "SELECT u.*, t.title, t.source, t.issue_key FROM updates u"
+                " JOIN tasks t ON t.task_id=u.task_id WHERE u.source_event_key=?",
+                (source_event_key,),
+            ).fetchone()
+        if old:
+            task = {"task_id": old["task_id"], "title": old["title"],
+                    "source": old["source"], "issue_key": old["issue_key"]}
+            decision = {"method": old["match_method"], "score": old["match_score"],
+                        "via": "source-event-key"}
+            return _result(task, old["update_id"], "duplicate", decision,
+                           old["date"], old["author"],
+                           note="同一 transcript 事件已处理，未重复写入。")
 
     tasks = db.list_tasks(author=author, status="open")
     if freeform:
@@ -179,10 +201,10 @@ def record_progress(
         # 判断，没有后续环节能纠错——真判错了，直接不写就等于这条内容从没存在过，
         # 日报看不到、人也翻不到。留一行的成本几乎为零，丢一条真实进展的成本很高。
         dup_of = None
-        if (source_agent or "") == "scan":
+        if ingestion_method == "transcript-scan":
             near = conn.execute(
                 "SELECT update_id, content_md FROM updates WHERE task_id=? AND date=?"
-                " AND source_agent='scan' AND status='active'",
+                " AND ingestion_method='transcript-scan' AND status='active'",
                 (task["task_id"], date),
             ).fetchall()
             for row in near:
@@ -194,12 +216,12 @@ def record_progress(
         ts = now_iso()
         conn.execute(
             "INSERT INTO updates (update_id, task_id, author, date, content_md, source_agent,"
-            " session_id, match_method, match_score, assignment_source, assignment_locked,"
-            " revision, pto_status, created_at, content_hash, status, meta)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            " ingestion_method, session_id, match_method, match_score, assignment_source, assignment_locked,"
+            " revision, source_event_key, pto_status, created_at, content_hash, status, meta)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (update_id, task["task_id"], author, date, content_md, source_agent or "manual",
-             session_id, decision["method"], decision.get("score"),
-             _assignment_source(decision["method"]), 0, 1, None, ts, h,
+             ingestion_method, session_id, decision["method"], decision.get("score"),
+             _assignment_source(decision["method"]), 0, 1, source_event_key, None, ts, h,
              "duplicate-ignored" if dup_of else "active",
              json.dumps(dict(meta or {}, **({"duplicate_of": dup_of} if dup_of else {})),
                         ensure_ascii=False)),
@@ -380,11 +402,13 @@ def stats(since: Optional[str] = None, until: Optional[str] = None) -> Dict[str,
         ups = [dict(r) for r in conn.execute(sql, args).fetchall()]
     by_author: Dict[str, int] = {}
     by_agent: Dict[str, int] = {}
+    by_ingestion: Dict[str, int] = {}
     by_method: Dict[str, int] = {}
     task_ids = set()
     for u in ups:
         by_author[u["author"]] = by_author.get(u["author"], 0) + 1
         by_agent[u["source_agent"]] = by_agent.get(u["source_agent"], 0) + 1
+        by_ingestion[u["ingestion_method"]] = by_ingestion.get(u["ingestion_method"], 0) + 1
         by_method[u["match_method"]] = by_method.get(u["match_method"], 0) + 1
         task_ids.add(u["task_id"])
     by_task = []
@@ -401,6 +425,7 @@ def stats(since: Optional[str] = None, until: Optional[str] = None) -> Dict[str,
         "tasks_touched": len(task_ids),
         "by_author": by_author,
         "by_source_agent": by_agent,
+        "by_ingestion_method": by_ingestion,
         "by_match_method": by_method,
         "by_task": by_task,
     }

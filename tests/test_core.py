@@ -12,6 +12,8 @@ import shutil
 import sys
 import tempfile
 import unittest
+from pathlib import Path
+from unittest import mock
 
 TMP = tempfile.mkdtemp(prefix="fecho-test-")
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -73,6 +75,7 @@ def reset():
         c.execute("DELETE FROM updates")
         c.execute("DELETE FROM tasks")
         c.execute("DELETE FROM reports")
+        c.execute("DELETE FROM scan_runs")
     seed_issues()
 
 
@@ -936,6 +939,77 @@ class TestScanWatermark(unittest.TestCase):
             {"type": "text", "text": "真话"},
             {"type": "tool_result", "content": "几百 KB 的工具输出"}]}}
         self.assertEqual(self.scan._text_of(rec), "真话")
+
+
+class TestScanIntegrity(unittest.TestCase):
+    def setUp(self):
+        reset()
+        from fecho import scan
+        self.scan = scan
+        with db.cursor() as c:
+            c.execute("DELETE FROM scan_marks")
+
+    @staticmethod
+    def _group():
+        at = __import__("datetime").datetime.fromisoformat("2030-01-01T10:00:00+00:00")
+        rows = [{"at": at, "ts": "2030-01-01T10:00:00Z",
+                 "role": "assistant", "text": "完成了实现"}]
+        groups = {("codex", "codex:s1", "/work/project", D): rows}
+        return groups, {}, {"codex:s1": ["2030-01-01T10:00:00Z"]}
+
+    def test_malformed_model_output_fails_group_and_keeps_watermark(self):
+        with mock.patch.object(self.scan, "collect", return_value=self._group()), \
+             mock.patch.object(config, "llm_configured", return_value=True), \
+             mock.patch("fecho.mobius.cached_issues", return_value=ISSUES), \
+             mock.patch("fecho.llm.chat", return_value="这是解释，不是约定格式"):
+            result = self.scan.scan(author="t")
+        self.assertFalse(result["ok"])
+        self.assertIn("codex:s1", result["retry_next_time"])
+        self.assertIsNone(self.scan.get_mark("codex:s1"))
+        with db.cursor() as conn:
+            run = conn.execute("SELECT status FROM scan_runs ORDER BY started_at DESC LIMIT 1").fetchone()
+        self.assertEqual(run["status"], "failed")
+
+    def test_explicit_none_is_a_valid_zero_result_and_advances_watermark(self):
+        with mock.patch.object(self.scan, "collect", return_value=self._group()), \
+             mock.patch.object(config, "llm_configured", return_value=True), \
+             mock.patch("fecho.mobius.cached_issues", return_value=ISSUES), \
+             mock.patch("fecho.llm.chat", return_value="NONE"):
+            result = self.scan.scan(author="t")
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["recorded"], 0)
+        self.assertEqual(self.scan.get_mark("codex:s1"), "2030-01-01T10:00:00Z")
+
+    def test_source_event_key_makes_scan_replay_idempotent(self):
+        a = store.record_progress(
+            "t", "第一种模型措辞", date=D, source_agent="codex",
+            issue="AI-2541", source_event_key="codex:s1:chunk-1:item-1")
+        b = store.record_progress(
+            "t", "重跑后模型换了一种措辞", date=D, source_agent="codex",
+            issue="AI-2541", source_event_key="codex:s1:chunk-1:item-1")
+        self.assertEqual(b["verdict"], "duplicate")
+        self.assertEqual(b["update_id"], a["update_id"])
+        self.assertEqual(len(db.list_updates(date=D, author="t")), 1)
+
+    def test_scan_preserves_producer_separately_from_ingestion_method(self):
+        a = store.record_progress(
+            "t", "Codex 扫描抽出的进展", date=D, source_agent="codex",
+            ingestion_method="transcript-scan", issue="AI-2541")
+        row = db.list_updates(task_id=a["task"]["task_id"])[0]
+        self.assertEqual(row["source_agent"], "codex")
+        self.assertEqual(row["ingestion_method"], "transcript-scan")
+
+    def test_discovers_configured_claude_codex_and_hermes_adapters(self):
+        root = Path(tempfile.mkdtemp(prefix="fecho-adapters-"))
+        self.addCleanup(shutil.rmtree, root, True)
+        paths = {}
+        for name in ("claude-code", "codex", "hermes"):
+            p = root / (name + ".jsonl")
+            p.write_text("{}\n", encoding="utf-8")
+            paths[name] = [str(p)]
+        with mock.patch.object(config, "SCAN_SOURCES", paths):
+            found = self.scan.discover_transcripts()
+        self.assertEqual({x["producer_agent"] for x in found}, set(paths))
 
 
 class TestCollector(unittest.TestCase):
