@@ -393,6 +393,34 @@ def cmd_install(args) -> int:
     return 0
 
 
+def cmd_export_shared_config(args) -> int:
+    """摘出团队共享的 LLM 配置，给同事 onboarding 用。
+
+    只导 LLM 那几个字段——Mobius token 是一人一份的身份凭证，绝不能跟着走。
+    """
+    from . import onboarding
+
+    values = {k: config.load().get(k) for k in onboarding.LLM_FIELDS}
+    values = {k: v for k, v in values.items() if v not in (None, "")}
+    missing = onboarding.REQUIRED_LLM_FIELDS - set(values)
+    if missing:
+        print("本机 LLM 还没配全，缺：%s" % "、".join(sorted(missing)), file=sys.stderr)
+        return 1
+
+    out = Path(args.out).expanduser()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with open(out, "w", encoding="utf-8") as f:
+        json.dump(values, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+    os.chmod(out, 0o600)                      # 里面有 key，别让同组可读
+
+    print("已导出 %s（权限 600）" % out)
+    print("包含：%s" % "、".join(sorted(values)))
+    print("\n⚠️  这个文件里有 API key，而代码仓库是公开的。")
+    print("    私聊发给同事或放内网盘，不要发群、不要进 Git、不要传公开网盘。")
+    return 0
+
+
 def cmd_schedule(args) -> int:
     from . import automation
 
@@ -531,6 +559,12 @@ def main() -> int:
     p.add_argument("--skip-schedule", action="store_true", help="暂不安装自动任务")
     p.add_argument("--dry-run", action="store_true", help="只校验并展示计划，不修改配置")
     p.set_defaults(fn=cmd_onboard)
+
+    p = sub.add_parser("export-shared-config",
+                       help="导出团队共享的 LLM 配置，给同事 onboarding 用（含密钥）")
+    p.add_argument("--out", default="~/.fecho/shared-llm-config.json",
+                   help="输出路径，默认 ~/.fecho/shared-llm-config.json")
+    p.set_defaults(fn=cmd_export_shared_config)
 
     p = sub.add_parser("schedule", help="管理北京时间日终任务和本地 Dashboard 后台服务")
     schedule_sub = p.add_subparsers(dest="action", required=True)

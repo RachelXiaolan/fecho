@@ -9,3 +9,7 @@ scribe.db*
 logs/
 .acceptance/
 .worktrees/
+
+# 共享 LLM 配置里有 API key，而这个仓库是公开的——绝不能进版本控制
+shared-llm-config.json
+*shared-config*.json

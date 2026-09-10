@@ -543,3 +543,47 @@ class TestHostInstallation(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestSharedConfigExport(unittest.TestCase):
+    """管理员导出给同事用的共享配置。"""
+
+    def test_export_carries_llm_fields_only(self):
+        """Mobius token 是一人一份的身份凭证，绝不能跟着共享配置走。"""
+        from fecho import onboarding
+
+        cfg = {
+            "llm_base_url": "http://gateway.example.com",
+            "llm_api_key": "secret-key",
+            "llm_model": "minimax-m3",
+            "mobius_token": "personal-token",      # 不该被导出
+            "author": "rachel",                     # 不该被导出
+        }
+        values = {k: cfg[k] for k in onboarding.LLM_FIELDS if cfg.get(k)}
+
+        self.assertTrue(onboarding.REQUIRED_LLM_FIELDS.issubset(values))
+        self.assertNotIn("mobius_token", values)
+        self.assertNotIn("author", values)
+
+    def test_colleague_onboarding_needs_the_shared_file(self):
+        """同事拿不到共享配置时要给一句能照做的话，而不是报个栈。"""
+        from fecho import onboarding
+
+        with mock.patch.dict(os.environ, {"FECHO_SHARED_CONFIG": "",
+                                          "FECHO_SHARED_CONFIG_URL": ""}, clear=False):
+            with self.assertRaises(RuntimeError) as ctx:
+                onboarding.resolve_shared_llm(current={})
+        self.assertIn("共享 LLM 配置", str(ctx.exception))
+
+    def test_existing_local_llm_config_wins(self):
+        """已经配好 LLM 的人重跑 onboarding，不该被共享配置覆盖。"""
+        from fecho import onboarding
+
+        current = {"llm_base_url": "http://mine", "llm_api_key": "k", "llm_model": "m"}
+        got = onboarding.resolve_shared_llm(current=current)
+        self.assertEqual(got["source"], "existing")
+        self.assertEqual(got["values"]["llm_base_url"], "http://mine")
+
+
+if __name__ == "__main__":
+    unittest.main()
