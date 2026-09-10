@@ -34,7 +34,7 @@ echo 'export PATH="$HOME/.fecho/venv/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
 fecho --version
 ```
 
-应该输出 `0.6.0`。
+应该输出 `0.6.1` 或更高。
 
 **如果提示 `command not found: fecho`**，说明 PATH 没生效（新开的终端窗口、
 或者你用的是 bash 不是 zsh）。两个办法：重开一个终端窗口，或者直接用全路径 ——

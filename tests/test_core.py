@@ -727,7 +727,8 @@ class TestWebEndpoints(unittest.TestCase):
     def test_healthz_does_not_leak_author(self):
         r = self.c.get("/healthz")
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(r.json(), {"ok": True, "version": "0.6.0"})
+        from fecho import __version__
+        self.assertEqual(r.json(), {"ok": True, "version": __version__})
 
 
 class TestOAuthRecovery(unittest.TestCase):

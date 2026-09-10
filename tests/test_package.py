@@ -20,12 +20,18 @@ class TestPackageContents(unittest.TestCase):
         package_data = pyproject.split("[tool.setuptools.package-data]", 1)[1]
         self.assertIn('"presets/skill/*.md"', package_data)
 
-    def test_release_version_is_060_everywhere(self):
+    def test_version_is_consistent_everywhere(self):
+        """两处版本号必须一致。
+
+        不写死具体数字——盯死数字的测试每次发版都得跟着改，改的时候顺手改对
+        反而掩盖了真问题：pyproject 和 __init__ 不一致时，pip 装出来的版本
+        和代码自报的版本对不上，没法判断同事装的到底是哪一版。
+        """
         from fecho import __version__
 
         pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-        self.assertEqual(__version__, "0.6.0")
-        self.assertIn('version = "0.6.0"', pyproject)
+        self.assertRegex(__version__, r"^\d+\.\d+\.\d+$")
+        self.assertIn('version = "%s"' % __version__, pyproject)
 
 
 if __name__ == "__main__":
