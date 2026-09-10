@@ -86,10 +86,11 @@ def _configure(values: Dict[str, Any]) -> None:
 def _connect_mobius(assignee: str) -> Dict[str, Any]:
     from . import oauth, service
 
-    if config.mobius_configured():
-        return service.sync_issues(assignee)
     url = config.MOBIUS_URL or "https://mobius.feedmob.com/api/mcp"
-    config.update(mobius_url=url, mobius_assignee=assignee)
+    # Onboarding belongs to the current installer. Never inherit a previous
+    # person's Mobius identity merely because this machine has a token.
+    config.update(mobius_url=url, mobius_assignee=assignee,
+                  mobius_token=None, mobius_oauth=None, mobius_auth=None)
     config.reload_module()
     started = oauth.login(url, open_browser=True, timeout=300)
     oauth.complete(started["ctx"])
@@ -114,6 +115,7 @@ def onboard(
     install_hosts: Optional[Callable[[], Dict[str, Any]]] = None,
     connect_mobius: Optional[Callable[[str], Dict[str, Any]]] = None,
     install_schedule: Optional[Callable[[str], Dict[str, Any]]] = None,
+    doctor: Optional[Callable[[], Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     if not author.strip():
         raise ValueError("author 不能为空")
@@ -146,6 +148,10 @@ def onboard(
         install_hosts = hosts.install_all
     connect_mobius = connect_mobius or _connect_mobius
     install_schedule = install_schedule or automation.install_schedule
+    if doctor is None:
+        from . import service
+
+        doctor = service.doctor
 
     settings = {
         "author": author,
@@ -171,4 +177,5 @@ def onboard(
                                     "dashboard_url": installed.get("dashboard_url")})
     else:
         summary["schedule"]["installed"] = False
+    summary["doctor"] = doctor()
     return summary

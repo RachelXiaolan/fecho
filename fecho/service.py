@@ -117,7 +117,7 @@ def catch_up(date: Optional[str] = None, author: Optional[str] = None) -> Dict[s
 
 def doctor() -> Dict[str, Any]:
     """装完之后 agent 该看的第一眼：什么配好了，什么还缺，缺的怎么补。"""
-    from . import llm, oauth
+    from . import automation, llm, oauth
 
     cfg = config.redacted()
     checks: List[Dict[str, Any]] = []
@@ -191,6 +191,18 @@ def doctor() -> Dict[str, Any]:
         "团队部署了共享 collector 后：fecho setup --collector-url <url> --collector-token <token>",
     })
 
+    auto = automation.status()
+    launch_agents = auto.get("launch_agents") or {}
+    auto_ok = bool(auto.get("enabled") and launch_agents and all(launch_agents.values()))
+    checks.append({
+        "name": "每日自动整理",
+        "ok": auto_ok,
+        "detail": ("每天北京时间 %s；Dashboard %s" % (
+            auto.get("daily_time", "21:00"), auto.get("dashboard_url")))
+        if auto_ok else "尚未完整安装自动任务和 Dashboard 后台服务",
+        "fix": None if auto_ok else "运行 fecho schedule install --time 21:00",
+    })
+
     return {
         "version": __version__,
         "config": cfg,
@@ -198,5 +210,6 @@ def doctor() -> Dict[str, Any]:
         "ready_to_log": True,
         "ready_to_match": mob_ok and n_issues > 0,
         "ready_to_report": llm_ok,
+        "ready_for_automation": auto_ok,
         "ready_for_team": team_ok,
     }

@@ -1,154 +1,120 @@
-# 给 Agent 的安装说明
+# 给 Agent 的 Fecho Onboarding 说明
 
-用户把这个仓库交给你，表示要你安装 Fecho、接上 Mobius，并从现在开始记录真实工作进展。按顺序完成；浏览器授权必须让用户自己确认。
+目标是让用户只表达一次安装意图，之后 Fecho 自动记录和补漏，并在用户选择的北京时间生成日报。浏览器里的 Mobius 授权必须由当前用户本人确认。
 
-## 1. 安装
+## 用户可以直接给 Agent 的 Prompt
 
-个人只用 stdio MCP：
+> 安装并接入 Fecho。使用管理员提供的共享 LLM 配置；询问我的稳定标识、展示名、工作目录白名单、Mobius 邮箱和每天的总结时间。总结时间默认北京时间 21:00，必须早于 22:00。为本机已有的 Codex、Claude Code、Hermes 安装 Fecho MCP 和 Skill，并安装本地 Dashboard 与每日自动任务。Mobius 必须打开网页让我登录自己的账号。完成后运行 doctor，告诉我哪些 Agent 已接入、自动任务状态和 Dashboard 地址。不要显示任何 key。
 
-```bash
-python3 -m pip install "git+https://github.com/RachelXiaolan/fecho.git"
+## 管理员准备共享 LLM 配置
+
+普通安装者不需要填写 MiniMax 参数。管理员通过私密 JSON 文件或 HTTPS 地址提供：
+
+```json
+{
+  "llm_base_url": "https://example.internal/v1",
+  "llm_api_key": "shared-key",
+  "llm_model": "minimax-m3",
+  "llm_reasoning_effort": "low"
+}
 ```
 
-需要 Dashboard、HTTP 或 SSE：
+可以预设其中一种环境变量：
+
+```bash
+export FECHO_SHARED_CONFIG=/private/path/fecho-shared.json
+export FECHO_SHARED_CONFIG_URL=https://private.example/fecho.json
+```
+
+不要把共享 key 提交到 Git、wheel 或 Skill。它最终会写入每位用户权限为 0600 的 `~/.fecho/config.json`；安装者本人可以读取，这是当前共享 key 方案的已知边界。
+
+## Agent 执行步骤
+
+安装包含 Dashboard 的版本：
 
 ```bash
 python3 -m pip install "fecho[server] @ git+https://github.com/RachelXiaolan/fecho.git"
 ```
 
-验证：
+收集用户信息后执行一次 onboarding：
+
+```bash
+fecho onboard \
+  --author <稳定英文标识> \
+  --display-name <展示名> \
+  --work-prefix /绝对路径/to/work \
+  --ignore /绝对路径/to/private-if-needed \
+  --mobius-assignee <用户自己的邮箱> \
+  --time 21:00
+```
+
+`--work-prefix` 和 `--ignore` 可以重复。未登记目录默认不读取、不发送给 LLM。时间固定按 `Asia/Shanghai` 解释，可选范围为 `00:00–21:59`。
+
+onboarding 会依次：
+
+1. 读取已有或管理员预置的共享 LLM 配置；
+2. 写入身份和工作区白名单；
+3. 为已安装的 Codex、Claude Code、Hermes 注册绝对路径 MCP 并复制 Fecho Skill；
+4. 清除可能存在的旧 Mobius 身份，打开网页让当前用户重新 OAuth；
+5. 同步当前用户的在办 issue；
+6. 安装北京时间每日任务和本地 Dashboard LaunchAgent；
+7. 返回脱敏 doctor 结果。
+
+完成后让用户重启 Agent。不存在的宿主会显示 `not-installed`；已有冲突配置会显示 `conflict`，不会静默覆盖。
+
+## 日常自动闭环
+
+Fecho Skill 要求 Agent 在开工时调用一次 `catch_up`，完成一个可复述成果、确认踩坑或作出明确决策后自动调用 `log_progress`。Agent 遗漏的内容由每日 transcript 扫描补齐。
+
+每天到点依次运行：
+
+```text
+Mobius sync → 白名单会话扫描 → 去重与匹配 → MiniMax 日报/口播稿 → Dashboard
+```
+
+管理命令：
+
+```bash
+fecho schedule status
+fecho schedule run-now
+fecho schedule install --time 20:30
+fecho schedule uninstall
+```
+
+`run-now` 用于新安装后的真实验收。Mobius 临时失败会成为警告，不阻断本地日志；扫描或日报失败会显示为失败，并保留后续重试条件。
+
+## Dashboard
+
+macOS 登录后，LaunchAgent 会把 Dashboard 保持在：
+
+<http://127.0.0.1:8900/>
+
+它只监听本机。日志记录和每日整理直接访问 SQLite，即使 Dashboard 进程短暂退出也不会丢数据；系统会自动重新拉起。页面在重新聚焦、恢复可见及每分钟自动刷新。
+
+用户在 21:00 后主要检查：
+
+- Today：当天事实是否齐全；
+- Review：正文和 Mobius 归属是否准确，确认后锁定；
+- Reports：日报和口播稿是否符合事实；
+- System：上次自动运行是否成功。
+
+人工修改会把报告标成需要更新。用户确认完成后，在 Reports 点击“重新生成”。
+
+## 验收与排查
 
 ```bash
 fecho --version
 fecho doctor
+fecho schedule status
+fecho schedule run-now
 ```
 
-应该同时存在 `fecho` 和 `fecho-mcp`。若仓库访问失败，先让用户处理 GitHub 权限；不要索要或回显访问 token。
+通过标准：
 
-## 2. 连接当前 Agent
+- 存储、Mobius、issue 缓存、LLM、工作范围和每日自动整理正常；
+- 当前用户亲自完成了 Mobius 网页授权；
+- 已安装宿主能看到 Fecho MCP 和 Skill；
+- `run-now` 完成同步、扫描和日报；
+- Dashboard 固定地址可打开，并能看到本次运行结果。
 
-Claude Code：
-
-```bash
-claude mcp add fecho -- fecho-mcp
-```
-
-Codex CLI / Desktop：
-
-```bash
-codex mcp add fecho -- fecho-mcp
-```
-
-也可在 `~/.codex/config.toml` 明确配置绝对路径：
-
-```toml
-[mcp_servers.fecho]
-command = "/绝对路径/fecho-mcp"
-```
-
-其它宿主：
-
-```json
-{"mcpServers":{"fecho":{"command":"fecho-mcp","args":[],"env":{}}}}
-```
-
-重启会话后应看到 13 个工具，包括 `log_progress`、`correct_progress`、`catch_up`、`complete_task` 和 `fecho_doctor`。不需要额外启动服务。
-
-## 3. 配身份并自检
-
-```bash
-fecho setup --author <稳定英文标识> --display-name <展示名>
-fecho doctor
-```
-
-`doctor` 会检查存储、Mobius、issue 缓存、LLM、工作范围、项目绑定和可选 collector。首次运行只有存储为正常是合理状态。
-
-## 4. 连接 Mobius（需要用户授权）
-
-先询问用户在 Mobius 上的邮箱，然后调用：
-
-```text
-mobius_login(assignee="用户邮箱")
-```
-
-Fecho 会走 OAuth 2.1 动态客户端注册 + PKCE，并打开浏览器。请用户在浏览器完成授权；不要替用户点击同意，也不要打印凭证。成功后会自动同步在办 issue。
-
-远程无浏览器时：
-
-```bash
-fecho login --no-browser --assignee <邮箱>
-```
-
-用户也可主动选择 token 模式：
-
-```bash
-fecho login --token <token> --assignee <邮箱>
-```
-
-验证：再次运行 `fecho doctor`，Mobius 与 issue 缓存应为正常；或调用 `sync_issues`。
-
-## 5. 设置工作范围和项目绑定
-
-扫描默认不读取任何目录。先显式加入工作仓库父目录：
-
-```bash
-fecho scope --work-prefix /绝对路径/to/work
-```
-
-在一个项目内工作时，建议绑定对应 issue：
-
-```bash
-cd /path/to/project
-fecho bind AI-2541
-```
-
-项目绑定是强信号，但 `log_progress(..., freeform=true)` 可以明确覆盖它。
-
-## 6. 配置 LLM
-
-扫描抽取和日终整理都需要 LLM：
-
-```bash
-fecho setup \
-  --llm-url <base_url> \
-  --llm-key <api_key> \
-  --llm-model <model> \
-  --llm-reasoning-effort low
-```
-
-不配置仍可主动记进展，日终会生成兜底稿；`fecho scan` 会明确报错并保留水位线，不会假装扫描成功。
-
-## 7. 验证一条完整链路
-
-1. 调用 `log_progress(content="AI-2541 完成 Fecho 安装验收", issue="AI-2541", completion_status="done")`；
-2. 保存返回的 `update_id`；
-3. 调用 `correct_progress(update_id="...", content="AI-2541 完成 Fecho 安装与连接验收")`；
-4. 调用 `my_tasks`，确认只有一个任务和一条修订后的进展；
-5. 调用 `end_of_day`，确认日报与口播稿都有产物。
-
-如需 Dashboard：
-
-```bash
-fecho web
-```
-
-打开 `http://127.0.0.1:8900/`，依次检查 Today、Review、Tasks、Reports、System。
-
-## 8. 可选：团队 collector
-
-```bash
-fecho setup --collector-url <地址> --collector-token <个人 token>
-```
-
-只会推送日报和口播稿，不会推原始进展。`fecho doctor` 的“团队协作”项会显示状态。
-
-## Agent 使用约定
-
-- 开工先调一次 `catch_up`；
-- 完成一个可复述的结果、踩坑或明确决策后调一次 `log_progress`；
-- 知道 issue 就明确传入，不确定就用自由任务，不要硬猜；
-- 归错或正文不准时调用 `correct_progress`，不要重记一条；
-- 明确填写 `completion_status` 和 `kind`；
-- 收工时调用 `end_of_day`；
-- 不记录用户原话、密钥、完整对话或无结果的计划；
-- 口播稿交给人照读录音，不使用 TTS 代替本人。
+团队 collector、精确指定历史日期重放和云端 Dashboard 不属于本轮 onboarding 闭环。

@@ -651,6 +651,16 @@ class TestWebEndpoints(unittest.TestCase):
         self.assertEqual(payload["system"]["automation"], state)
         self.assertNotIn("api_key", json.dumps(payload["system"]["automation"]))
 
+    def test_doctor_reports_automation_readiness(self):
+        from fecho import service
+        state = {"enabled": True, "daily_time": "21:00", "timezone": "Asia/Shanghai",
+                 "launch_agents": {"daily": True, "dashboard": True}}
+        with mock.patch("fecho.automation.status", return_value=state):
+            result = service.doctor()
+        check = next(item for item in result["checks"] if item["name"] == "每日自动整理")
+        self.assertTrue(check["ok"])
+        self.assertIn("21:00", check["detail"])
+
     def test_mutation_returns_refreshed_dashboard_and_marks_report_dirty(self):
         rec = store.record_progress("t", "闲鱼抓了十六个商品", date=D, issue="AI-2541")
         digest.generate("t", D, force=True)

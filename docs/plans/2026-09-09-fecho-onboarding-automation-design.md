@@ -8,7 +8,7 @@ Turn Fecho from a set of working primitives into a one-time onboarding flow foll
 
 1. The user gives Codex, Claude Code, or Hermes one installation prompt.
 2. The agent installs Fecho and runs `fecho onboard` with the user's identity, work allowlist, Mobius email, and chosen daily time.
-3. Onboarding loads an owner-provided shared LLM configuration, registers the stdio MCP and Fecho Skill for installed hosts, completes Mobius OAuth, installs automation, and runs `doctor`.
+3. Onboarding loads an owner-provided shared LLM configuration, registers the stdio MCP and Fecho Skill for installed hosts, requires the current installer to complete their own Mobius browser OAuth, installs automation, and runs `doctor`.
 4. During work, the Skill tells the active agent to call `catch_up` at the beginning and `log_progress` after a concrete result, pitfall, or decision.
 5. A macOS LaunchAgent wakes once per minute. A Beijing-time guard runs the daily pipeline once on the configured calendar day: sync Mobius, scan recent allowlisted transcripts, then generate that Beijing day's report.
 6. A second LaunchAgent keeps the local Dashboard available at `http://127.0.0.1:8900/`. The page refreshes when revisited and periodically while visible.
@@ -25,6 +25,8 @@ The onboarding UI does not ask ordinary installers for MiniMax fields. It resolv
 3. an HTTPS JSON endpoint named by `--shared-config-url` or `FECHO_SHARED_CONFIG_URL`.
 
 Only `llm_base_url`, `llm_api_key`, `llm_model`, and optional reasoning/timeout values are accepted. The resolved key is stored in each user's `~/.fecho/config.json`, which is already restricted to mode 0600. No credential is committed to Git, built into the wheel, written to logs, or returned by `doctor`. The owner accepts that each installer can read the shared key on their own machine.
+
+Mobius credentials are never shared. Even if a machine already contains a Mobius token, onboarding clears it and starts a new browser OAuth flow for the current installer's email before syncing issues.
 
 ## Onboarding and host adapters
 

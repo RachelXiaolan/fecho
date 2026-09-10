@@ -229,6 +229,22 @@ class TestSharedProvisioning(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "共享 LLM"):
             self.onboarding.resolve_shared_llm(current={})
 
+    def test_onboarding_always_runs_mobius_browser_oauth_for_current_user(self):
+        from fecho import config, oauth, service
+
+        started = {"ctx": object()}
+        with mock.patch.object(config, "mobius_configured", return_value=True), \
+                mock.patch.object(config, "update"), \
+                mock.patch.object(config, "reload_module"), \
+                mock.patch.object(oauth, "login", return_value=started) as login, \
+                mock.patch.object(oauth, "complete") as complete, \
+                mock.patch.object(service, "sync_issues", return_value={"count": 3}):
+            result = self.onboarding._connect_mobius("person@example.test")
+
+        login.assert_called_once()
+        complete.assert_called_once_with(started["ctx"])
+        self.assertEqual(result["count"], 3)
+
     def test_persisted_shared_key_is_0600_and_result_is_redacted(self):
         home = Path(tempfile.mkdtemp(prefix="fecho-shared-config-test-"))
         config_file = home / "config.json"
@@ -254,10 +270,12 @@ class TestSharedProvisioning(unittest.TestCase):
             install_hosts=lambda: events.append(("hosts",)) or {"codex": "installed"},
             connect_mobius=lambda email: events.append(("oauth", email)) or {"count": 2},
             install_schedule=lambda when: events.append(("schedule", when)) or {"installed": True},
+            doctor=lambda: events.append(("doctor",)) or {"checks": [{"ok": True}]},
         )
         self.assertEqual([event[0] for event in events], [
-            "configure", "scope", "scope", "hosts", "oauth", "schedule"])
+            "configure", "scope", "scope", "hosts", "oauth", "schedule", "doctor"])
         self.assertTrue(result["ok"])
+        self.assertTrue(result["doctor"]["checks"][0]["ok"])
         self.assertNotIn("shared-secret", json.dumps(result))
 
     def home_file(self, content):
