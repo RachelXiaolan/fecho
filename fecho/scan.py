@@ -432,6 +432,16 @@ def scan(days: int = 1, dry_run: bool = False, author: Optional[str] = None) -> 
             continue
 
         for e, source_event_key in extracted:
+            mentioned = match.extract_issue_keys(e["content"])
+            candidate = e.get("issue") or (mentioned[0] if mentioned else bound)
+            if candidate and candidate not in valid_keys:
+                try:
+                    mobius.fetch_issue(author, candidate)
+                    valid_keys.add(candidate)
+                except Exception:
+                    # Historical references must not block the whole day. If Mobius
+                    # cannot validate it, store it as a reviewable free task below.
+                    pass
             rec = store.record_progress(
                 author, e["content"], date=date, source_agent=producer,
                 ingestion_method="transcript-scan",
@@ -440,6 +450,7 @@ def scan(days: int = 1, dry_run: bool = False, author: Optional[str] = None) -> 
                 session_id=session_id, project=project,
                 issue=e.get("issue"),        # 模型判的归属，当确定信号用
                 source_event_key=source_event_key,
+                unknown_issue_policy="freeform",
                 meta={"kind": e["kind"], "source": "transcript",
                       "ingestion_method": "transcript-scan"},
             )

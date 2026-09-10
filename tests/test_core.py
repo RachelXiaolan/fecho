@@ -1276,6 +1276,35 @@ class TestScanIntegrity(unittest.TestCase):
         self.assertEqual(row["source_agent"], "codex")
         self.assertEqual(row["ingestion_method"], "transcript-scan")
 
+    def test_historical_issue_is_fetched_on_demand_instead_of_blocking_day(self):
+        historical = {
+            "identifier": "AI-2538", "title": "已完成的历史任务", "state": "Done",
+            "url": "", "updatedAt": "2030-01-01T00:00:00Z"}
+        response = {"content": [{"text": json.dumps(historical)}]}
+        with mock.patch.object(self.scan, "collect", return_value=self._group()), \
+             mock.patch.object(config, "llm_configured", return_value=True), \
+             mock.patch("fecho.mobius.cached_issues", return_value=ISSUES), \
+             mock.patch("fecho.mobius._rpc", return_value=response) as rpc, \
+             mock.patch("fecho.llm.chat", return_value=
+                        "done | - | AI-2538 的历史任务已经完成"):
+            result = self.scan.scan(author="t")
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["groups"][0]["entries"][0]["issue"], "AI-2538")
+        rpc.assert_called_once()
+
+    def test_unknown_issue_in_scanned_text_becomes_reviewable_freeform(self):
+        with mock.patch.object(self.scan, "collect", return_value=self._group()), \
+             mock.patch.object(config, "llm_configured", return_value=True), \
+             mock.patch("fecho.mobius.cached_issues", return_value=ISSUES), \
+             mock.patch("fecho.mobius._rpc", side_effect=RuntimeError("not found")), \
+             mock.patch("fecho.llm.chat", return_value=
+                        "done | - | AI-9999 这个编号并不存在"):
+            result = self.scan.scan(author="t")
+        self.assertTrue(result["ok"])
+        entry = result["groups"][0]["entries"][0]
+        self.assertIsNone(entry["issue"])
+        self.assertEqual(entry["method"], "new-task")
+
     def test_discovers_configured_claude_codex_and_hermes_adapters(self):
         root = Path(tempfile.mkdtemp(prefix="fecho-adapters-"))
         self.addCleanup(shutil.rmtree, root, True)
