@@ -188,6 +188,21 @@ class TestLaunchAgents(unittest.TestCase):
                 killer=lambda pid, sig: killed.append((pid, sig)))
         self.assertFalse(killed)
 
+    def test_launchd_owned_dashboard_pid_survives_wrapper_exec_detection(self):
+        listener_checks = iter([_Result(0, "789\n"), _Result(1)])
+        killed = []
+
+        def runner(args, **kwargs):
+            if args[0] == "lsof":
+                return next(listener_checks)
+            return _Result(0, "501 /System/Python -m fecho.cli web --port 8900\n")
+
+        result = self.automation.release_dashboard_port(
+            home=self.home, uid=501, managed_pid=789, runner=runner,
+            killer=lambda pid, sig: killed.append((pid, sig)), waiter=lambda _: None)
+        self.assertEqual(result, {"status": "migrated", "pid": 789})
+        self.assertEqual(killed, [(789, signal.SIGTERM)])
+
     def test_install_writes_only_owned_plists_and_loads_them(self):
         calls = []
         result = self.automation.install_launch_agents(

@@ -198,6 +198,7 @@ def _result_text(value: Any, field: str = "stdout") -> str:
 
 def release_dashboard_port(
     *, home: Optional[Path] = None, uid: Optional[int] = None, port: int = 8900,
+    managed_pid: Optional[int] = None,
     runner: Callable[..., Any] = subprocess.run,
     killer: Callable[[int, int], None] = os.kill,
     waiter: Callable[[float], None] = time.sleep,
@@ -226,7 +227,7 @@ def release_dashboard_port(
     owner = int(parts[0]) if parts and parts[0].isdigit() else -1
     command = parts[1] if len(parts) > 1 else ""
     install = str(home / ".fecho" / "venv" / "bin")
-    owned = owner == uid and (
+    owned = owner == uid and (pid == managed_pid or
         (install + "/fecho web") in command or
         (command.startswith(install + "/python") and "-m fecho.cli web" in command))
     if not owned:
@@ -261,9 +262,12 @@ def install_launch_agents(
         tmp.write_bytes(content)
         os.chmod(tmp, 0o600)
         tmp.replace(path)
+        managed_pid = (_launch_runtime(label, uid=uid, runner=runner).get("pid")
+                       if label == DASHBOARD_LABEL else None)
         _invoke(runner, ["launchctl", "bootout", "%s/%s" % (target, label)], check=False)
         if label == DASHBOARD_LABEL:
-            release_dashboard_port(home=home, uid=uid, runner=runner)
+            release_dashboard_port(
+                home=home, uid=uid, managed_pid=managed_pid, runner=runner)
         _invoke(runner, ["launchctl", "bootstrap", target, str(path)], check=True)
         _invoke(runner, ["launchctl", "kickstart", "-k", "%s/%s" % (target, label)], check=True)
         files.append(str(path))
@@ -339,10 +343,12 @@ def _launch_runtime(
     output = _result_text(result)
     state_match = re.search(r"^\s*state\s*=\s*([^\n]+)", output, re.MULTILINE)
     exit_match = re.search(r"^\s*last exit code\s*=\s*(-?\d+)", output, re.MULTILINE)
+    pid_match = re.search(r"^\s*pid\s*=\s*(\d+)", output, re.MULTILINE)
     return {
         "loaded": code == 0,
         "state": state_match.group(1).strip() if state_match else None,
         "last_exit_code": int(exit_match.group(1)) if exit_match else None,
+        "pid": int(pid_match.group(1)) if pid_match else None,
     }
 
 
