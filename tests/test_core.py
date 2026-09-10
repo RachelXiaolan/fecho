@@ -640,6 +640,39 @@ class TestWebEndpoints(unittest.TestCase):
         self.assertEqual(payload["review"]["items"][0]["source_agent"], "codex")
         self.assertRegex(payload["system"]["doctor"]["version"], r"^\d+\.\d+\.\d+$")
 
+    def test_dashboard_payload_exposes_redacted_automation_status(self):
+        state = {
+            "enabled": True, "daily_time": "21:00", "timezone": "Asia/Shanghai",
+            "dashboard_url": "http://127.0.0.1:8900/",
+            "last_result": {"status": "succeeded", "date": D},
+        }
+        with mock.patch("fecho.automation.status", return_value=state):
+            payload = self.c.get("/api/dashboard", params={"date": D}).json()
+        self.assertEqual(payload["system"]["automation"], state)
+        self.assertNotIn("api_key", json.dumps(payload["system"]["automation"]))
+
+    def test_doctor_reports_automation_readiness(self):
+        from fecho import service
+        state = {"enabled": True, "daily_time": "21:00", "timezone": "Asia/Shanghai",
+                 "ready": True,
+                 "configured_launch_agents": {"daily": True, "dashboard": True},
+                 "runtime": {"daily": {"ok": True}, "dashboard": {"ok": True}}}
+        with mock.patch("fecho.automation.status", return_value=state):
+            result = service.doctor()
+        check = next(item for item in result["checks"] if item["name"] == "每日自动整理")
+        self.assertTrue(check["ok"])
+        self.assertIn("21:00", check["detail"])
+
+    def test_doctor_rejects_configured_but_dead_dashboard(self):
+        from fecho import service
+        state = {"enabled": True, "daily_time": "21:00", "timezone": "Asia/Shanghai",
+                 "ready": False,
+                 "configured_launch_agents": {"daily": True, "dashboard": True},
+                 "runtime": {"daily": {"ok": True}, "dashboard": {"ok": False}}}
+        with mock.patch("fecho.automation.status", return_value=state):
+            result = service.doctor()
+        self.assertFalse(result["ready_for_automation"])
+
     def test_mutation_returns_refreshed_dashboard_and_marks_report_dirty(self):
         rec = store.record_progress("t", "闲鱼抓了十六个商品", date=D, issue="AI-2541")
         digest.generate("t", D, force=True)
@@ -694,7 +727,7 @@ class TestWebEndpoints(unittest.TestCase):
     def test_healthz_does_not_leak_author(self):
         r = self.c.get("/healthz")
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(r.json(), {"ok": True})
+        self.assertEqual(r.json(), {"ok": True, "version": "0.6.0"})
 
 
 class TestOAuthRecovery(unittest.TestCase):
@@ -1242,6 +1275,35 @@ class TestScanIntegrity(unittest.TestCase):
         row = db.list_updates(task_id=a["task"]["task_id"])[0]
         self.assertEqual(row["source_agent"], "codex")
         self.assertEqual(row["ingestion_method"], "transcript-scan")
+
+    def test_historical_issue_is_fetched_on_demand_instead_of_blocking_day(self):
+        historical = {
+            "identifier": "AI-2538", "title": "已完成的历史任务", "state": "Done",
+            "url": "", "updatedAt": "2030-01-01T00:00:00Z"}
+        response = {"content": [{"text": json.dumps(historical)}]}
+        with mock.patch.object(self.scan, "collect", return_value=self._group()), \
+             mock.patch.object(config, "llm_configured", return_value=True), \
+             mock.patch("fecho.mobius.cached_issues", return_value=ISSUES), \
+             mock.patch("fecho.mobius._rpc", return_value=response) as rpc, \
+             mock.patch("fecho.llm.chat", return_value=
+                        "done | - | AI-2538 的历史任务已经完成"):
+            result = self.scan.scan(author="t")
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["groups"][0]["entries"][0]["issue"], "AI-2538")
+        rpc.assert_called_once()
+
+    def test_unknown_issue_in_scanned_text_becomes_reviewable_freeform(self):
+        with mock.patch.object(self.scan, "collect", return_value=self._group()), \
+             mock.patch.object(config, "llm_configured", return_value=True), \
+             mock.patch("fecho.mobius.cached_issues", return_value=ISSUES), \
+             mock.patch("fecho.mobius._rpc", side_effect=RuntimeError("not found")), \
+             mock.patch("fecho.llm.chat", return_value=
+                        "done | - | AI-9999 这个编号并不存在"):
+            result = self.scan.scan(author="t")
+        self.assertTrue(result["ok"])
+        entry = result["groups"][0]["entries"][0]
+        self.assertIsNone(entry["issue"])
+        self.assertEqual(entry["method"], "new-task")
 
     def test_discovers_configured_claude_codex_and_hermes_adapters(self):
         root = Path(tempfile.mkdtemp(prefix="fecho-adapters-"))

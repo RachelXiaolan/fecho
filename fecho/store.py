@@ -14,7 +14,7 @@ import uuid
 from datetime import date as calendar_date, datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from . import config, db, match
+from . import clock, config, db, match
 
 
 _UNSET = object()
@@ -25,7 +25,7 @@ def now_iso() -> str:
 
 
 def today() -> str:
-    return datetime.now().strftime("%Y-%m-%d")
+    return clock.today()
 
 
 def content_hash(text: str) -> str:
@@ -107,6 +107,14 @@ def _validate_issue(author: str, issue_key: str) -> str:
     return key
 
 
+def _issue_known(author: str, issue_key: str) -> bool:
+    with db.cursor() as conn:
+        return conn.execute(
+            "SELECT 1 FROM mobius_issues WHERE author=? AND issue_key=?",
+            (author, issue_key),
+        ).fetchone() is not None
+
+
 def _create_freeform_task(author: str, content: str) -> Dict[str, Any]:
     task_id = str(uuid.uuid4())
     ts = now_iso()
@@ -135,6 +143,7 @@ def record_progress(
     freeform: bool = False,
     source_event_key: Optional[str] = None,
     meta: Optional[Dict[str, Any]] = None,
+    unknown_issue_policy: str = "error",
 ) -> Dict[str, Any]:
     content_md = (content_md or "").strip()
     if not content_md:
@@ -152,6 +161,8 @@ def record_progress(
         raise ValueError("completion_status 必须是 done/wip/blocked/unknown")
     if content_kind not in ("progress", "pitfall", "decision"):
         raise ValueError("content_kind 必须是 progress/pitfall/decision")
+    if unknown_issue_policy not in ("error", "freeform"):
+        raise ValueError("unknown_issue_policy 必须是 error/freeform")
 
     # Transcript 重跑时模型措辞可能变化，不能只靠正文 hash 去重。稳定事件键在创建
     # task 之前判断，避免重复回放留下空任务。
@@ -193,8 +204,16 @@ def record_progress(
         if task is None or task["author"] != author:
             raise ValueError("任务不存在: %s" % decision["task_id"])
     elif decision.get("issue_key"):
-        decision["issue_key"] = _validate_issue(author, decision["issue_key"])
-        task = _get_or_create_mobius_task(author, decision["issue_key"], decision.get("title"))
+        key = (decision["issue_key"] or "").strip().upper()
+        if (unknown_issue_policy == "freeform" and match.ISSUE_RE.fullmatch(key)
+                and not _issue_known(author, key)):
+            decision = {"method": "new-task", "score": None,
+                        "via": "unknown-issue-review"}
+            task = _create_freeform_task(author, content_md)
+        else:
+            decision["issue_key"] = _validate_issue(author, key)
+            task = _get_or_create_mobius_task(
+                author, decision["issue_key"], decision.get("title"))
     else:
         task = _create_freeform_task(author, content_md)
 

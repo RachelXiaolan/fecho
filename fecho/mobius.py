@@ -62,6 +62,33 @@ def fetch_open_issues(assignee: str) -> List[Dict[str, Any]]:
     return list(out.values())
 
 
+def fetch_issue(author: str, identifier: str) -> Dict[str, Any]:
+    """Resolve one historical issue and retain it in the local validation cache."""
+    res = _rpc("tools/call", {
+        "name": "get_issue", "arguments": {"identifier": identifier}})
+    content = res.get("content") or []
+    if not content:
+        raise MobiusError("Mobius 没有返回 issue %s" % identifier)
+    try:
+        payload = json.loads(content[0]["text"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise MobiusError("Mobius 返回的 issue 数据无法解析") from exc
+    issue = payload.get("issue", payload)
+    if issue.get("identifier") != identifier:
+        raise MobiusError("Mobius 没有找到 issue %s" % identifier)
+    now = store.now_iso()
+    with db.cursor() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO mobius_issues"
+            " (issue_key, author, title, state, url, updated_at, synced_at, raw)"
+            " VALUES (?,?,?,?,?,?,?,?)",
+            (identifier, author, issue.get("title", ""), issue.get("state", ""),
+             issue.get("url", ""), issue.get("updatedAt", ""), now,
+             json.dumps(issue, ensure_ascii=False)),
+        )
+    return issue
+
+
 def sync(author: str, assignee: Optional[str] = None) -> Dict[str, Any]:
     """把某人的 issue 同步进本地缓存。cron 或开工时调。"""
     assignee = assignee or config.MOBIUS_ASSIGNEE

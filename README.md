@@ -2,7 +2,7 @@
 
 > [Mobius AI-2541](https://mobius.feedmob.com/issue/AI-2541) · 本地优先 · Python 3.9+
 
-Fecho 让 Codex、Claude Code、Hermes 等 Agent 在推进工作时直接记录事实，再把这些事实归到持续生长的任务里，日终生成日报和口播稿。原始进展默认只保存在本机 SQLite；人通过 Dashboard 复核归属、修正文案、管理任务和查看系统健康。
+Fecho 让 Codex、Claude Code、Hermes 等 Agent 在推进工作时直接记录事实，再把这些事实归到持续生长的任务里。每天由 MiniMax 在用户选择的北京时间自动扫描补漏、生成日报和口播稿；人只需进入 Dashboard 复核和修正。原始进展默认只保存在本机 SQLite。
 
 ```text
 Agent 主动提交 ─┐
@@ -58,35 +58,39 @@ Agent 主动提交 ─┐
 
 ## 安装与连接
 
+管理员先通过私密文件或 HTTPS 地址提供共享 LLM 配置。共享的只有 MiniMax 访问配置；每位安装者仍必须通过浏览器登录自己的 Mobius 账号。
+
 ```bash
-pip install "git+https://github.com/RachelXiaolan/fecho.git"
-
-# Claude Code
-claude mcp add fecho -- fecho-mcp
-
-# Codex CLI / Desktop
-codex mcp add fecho -- fecho-mcp
+python3 -m pip install "fecho[server] @ git+https://github.com/RachelXiaolan/fecho.git"
+export FECHO_SHARED_CONFIG_URL="https://管理员提供的私密地址/fecho.json"
+fecho onboard \
+  --author <稳定英文标识> \
+  --display-name <展示名> \
+  --work-prefix /绝对路径/to/work \
+  --mobius-assignee <你的公司邮箱> \
+  --time 21:00
 ```
 
-随后重启 Agent，并调用 `fecho_doctor`。完整安装说明见 [INSTALL.md](INSTALL.md)；ChatGPT 远程连接见 [CONNECT-CHATGPT.md](CONNECT-CHATGPT.md)。
+`onboard` 会为本机已安装的 Codex、Claude Code、Hermes 注册 MCP 和 Fecho Skill，打开浏览器让当前用户完成 Mobius OAuth，并安装每日任务与 Dashboard 后台服务。完成后重启 Agent。完整说明见 [INSTALL.md](INSTALL.md)；ChatGPT 远程连接见 [CONNECT-CHATGPT.md](CONNECT-CHATGPT.md)。
 
 常用命令：
 
 ```bash
 fecho doctor
-fecho login                         # Mobius OAuth + PKCE
+fecho onboard --help
 fecho scope --work-prefix ~/Documents/work
 fecho bind AI-2541                  # 在当前项目目录执行
 fecho scan --days 1
 fecho digest
-fecho web                           # Dashboard + HTTP/SSE MCP
+fecho schedule status
+fecho schedule run-now              # 立即跑同步 → 扫描 → 日报，用于验收
 ```
 
 默认数据目录为 `~/.fecho/`，配置文件权限为 0600。stdio 模式只依赖 `httpx`；Dashboard/HTTP/SSE 需要安装 `fecho[server]`。
 
 ## Dashboard
 
-运行 `fecho web` 后打开 `http://127.0.0.1:8900/`：
+onboarding 会在 macOS 登录后自动启动本地 Dashboard。打开 `http://127.0.0.1:8900/`：
 
 - **Today**：按任务聚合当天进展，查看需要留意的归属、重复和报告状态；
 - **Review**：编辑正文、改 issue、确认并锁定，恢复误挡的扫描结果；
@@ -152,13 +156,14 @@ collector 的 author 只从 Bearer token 反查，请求体不能冒充他人。
 
 ## 自动运行
 
-```cron
-0  9 * * 1-5 fecho sync
-*/30 * * * 1-5 fecho scan --days 2
-30 19 * * 1-5 fecho digest
+```bash
+fecho schedule install --time 21:00  # 北京时间；允许 00:00–21:59
+fecho schedule status
+fecho schedule run-now               # 立即验收完整流水线
+fecho schedule uninstall             # 不删除日志和数据库
 ```
 
-先配置 `fecho scope`，否则扫描默认不读取任何工作目录。
+系统每天依次执行 Mobius 同步、白名单会话扫描和日报生成。默认北京时间 21:00；电脑处于其他时区也不改变触发时刻。Dashboard 固定监听本机 `127.0.0.1:8900`，页面可见时会自动刷新。
 
 ## 已知边界
 
@@ -166,6 +171,8 @@ collector 的 author 只从 Bearer token 反查，请求体不能冒充他人。
 - PTO 仍使用本地配置文件，未接 timeoff 服务；
 - collector 是单机 SQLite，没有高可用；
 - ChatGPT 远程连接取决于账户/工作区权限；优先使用 OpenAI Secure MCP Tunnel；
+- 当前 Dashboard 是本地服务；未来托管版仍需本地扫描端，再同步允许的数据；
+- 精确指定某一天重新读取历史 transcript 的测试工具尚未提供；
 - transcript 格式由宿主控制，版本变化时适配器可能需要跟进。
 
 ## 验证

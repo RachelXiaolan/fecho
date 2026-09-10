@@ -19,7 +19,7 @@ import os
 import secrets
 from typing import Any, Dict, List, Optional
 
-from . import config, db, mcp_server, store
+from . import __version__, config, db, mcp_server, store
 
 TOKEN = os.getenv("FECHO_WEB_TOKEN") or config.get("web_token", "FECHO_WEB_TOKEN", "")
 
@@ -165,7 +165,7 @@ def report_payload(author: str, date: str) -> Dict[str, Any]:
 
 
 def dashboard_payload(author: str, date: str) -> Dict[str, Any]:
-    from . import mobius, service
+    from . import automation, mobius, service
 
     all_updates = db.list_updates(author=author)
     with db.cursor() as conn:
@@ -185,7 +185,8 @@ def dashboard_payload(author: str, date: str) -> Dict[str, Any]:
         "hidden": {"items": hidden_entries(author, date)},
         "timeline": {"groups": timeline(author, 14, date)},
         "issues": {"items": mobius.cached_issues(author)},
-        "system": {"doctor": service.doctor(), "scan_runs": scan_rows},
+        "system": {"doctor": service.doctor(), "scan_runs": scan_rows,
+                   "automation": automation.status()},
         "filters": {"agents": agents, "ingestion_methods": ingestions,
                     "completion_statuses": ["done", "wip", "blocked", "unknown"]},
     }
@@ -298,7 +299,7 @@ def build_app():
     @app.get("/healthz")
     def healthz(request: Request, authorization: Optional[str] = Header(None)):
         guard(request, authorization)
-        return {"ok": True}
+        return {"ok": True, "version": __version__}
 
     # ---- dashboard 数据 ----
     @app.get("/api/overview")

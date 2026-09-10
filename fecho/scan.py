@@ -29,7 +29,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from . import config, db, scope, store
+from . import clock, config, db, scope, store
 from .match import ISSUE_RE
 
 # 单次请求的输入上限（字符）。实测 24K tokens 打推理模型会超时。
@@ -220,8 +220,8 @@ def collect(days: int = 1) -> Tuple[Dict[Tuple[str, str, str, str], List[Dict]],
     分组的键是 (session_id, project, 本地日期)——三者决定了这批进展归谁、
     归哪个 issue、归哪天。
     """
-    tz = datetime.now().astimezone().tzinfo
-    floor = (datetime.now(tz) - timedelta(days=days)).replace(
+    tz = clock.BEIJING
+    floor = (clock.now() - timedelta(days=days)).replace(
         hour=0, minute=0, second=0, microsecond=0)
 
     groups: Dict[Tuple[str, str, str], List[Dict]] = {}
@@ -239,7 +239,7 @@ def collect(days: int = 1) -> Tuple[Dict[Tuple[str, str, str, str], List[Dict]],
                 continue
             if mark and ts <= mark:            # 水位线之前的，已经处理过
                 continue
-            when = datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(tz)
+            when = clock.from_iso(ts)
             if when < floor:                   # 太老的不追，避免首次扫描炸开
                 continue
 
@@ -432,6 +432,16 @@ def scan(days: int = 1, dry_run: bool = False, author: Optional[str] = None) -> 
             continue
 
         for e, source_event_key in extracted:
+            mentioned = match.extract_issue_keys(e["content"])
+            candidate = e.get("issue") or (mentioned[0] if mentioned else bound)
+            if candidate and candidate not in valid_keys:
+                try:
+                    mobius.fetch_issue(author, candidate)
+                    valid_keys.add(candidate)
+                except Exception:
+                    # Historical references must not block the whole day. If Mobius
+                    # cannot validate it, store it as a reviewable free task below.
+                    pass
             rec = store.record_progress(
                 author, e["content"], date=date, source_agent=producer,
                 ingestion_method="transcript-scan",
@@ -440,6 +450,7 @@ def scan(days: int = 1, dry_run: bool = False, author: Optional[str] = None) -> 
                 session_id=session_id, project=project,
                 issue=e.get("issue"),        # 模型判的归属，当确定信号用
                 source_event_key=source_event_key,
+                unknown_issue_policy="freeform",
                 meta={"kind": e["kind"], "source": "transcript",
                       "ingestion_method": "transcript-scan"},
             )
