@@ -2,6 +2,7 @@
 import os
 import json
 import plistlib
+import signal
 import tempfile
 import unittest
 from datetime import datetime, timezone
@@ -134,14 +135,58 @@ class TestLaunchAgents(unittest.TestCase):
 
         self.assertEqual(daily["StartInterval"], 60)
         self.assertTrue(daily["RunAtLoad"])
-        self.assertEqual(
-            daily["ProgramArguments"],
-            ["/private/fecho/bin/python", "-m", "fecho.cli", "schedule", "tick"],
-        )
+        self.assertEqual(daily["ProgramArguments"][:7], [
+            "/usr/bin/env", "-u", "FECHO_LLM_API_KEY", "-u",
+            "FECHO_MOBIUS_TOKEN", "-u", "MOBIUS_API_KEY",
+        ])
+        self.assertEqual(daily["ProgramArguments"][-4:], [
+            "-m", "fecho.cli", "schedule", "tick"])
         self.assertTrue(dashboard["KeepAlive"])
         self.assertIn("127.0.0.1", dashboard["ProgramArguments"])
         self.assertIn("8900", dashboard["ProgramArguments"])
         self.assertIn("--no-browser", dashboard["ProgramArguments"])
+
+    def test_free_dashboard_port_requires_no_migration(self):
+        calls = []
+        result = self.automation.release_dashboard_port(
+            home=self.home, uid=501,
+            runner=lambda args, **kw: calls.append(args) or _Result(1),
+            killer=lambda *args: self.fail("free port must not kill a process"),
+        )
+        self.assertEqual(result["status"], "free")
+        self.assertEqual(calls[0][:3], ["lsof", "-nP", "-tiTCP:8900"])
+
+    def test_owned_legacy_dashboard_is_stopped(self):
+        old = str(self.home / ".fecho" / "venv" / "bin" / "fecho")
+        listener_checks = iter([_Result(0, "123\n"), _Result(1)])
+        killed = []
+
+        def runner(args, **kwargs):
+            if args[0] == "lsof":
+                return next(listener_checks)
+            if args[0] == "ps":
+                return _Result(0, "501 /usr/bin/python3 %s web --no-browser\n" % old)
+            return _Result()
+
+        result = self.automation.release_dashboard_port(
+            home=self.home, uid=501, runner=runner,
+            killer=lambda pid, sig: killed.append((pid, sig)), waiter=lambda _: None)
+        self.assertEqual(result, {"status": "migrated", "pid": 123})
+        self.assertEqual(killed, [(123, signal.SIGTERM)])
+
+    def test_unknown_dashboard_port_owner_is_never_stopped(self):
+        killed = []
+
+        def runner(args, **kwargs):
+            if args[0] == "lsof":
+                return _Result(0, "456\n")
+            return _Result(0, "501 /usr/local/bin/unrelated-server\n")
+
+        with self.assertRaisesRegex(RuntimeError, "不是 Fecho"):
+            self.automation.release_dashboard_port(
+                home=self.home, uid=501, runner=runner,
+                killer=lambda pid, sig: killed.append((pid, sig)))
+        self.assertFalse(killed)
 
     def test_install_writes_only_owned_plists_and_loads_them(self):
         calls = []
@@ -185,6 +230,40 @@ class TestLaunchAgents(unittest.TestCase):
         self.assertEqual(saved[-1]["daily_time"], "20:45")
         self.assertTrue(saved[-1]["enabled"])
         self.assertEqual(result["daily_time"], "20:45")
+
+    def test_status_separates_configuration_from_live_health(self):
+        agents = self.home / "Library" / "LaunchAgents"
+        agents.mkdir(parents=True)
+        for label in self.automation.OWNED_LABELS:
+            (agents / (label + ".plist")).write_text("plist", encoding="utf-8")
+
+        def runner(args, **kwargs):
+            label = args[-1]
+            if label.endswith(self.automation.DAILY_LABEL):
+                return _Result(0, "state = not running\nlast exit code = 0\n")
+            return _Result(0, "state = running\npid = 123\nlast exit code = 0\n")
+
+        with mock.patch.object(self.automation, "schedule_state", return_value={
+                "enabled": True, "daily_time": "21:00"}):
+            result = self.automation.status(
+                home=self.home, uid=501, runner=runner,
+                health=lambda url: {"ok": True, "version": "0.6.0"})
+        self.assertTrue(all(result["configured_launch_agents"].values()))
+        self.assertTrue(result["runtime"][self.automation.DAILY_LABEL]["ok"])
+        self.assertTrue(result["runtime"][self.automation.DASHBOARD_LABEL]["ok"])
+        self.assertTrue(result["ready"])
+
+    def test_status_is_not_ready_when_dashboard_is_not_healthy(self):
+        def runner(args, **kwargs):
+            return _Result(0, "state = running\nlast exit code = 0\n")
+
+        with mock.patch.object(self.automation, "schedule_state", return_value={
+                "enabled": True, "daily_time": "21:00"}):
+            result = self.automation.status(
+                home=self.home, uid=501, runner=runner,
+                health=lambda url: {"ok": False})
+        self.assertFalse(result["runtime"][self.automation.DASHBOARD_LABEL]["ok"])
+        self.assertFalse(result["ready"])
 
 
 class TestSharedProvisioning(unittest.TestCase):
@@ -308,6 +387,18 @@ class TestHostInstallation(unittest.TestCase):
         self.assertEqual(specs["hermes"]["add"], [
             "hermes", "mcp", "add", "fecho", "--command", self.command])
         self.assertEqual(specs["codex"]["skill"], self.home / ".codex" / "skills" / "fecho")
+
+    def test_default_mcp_command_stays_beside_symlinked_venv_python(self):
+        venv_bin = self.home / "venv" / "bin"
+        venv_bin.mkdir(parents=True)
+        python = venv_bin / "python"
+        python.symlink_to("/usr/bin/python3")
+        mcp = venv_bin / "fecho-mcp"
+        mcp.write_text("#!/bin/sh\n", encoding="utf-8")
+
+        with mock.patch.object(self.hosts.sys, "executable", str(python)), \
+                mock.patch.object(self.hosts.shutil, "which", return_value=None):
+            self.assertEqual(self.hosts._default_mcp_command(), str(mcp))
 
     def test_install_all_registers_detected_hosts_and_copies_skill(self):
         calls = []

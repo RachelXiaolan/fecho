@@ -51,6 +51,10 @@ class TestDashboardContract(unittest.TestCase):
         self.assertIn('id="automation-status"', self.html)
         self.assertIn("daily_time", self.html)
         self.assertIn("last_result", self.html)
+        self.assertIn("configured_launch_agents", self.html)
+        self.assertIn("automation.runtime", self.html)
+        self.assertIn("运行正常", self.html)
+        self.assertIn("服务异常", self.html)
 
 
 if __name__ == "__main__":

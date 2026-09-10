@@ -39,7 +39,7 @@ def _text(value: Any) -> str:
 
 
 def _default_mcp_command() -> str:
-    beside_python = Path(sys.executable).resolve().parent / "fecho-mcp"
+    beside_python = Path(sys.executable).parent / "fecho-mcp"
     found = shutil.which("fecho-mcp")
     if beside_python.exists():
         return str(beside_python)

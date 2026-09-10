@@ -192,8 +192,7 @@ def doctor() -> Dict[str, Any]:
     })
 
     auto = automation.status()
-    launch_agents = auto.get("launch_agents") or {}
-    auto_ok = bool(auto.get("enabled") and launch_agents and all(launch_agents.values()))
+    auto_ok = bool(auto.get("ready"))
     checks.append({
         "name": "每日自动整理",
         "ok": auto_ok,

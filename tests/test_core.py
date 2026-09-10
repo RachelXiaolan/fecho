@@ -654,12 +654,24 @@ class TestWebEndpoints(unittest.TestCase):
     def test_doctor_reports_automation_readiness(self):
         from fecho import service
         state = {"enabled": True, "daily_time": "21:00", "timezone": "Asia/Shanghai",
-                 "launch_agents": {"daily": True, "dashboard": True}}
+                 "ready": True,
+                 "configured_launch_agents": {"daily": True, "dashboard": True},
+                 "runtime": {"daily": {"ok": True}, "dashboard": {"ok": True}}}
         with mock.patch("fecho.automation.status", return_value=state):
             result = service.doctor()
         check = next(item for item in result["checks"] if item["name"] == "每日自动整理")
         self.assertTrue(check["ok"])
         self.assertIn("21:00", check["detail"])
+
+    def test_doctor_rejects_configured_but_dead_dashboard(self):
+        from fecho import service
+        state = {"enabled": True, "daily_time": "21:00", "timezone": "Asia/Shanghai",
+                 "ready": False,
+                 "configured_launch_agents": {"daily": True, "dashboard": True},
+                 "runtime": {"daily": {"ok": True}, "dashboard": {"ok": False}}}
+        with mock.patch("fecho.automation.status", return_value=state):
+            result = service.doctor()
+        self.assertFalse(result["ready_for_automation"])
 
     def test_mutation_returns_refreshed_dashboard_and_marks_report_dirty(self):
         rec = store.record_progress("t", "闲鱼抓了十六个商品", date=D, issue="AI-2541")
@@ -715,7 +727,7 @@ class TestWebEndpoints(unittest.TestCase):
     def test_healthz_does_not_leak_author(self):
         r = self.c.get("/healthz")
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(r.json(), {"ok": True})
+        self.assertEqual(r.json(), {"ok": True, "version": "0.6.0"})
 
 
 class TestOAuthRecovery(unittest.TestCase):
