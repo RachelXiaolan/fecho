@@ -1192,6 +1192,51 @@ class TestScanWatermark(unittest.TestCase):
         usable = [t for t in stamps if t < failed_from]
         self.assertEqual(usable, [], "第一组就失败时，水位线一步都不能动")
 
+    def test_scan_reports_why_it_failed(self):
+        """失败原因必须跟着返回值往上带。
+
+        真实翻车：09-10 晚上在路上没网，扫描整晚失败，但 scan 只标了 ok=False
+        没写 error，Dashboard 上只能看到「未知错误」——真实原因（域名解析不了）
+        只剩数据库里有，人没法自查。
+        """
+        from datetime import datetime, timezone
+        from fecho import clock, llm
+
+        ts = datetime(2030, 1, 1, 12, 0, tzinfo=timezone.utc)
+        rows = [{"at": ts.astimezone(clock.BEIJING), "ts": "2030-01-01T12:00:00Z",
+                 "role": "assistant", "text": "把配对引擎写完了"}]
+        groups = {("codex", "sess-1", "/tmp/proj", "2030-01-01"): rows}
+
+        boom = llm.LLMError("[Errno 8] nodename nor servname provided, or not known")
+        with mock.patch.object(self.scan, "collect",
+                               return_value=(groups, {}, {"sess-1": ["2030-01-01T12:00:00Z"]})), \
+             mock.patch.object(llm, "chat", side_effect=boom), \
+             mock.patch.object(config, "llm_configured", return_value=True):
+            res = self.scan.scan(days=1)
+
+        self.assertFalse(res["ok"])
+        self.assertIn("error", res, "标了失败就必须说清楚为什么")
+        self.assertIn("nodename", res["error"])
+
+    def test_scan_summarises_when_many_groups_fail_the_same_way(self):
+        """整晚断网时每组都挂在同一个原因上，别把同一句话重复三遍。"""
+        from datetime import datetime, timezone
+        from fecho import clock, llm
+
+        ts = datetime(2030, 1, 1, 12, 0, tzinfo=timezone.utc)
+        row = {"at": ts.astimezone(clock.BEIJING), "ts": "2030-01-01T12:00:00Z",
+               "role": "assistant", "text": "做了点事"}
+        groups = {("codex", "s%d" % i, "/tmp/p", "2030-01-01"): [row] for i in range(3)}
+        stamps = {"s%d" % i: ["2030-01-01T12:00:00Z"] for i in range(3)}
+
+        with mock.patch.object(self.scan, "collect", return_value=(groups, {}, stamps)), \
+             mock.patch.object(llm, "chat", side_effect=llm.LLMError("连不上网关")), \
+             mock.patch.object(config, "llm_configured", return_value=True):
+            res = self.scan.scan(days=1)
+
+        self.assertFalse(res["ok"])
+        self.assertEqual(res["error"], "连不上网关", "三组同因，去重后只说一次")
+
     def test_parse_survives_chinese_quotes(self):
         """中文引号会把 JSON 打断，所以输出格式是竖线分隔的一行一条。"""
         raw = 'done | 把"一条条记录"改成了"任务+进展"，日报按任务分组\npitfall | 试了 X 不行'

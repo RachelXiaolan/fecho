@@ -5,7 +5,7 @@ import plistlib
 import signal
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
 
@@ -91,6 +91,81 @@ class TestDailyAutomation(unittest.TestCase):
         self.assertEqual(result["status"], "failed")
         self.assertNotIn("last_run_date", saved[-1])
         self.assertEqual(saved[-1]["last_result"]["error"], "scan failed")
+
+    def test_failure_schedules_one_retry_and_alerts(self):
+        """21:00 那次挂了（比如在路上没网），正常窗口只有 10 分钟，当天就再也不会
+        触发。所以失败要排一次补跑，并且要让人知道。"""
+        instant = datetime(2030, 1, 1, 13, 0, tzinfo=timezone.utc)  # 21:00 北京
+        saved, alerts = [], []
+
+        self.automation.tick(
+            instant=instant, state=dict(self.state),
+            runner=lambda date: {"ok": False, "date": date, "error": "连不上 LLM 网关"},
+            save=saved.append,
+            notifier=lambda title, msg: alerts.append((title, msg)))
+
+        retry = saved[-1]["retry"]
+        self.assertEqual(retry["attempts"], 0, "排好但还没跑，已执行次数是 0")
+        self.assertEqual(retry["date"], "2030-01-01")
+        self.assertEqual(len(alerts), 1, "失败必须报警")
+        self.assertIn("连不上 LLM 网关", alerts[0][1])
+        self.assertIn("30", alerts[0][1], "要说清楚多久后重试")
+
+    def test_retry_fires_after_the_delay_but_not_before(self):
+        base = datetime(2030, 1, 1, 13, 0, tzinfo=timezone.utc)
+        saved = []
+        self.automation.tick(
+            instant=base, state=dict(self.state),
+            runner=lambda date: {"ok": False, "date": date, "error": "boom"},
+            save=saved.append, notifier=lambda *a: None)
+        after_fail = saved[-1]
+
+        early = self.automation.tick(                    # 才过 20 分钟
+            instant=base + timedelta(minutes=20), state=after_fail,
+            runner=mock.Mock(), save=lambda v: None, notifier=lambda *a: None)
+        self.assertEqual(early["status"], "not-due", "没到点不能提前补跑")
+
+        runner = mock.Mock(return_value={"ok": True, "date": "2030-01-01"})
+        late = self.automation.tick(                     # 过了 31 分钟
+            instant=base + timedelta(minutes=31), state=after_fail,
+            runner=runner, save=saved.append, notifier=lambda *a: None)
+        self.assertEqual(late["status"], "succeeded")
+        self.assertEqual(late["attempt"], "retry")
+        self.assertEqual(saved[-1]["last_run_date"], "2030-01-01")
+        self.assertNotIn("retry", saved[-1], "成功之后补跑记录要清掉")
+
+    def test_retry_is_used_at_most_once_then_gives_up_loudly(self):
+        """补跑无限重试会在真故障时刷屏。只补一次，然后停手并报警。"""
+        base = datetime(2030, 1, 1, 13, 0, tzinfo=timezone.utc)
+        saved, alerts = [], []
+        fail = lambda date: {"ok": False, "date": date, "error": "还是没网"}
+
+        self.automation.tick(instant=base, state=dict(self.state), runner=fail,
+                             save=saved.append,
+                             notifier=lambda t, m: alerts.append((t, m)))
+        self.automation.tick(instant=base + timedelta(minutes=31), state=saved[-1],
+                             runner=fail, save=saved.append,
+                             notifier=lambda t, m: alerts.append((t, m)))
+
+        third = self.automation.tick(
+            instant=base + timedelta(minutes=90), state=saved[-1],
+            runner=mock.Mock(), save=lambda v: None, notifier=lambda *a: None)
+        self.assertEqual(third["status"], "not-due", "只补一次，不能没完没了")
+        self.assertEqual(len(alerts), 2)
+        self.assertIn("重试已用完", alerts[-1][1])
+
+    def test_retry_from_a_previous_day_is_ignored(self):
+        """昨天挂掉留下的补跑记录，不该在今天大清早突然跑起来。"""
+        stale = dict(self.state)
+        stale["retry"] = {"date": "2029-12-31", "attempts": 1,
+                          "at": "2029-12-31T21:30:00+08:00"}
+        runner = mock.Mock()
+        result = self.automation.tick(
+            instant=datetime(2030, 1, 1, 2, 0, tzinfo=timezone.utc),  # 10:00 北京
+            state=stale, runner=runner, save=lambda v: None,
+            notifier=lambda *a: None)
+        self.assertEqual(result["status"], "not-due")
+        runner.assert_not_called()
 
     def test_daily_pipeline_continues_when_mobius_sync_fails(self):
         scan = mock.Mock(return_value={"ok": True, "recorded": 2})

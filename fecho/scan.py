@@ -429,6 +429,9 @@ def scan(days: int = 1, dry_run: bool = False, author: Optional[str] = None) -> 
             blocked[session_id] = min(blocked.get(session_id, first), first)
             _scan_run_finish(run_id, "failed", error=g["error"])
             result["ok"] = False
+            # 失败原因必须跟着往上带。只标 ok=False 而不写 error，上层就只能
+            # 显示「未知错误」，真实原因（比如域名解析不了）只剩数据库里有。
+            result.setdefault("errors", []).append(g["error"])
             continue
 
         for e, source_event_key in extracted:
@@ -479,5 +482,13 @@ def scan(days: int = 1, dry_run: bool = False, author: Optional[str] = None) -> 
             set_mark(session_id, usable[-1], n)
         if blocked:
             result["retry_next_time"] = sorted(blocked)
+
+    # 多组常常挂在同一个原因上（比如整晚都连不上 LLM 网关），去重后给一句
+    # 人能看懂的话，别让调用方去猜。
+    errs = result.pop("errors", None)
+    if errs:
+        uniq = list(dict.fromkeys(errs))
+        result["error"] = uniq[0] if len(uniq) == 1 else \
+            "%d 组失败：%s" % (len(errs), "；".join(uniq[:3]))
 
     return result

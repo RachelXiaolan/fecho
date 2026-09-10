@@ -1,6 +1,6 @@
 """Unattended Fecho pipeline and Beijing-time scheduling state."""
 from copy import deepcopy
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import os
 import plistlib
@@ -20,6 +20,12 @@ DAILY_LABEL = "com.feedmob.fecho.daily"
 DASHBOARD_LABEL = "com.feedmob.fecho.dashboard"
 OWNED_LABELS = (DAILY_LABEL, DASHBOARD_LABEL)
 SENSITIVE_ENV = ("FECHO_LLM_API_KEY", "FECHO_MOBIUS_TOKEN", "MOBIUS_API_KEY")
+
+# 失败后补跑：只补一次，间隔 30 分钟。
+# 正常触发窗口只有 10 分钟，一次网络抖动就丢一整天，所以要补；
+# 但补跑无限重试会在真故障时刷屏，所以只补一次就停手并报警。
+RETRY_LIMIT = 1
+RETRY_DELAY_MINUTES = 30
 
 
 def schedule_state() -> Dict[str, Any]:
@@ -99,39 +105,106 @@ def _due(instant: datetime, daily_time: str) -> bool:
     return target <= actual < end
 
 
+def _retry_due(instant: datetime, state: Dict[str, Any], date: str) -> bool:
+    """失败后的补跑窗口到了没。
+
+    正常窗口只有 10 分钟，21:00 那次挂了（比如在路上没网），当天就再也不会
+    触发——一次网络抖动等于丢一整天。所以失败后排一次补跑。
+    launchd 每分钟叫醒一次 tick，补跑不需要另装定时器。
+    """
+    retry = state.get("retry")
+    if not retry or retry.get("date") != date:
+        return False
+    # attempts = 已经**执行过**的补跑次数。排好但还没跑的那次不算在内，
+    # 否则刚排完就被自己挡掉。
+    if retry.get("attempts", 0) >= RETRY_LIMIT:
+        return False
+    try:
+        at = datetime.fromisoformat(retry["at"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    return clock.now(instant) >= clock.now(at)
+
+
+def notify(title: str, message: str, *, runner: Optional[Callable[..., Any]] = None) -> bool:
+    """弹一条系统通知。报警失败不能反过来搞挂定时任务，所以一律吞掉异常。"""
+    import shutil
+    import subprocess
+
+    runner = runner or subprocess.run
+    osascript = shutil.which("osascript")
+    if not osascript:
+        return False
+    safe = lambda s: s.replace("\\", "\\\\").replace('"', '\\"')[:200]
+    try:
+        runner([osascript, "-e", 'display notification "%s" with title "%s"'
+                % (safe(message), safe(title))],
+               check=False, capture_output=True, timeout=10)
+        return True
+    except Exception:
+        return False
+
+
 def tick(
     *,
     instant: Optional[datetime] = None,
     state: Optional[Dict[str, Any]] = None,
     runner: Optional[Callable[[str], Dict[str, Any]]] = None,
     save: Optional[Callable[[Dict[str, Any]], None]] = None,
+    notifier: Optional[Callable[[str, str], Any]] = None,
 ) -> Dict[str, Any]:
-    """Run at most once per Beijing calendar day inside a short grace window."""
+    """每个北京日历日最多成功跑一次；失败排一次补跑并报警。"""
     instant = instant or clock.now()
     state = deepcopy(state if state is not None else schedule_state())
     runner = runner or (lambda date: run_daily(date))
     save = save or _save_state
+    notifier = notifier or (lambda title, msg: notify(title, msg))
     date = clock.today(instant)
 
     if not state.get("enabled"):
         return {"status": "disabled", "date": date}
     if state.get("last_run_date") == date:
         return {"status": "already-run", "date": date}
-    if not _due(instant, state.get("daily_time", clock.DEFAULT_DAILY_TIME)):
+
+    is_retry = _retry_due(instant, state, date)
+    if not is_retry and not _due(instant, state.get("daily_time", clock.DEFAULT_DAILY_TIME)):
         return {"status": "not-due", "date": date}
 
     started_at = store.now_iso()
     result = runner(date)
+    ok = bool(result.get("ok"))
+    error = result.get("error") or "未知错误"
     state["last_result"] = {
-        "status": "succeeded" if result.get("ok") else "failed",
+        "status": "succeeded" if ok else "failed",
         "date": date,
         "at": started_at,
-        **({"error": result.get("error", "未知错误")} if not result.get("ok") else {}),
+        **({"attempt": "retry"} if is_retry else {}),
+        **({} if ok else {"error": error}),
     }
-    if result.get("ok"):
+
+    if ok:
         state["last_run_date"] = date
+        state.pop("retry", None)
+    else:
+        attempts = (state.get("retry") or {}).get("attempts", 0)
+        if is_retry:
+            attempts += 1                    # 这次就是补跑，算进已执行次数
+        if attempts < RETRY_LIMIT:
+            # 还有补跑机会：排下一次。存绝对时间点，tick 每分钟醒一次自己去比。
+            state["retry"] = {
+                "date": date, "attempts": attempts,
+                "at": (clock.now(instant) + timedelta(minutes=RETRY_DELAY_MINUTES)).isoformat(),
+            }
+            notifier("Fecho 日报任务失败",
+                     "%s；%d 分钟后自动重试" % (error, RETRY_DELAY_MINUTES))
+        else:
+            state["retry"] = {"date": date, "attempts": attempts, "at": None}
+            notifier("Fecho 日报任务仍然失败",
+                     "%s；重试已用完，今天不再自动跑" % error)
+
     save(state)
-    return {"status": state["last_result"]["status"], "date": date, "result": result}
+    return {"status": state["last_result"]["status"], "date": date,
+            "attempt": "retry" if is_retry else "scheduled", "result": result}
 
 
 def _agent_path(home: Path, label: str) -> Path:
