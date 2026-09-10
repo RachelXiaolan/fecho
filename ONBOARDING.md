@@ -37,6 +37,10 @@ fecho --version
 
 应该输出 `0.6.0`。
 
+**如果提示 `command not found: fecho`**，说明 PATH 没生效（新开的终端窗口、
+或者你用的是 bash 不是 zsh）。两个办法：重开一个终端窗口，或者直接用全路径 ——
+后面所有命令把 `fecho` 换成 `~/.fecho/venv/bin/fecho` 都能用。
+
 ---
 
 ## 二、初始化（1 条命令）
