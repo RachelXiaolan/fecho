@@ -11,13 +11,29 @@ import json
 import os
 import sys
 import uuid
+from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
 from . import __version__, config, db, service
 
-SESSION_ID = os.getenv("FECHO_SESSION_ID") or str(uuid.uuid4())
 PROTOCOL = "2024-11-05"
-_client_name = "unknown-agent"
+
+
+@dataclass
+class MCPContext:
+    """Connection-local identity used by every MCP transport."""
+
+    session_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    client_name: str = "unknown-agent"
+
+
+DEFAULT_CONTEXT = MCPContext(session_id=os.getenv("FECHO_SESSION_ID") or str(uuid.uuid4()))
+
+
+@dataclass
+class ToolReply:
+    text: str
+    structured: Dict[str, Any]
 
 
 def log(msg: str) -> None:
@@ -43,9 +59,27 @@ TOOLS = [
             "content": {"type": "string", "description": "做成了什么、进展到哪"},
             "issue": {"type": "string", "description": "可选。确定是哪个 issue 就直接写，如 AI-2541"},
             "task_id": {"type": "string", "description": "可选。强制挂到某个已有任务"},
-            "date": {"type": "string", "description": "可选，YYYY-MM-DD，补记往日时用"},
-            "agent": {"type": "string", "description": "可选，覆盖来源 agent 名"}},
+            "freeform": {"type": "boolean", "description": "明确不属于任何 issue；可覆盖项目目录绑定"},
+            "completion_status": {"type": "string", "enum": ["done", "wip", "blocked", "unknown"],
+                                  "description": "这项工作的完成状态；不确定就用 unknown"},
+            "kind": {"type": "string", "enum": ["progress", "pitfall", "decision"],
+                     "description": "内容类型，默认 progress"},
+            "date": {"type": "string", "description": "可选，YYYY-MM-DD，补记往日时用"}},
             "required": ["content"]},
+    },
+    {
+        "name": "correct_progress",
+        "description": (
+            "纠正一条已记录进展的正文或任务归属。使用 log_progress 返回的 update_id；"
+            "原地修订，不会制造重复记录。人工确认后的归属会锁定，不再被日报模型覆盖。"
+        ),
+        "inputSchema": {"type": "object", "properties": {
+            "update_id": {"type": "string", "description": "要纠正的进展 ID"},
+            "content": {"type": "string", "description": "可选，修正后的正文"},
+            "issue": {"type": "string", "description": "可选，修正到已同步的 issue"},
+            "task_id": {"type": "string", "description": "可选，修正到已有任务"},
+            "freeform": {"type": "boolean", "description": "修正为自由任务"}},
+            "required": ["update_id"]},
     },
     {
         "name": "catch_up",
@@ -58,6 +92,26 @@ TOOLS = [
         "name": "my_tasks",
         "description": "我现在有哪些任务在推进，各自最近一条进展是什么。",
         "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "complete_task",
+        "description": "把一个本地任务标为已完成；不会回写 Mobius。后续有新进展时会自动重开。",
+        "inputSchema": {"type": "object", "properties": {
+            "task_id": {"type": "string"}}, "required": ["task_id"]},
+    },
+    {
+        "name": "reopen_task",
+        "description": "重新打开一个已完成的本地任务。",
+        "inputSchema": {"type": "object", "properties": {
+            "task_id": {"type": "string"}}, "required": ["task_id"]},
+    },
+    {
+        "name": "merge_tasks",
+        "description": "把误拆出来的源任务合并进目标任务；进展原地移动并保留审计记录。",
+        "inputSchema": {"type": "object", "properties": {
+            "source_task_id": {"type": "string"},
+            "target_task_id": {"type": "string"}},
+            "required": ["source_task_id", "target_task_id"]},
     },
     {
         "name": "get_my_log",
@@ -104,6 +158,7 @@ TOOLS = [
 
 _METHOD_LABEL = {
     "explicit": "你点名了 issue",
+    "explicit-freeform": "你明确指定了自由任务",
     "mobius-auto": "自动配到 Mobius issue",
     "task-continue": "接着已有任务",
     "new-task": "新立了自由任务",
@@ -139,12 +194,16 @@ def _fmt_report(r: Dict[str, Any]) -> str:
     return "\n".join(out)
 
 
-def call_tool(name: str, args: Dict[str, Any]) -> str:
+def call_tool(name: str, args: Dict[str, Any], context: Optional[MCPContext] = None) -> Any:
+    context = context or DEFAULT_CONTEXT
     if name == "log_progress":
         res = service.record(
             args["content"], date=args.get("date"),
-            source_agent=args.get("agent") or _client_name, session_id=SESSION_ID,
-            issue=args.get("issue"), task_id=args.get("task_id"))
+            source_agent=context.client_name, session_id=context.session_id,
+            issue=args.get("issue"), task_id=args.get("task_id"),
+            freeform=bool(args.get("freeform")),
+            completion_status=args.get("completion_status", "unknown"),
+            content_kind=args.get("kind", "progress"))
         t, m = res["task"], res["match"]
         head = ("重复，未写入 → %s" if res["verdict"] == "duplicate" else "已记录 → **%s**") \
             % _task_line(t)
@@ -156,9 +215,41 @@ def call_tool(name: str, args: Dict[str, Any]) -> str:
             why = _METHOD_LABEL.get(m["method"], m["method"])
         lines = [head, "配对方式：%s" % why]
         if m.get("confidence") == "low":
-            lines.append('⚠️ 这条是猜的。不是同一件事的话，带 issue="AI-xxxx" 或 task_id 重记一次。')
+            lines.append("⚠️ 这条是猜的。不是同一件事的话，请用 correct_progress 原地纠正。")
+        lines.append("进展 ID：%s" % res["update_id"])
         lines.append("今天已推进 %d 个任务。" % res["today_task_count"])
-        return "\n".join(lines)
+        return ToolReply("\n".join(lines), {
+            "update_id": res["update_id"],
+            "task_id": t["task_id"],
+            "issue_key": t.get("issue_key"),
+            "match_method": m["method"],
+            "confidence": m.get("confidence", "high"),
+            "verdict": res["verdict"],
+            "date": res["date"],
+        })
+
+    if name == "correct_progress":
+        from . import store
+
+        kw: Dict[str, Any] = {}
+        if "issue" in args:
+            kw["issue_key"] = args["issue"]
+        if "task_id" in args:
+            kw["task_id"] = args["task_id"]
+        if "content" in args:
+            kw["content_md"] = args["content"]
+        if args.get("freeform"):
+            kw["freeform"] = True
+        result = store.correct_progress(args["update_id"], service.whoami(), **kw)
+        task = result["task"]
+        text = ("已原地修订" if result["changed"] else "无需修订") + " → **%s**" % _task_line(task)
+        return ToolReply(text, {
+            "changed": result["changed"],
+            "update_id": result["update_id"],
+            "task_id": task["task_id"],
+            "issue_key": task.get("issue_key"),
+            "assignment_locked": True,
+        })
 
     if name == "catch_up":
         c = service.catch_up(args.get("date"))
@@ -187,6 +278,24 @@ def call_tool(name: str, args: Dict[str, Any]) -> str:
             if t.get("last_progress"):
                 out.append("    最近：%s" % t["last_progress"].splitlines()[0])
         return "\n".join(out)
+
+    if name in ("complete_task", "reopen_task"):
+        result = (service.complete_task(args["task_id"])
+                  if name == "complete_task" else service.reopen_task(args["task_id"]))
+        task = result["task"]
+        label = "已完成" if name == "complete_task" else "已重新打开"
+        return ToolReply("%s → **%s**" % (label, _task_line(task)), {
+            "changed": result["changed"], "task_id": task["task_id"],
+            "status": task["status"], "issue_key": task.get("issue_key")})
+
+    if name == "merge_tasks":
+        result = service.merge_tasks(args["source_task_id"], args["target_task_id"])
+        task = result["task"]
+        return ToolReply("已合并 %d 条进展 → **%s**" % (
+            result["moved_updates"], _task_line(task)), {
+                "source_task_id": result["source_task_id"],
+                "target_task_id": result["target_task_id"],
+                "moved_updates": result["moved_updates"]})
 
     if name == "get_my_log":
         data = service.day(service.whoami(), args.get("date"))
@@ -268,14 +377,15 @@ def call_tool(name: str, args: Dict[str, Any]) -> str:
     raise RuntimeError("未知工具: %s" % name)
 
 
-def handle(msg: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    global _client_name
+def handle(msg: Dict[str, Any], context: Optional[MCPContext] = None) -> Optional[Dict[str, Any]]:
+    context = context or DEFAULT_CONTEXT
     method, mid = msg.get("method"), msg.get("id")
 
     if method == "initialize":
         info = (msg.get("params") or {}).get("clientInfo") or {}
-        _client_name = info.get("name") or _client_name
-        log("client=%s session=%s home=%s" % (_client_name, SESSION_ID[:8], config.HOME))
+        context.client_name = info.get("name") or context.client_name
+        log("client=%s session=%s home=%s" % (
+            context.client_name, context.session_id[:8], config.HOME))
         return {"jsonrpc": "2.0", "id": mid, "result": {
             "protocolVersion": (msg.get("params") or {}).get("protocolVersion", PROTOCOL),
             "capabilities": {"tools": {}},
@@ -290,9 +400,12 @@ def handle(msg: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if method == "tools/call":
         params = msg.get("params") or {}
         try:
-            text = call_tool(params.get("name"), params.get("arguments") or {})
-            return {"jsonrpc": "2.0", "id": mid,
-                    "result": {"content": [{"type": "text", "text": text}], "isError": False}}
+            reply = call_tool(params.get("name"), params.get("arguments") or {}, context)
+            text = reply.text if isinstance(reply, ToolReply) else reply
+            result = {"content": [{"type": "text", "text": text}], "isError": False}
+            if isinstance(reply, ToolReply):
+                result["structuredContent"] = reply.structured
+            return {"jsonrpc": "2.0", "id": mid, "result": result}
         except Exception as exc:
             log("tool error: %s" % exc)
             return {"jsonrpc": "2.0", "id": mid, "result": {
@@ -307,7 +420,8 @@ def handle(msg: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 def main() -> None:
     db.init()
     config.LOGS_DIR.mkdir(parents=True, exist_ok=True)
-    log("started pid=%d session=%s" % (os.getpid(), SESSION_ID[:8]))
+    context = MCPContext(session_id=os.getenv("FECHO_SESSION_ID") or str(uuid.uuid4()))
+    log("started pid=%d session=%s" % (os.getpid(), context.session_id[:8]))
     for line in sys.stdin:
         line = line.strip()
         if not line:
@@ -316,7 +430,7 @@ def main() -> None:
             msg = json.loads(line)
         except json.JSONDecodeError:
             continue
-        resp = handle(msg)
+        resp = handle(msg, context)
         if resp is not None:
             sys.stdout.write(json.dumps(resp, ensure_ascii=False) + "\n")
             sys.stdout.flush()

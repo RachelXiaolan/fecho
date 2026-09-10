@@ -12,9 +12,14 @@ import hashlib
 import json
 import re
 import uuid
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from . import config, db, llm, personas, pto, store
+
+
+REPORT_PROMPT_VERSION = "daily-v2-status-fields"
+VERIFY_PROMPT_VERSION = "assignment-v2-cache-safe"
 
 
 def _cjk_len(text: str) -> int:
@@ -28,9 +33,15 @@ def speaking_seconds(text: str) -> int:
 def fingerprint(tasks: List[Dict[str, Any]], persona: Dict[str, Any], pto_status: str) -> str:
     blob = json.dumps(
         {
-            "tasks": [[t["task_id"], [u["update_id"] for u in t["updates"]]] for t in tasks],
+            "tasks": [[t["task_id"], t.get("issue_key"), t.get("title"), t.get("status"),
+                       [[u["update_id"], u.get("revision", 1), u.get("content_hash"),
+                         u.get("task_id"), u.get("assignment_source"),
+                         u.get("assignment_locked", 0), u.get("completion_status", "unknown"),
+                         u.get("content_kind", "progress")] for u in t["updates"]]]
+                      for t in tasks],
             "persona": personas.fingerprint(persona),
             "pto": pto_status,
+            "prompt_version": REPORT_PROMPT_VERSION,
         },
         sort_keys=True,
     )
@@ -45,13 +56,16 @@ def _tasks_block(tasks: List[Dict[str, Any]]) -> str:
         head = "[任务 %d] %s（%s，%d 条进展，来自 %s）" % (
             i, label, "Mobius" if t["source"] == "mobius" else "无对应 issue",
             len(t["updates"]), "/".join(agents))
-        body = "\n".join("  - %s" % u["content_md"].strip().replace("\n", " ")
+        body = "\n".join("  - [status=%s kind=%s] %s" % (
+                             u.get("completion_status", "unknown"),
+                             u.get("content_kind", "progress"),
+                             u["content_md"].strip().replace("\n", " "))
                          for u in t["updates"])
         out.append(head + "\n" + body)
     return "\n\n".join(out)
 
 
-STATUS_ICON = {"done": "✅", "wip": "⭕️", "blocked": "❌"}
+STATUS_ICON = {"done": "✅", "wip": "⭕️", "blocked": "❌", "unknown": "•"}
 
 # 标题里这些后缀对短名没信息量，砍掉
 _TITLE_TRIM = re.compile(r"[（(【\[].*?[）)】\]]|[:：].*$")
@@ -116,20 +130,23 @@ def _daily_prompt(author, date, tasks, persona) -> List[dict]:
         lines = []
         for u in t["updates"]:
             k = (u.get("meta") or {}).get("kind")
-            lines.append("  - %s%s" % (hint.get(k, ""),
-                                       u["content_md"].strip().replace("\n", " ")))
+            kind = u.get("content_kind") or k or "progress"
+            status = u.get("completion_status") or "unknown"
+            lines.append("  - [status=%s kind=%s] %s%s" % (
+                status, kind, hint.get(kind, ""),
+                u["content_md"].strip().replace("\n", " ")))
         blocks.append("[%d]\n%s" % (i, "\n".join(lines)))
     user = "日期：%s\n\n今天推进了 %d 个任务：\n\n%s" % (date, len(tasks), "\n\n".join(blocks))
     return [{"role": "system", "content": sys}, {"role": "user", "content": user}]
 
 
 def _split_status(text: str) -> Tuple[str, str]:
-    """从 `status | 正文` 里取出状态；没写状态就当作已完成。"""
+    """从 `status | 正文` 里取出状态；没写时保持中性，不冒充已完成。"""
     head, sep, rest = text.partition("|")
     key = head.strip().lower()
     if sep and key in STATUS_ICON:
         return key, rest.strip()
-    return "done", text.strip()
+    return "unknown", text.strip()
 
 
 def _parse_daily(raw: str, n_tasks: int) -> Tuple[Dict[int, Dict[str, Any]], List[Tuple[Optional[int], str]]]:
@@ -179,15 +196,25 @@ def _assemble_daily(date, tasks, items, todos, persona) -> str:
     header = persona.get("daily_header", "{date_slash} 工作日志").format(
         date_slash=date.replace("-", "/"), date=date,
         display_name=persona.get("display_name", ""))
-    out = ["# %s" % header, "", "## Done", ""]
-    for i, t in enumerate(tasks, 1):
-        it = items.get(i) or {}
-        icon = STATUS_ICON.get(it.get("status", "done"), STATUS_ICON["done"])
-        head = _link(t, short_name(t, persona), persona)
-        summary = it.get("summary", "")
-        out.append("%d. %s %s%s" % (i, icon, head, "：" + summary if summary else ""))
-        for status, text in it.get("bullets", []):
-            out.append("    * %s %s" % (STATUS_ICON.get(status, STATUS_ICON["done"]), text))
+    out = ["# %s" % header]
+    sections = (("done", "Done"), ("wip", "In Progress"),
+                ("blocked", "Blocked"), ("unknown", "Updates"))
+    for status_key, label in sections:
+        indexes = [i for i in range(1, len(tasks) + 1)
+                   if (items.get(i) or {}).get("status", "unknown") == status_key]
+        if not indexes:
+            continue
+        out += ["", "## %s" % label, ""]
+        for i in indexes:
+            t = tasks[i - 1]
+            it = items.get(i) or {}
+            icon = STATUS_ICON[status_key]
+            head = _link(t, short_name(t, persona), persona)
+            summary = it.get("summary", "")
+            out.append("%d. %s %s%s" % (i, icon, head, "：" + summary if summary else ""))
+            for bullet_status, text in it.get("bullets", []):
+                out.append("    * %s %s" % (
+                    STATUS_ICON.get(bullet_status, STATUS_ICON["unknown"]), text))
     if todos:
         out += ["", "## To do", ""]
         for n, (idx, text) in enumerate(todos, 1):
@@ -227,17 +254,62 @@ def _fallback_daily(author, date, tasks, persona) -> str:
     """LLM 挂了也要出同样结构的稿——链接、短名、图标照拼，内容用进展原文顶上。"""
     items = {}
     for i, t in enumerate(tasks, 1):
-        ups = [u["content_md"].strip().splitlines()[0] for u in t["updates"]]
-        items[i] = {"status": "done", "summary": ups[0] if ups else "",
-                    "bullets": [("done", u) for u in ups[1:]]}
+        updates = t["updates"]
+        ups = [u["content_md"].strip().splitlines()[0] for u in updates]
+        statuses = [u.get("completion_status", "unknown") for u in updates]
+        if "blocked" in statuses:
+            task_status = "blocked"
+        elif "wip" in statuses:
+            task_status = "wip"
+        elif statuses and all(s == "done" for s in statuses):
+            task_status = "done"
+        else:
+            task_status = "unknown"
+        items[i] = {"status": task_status, "summary": ups[0] if ups else "",
+                    "bullets": [(statuses[n], u) for n, u in enumerate(ups[1:], 1)]}
     return (_assemble_daily(date, tasks, items, [], persona)
             + "\n> 本篇为兜底稿（LLM 不可用），内容取自进展原文，未经整理。\n")
 
 
-def _fallback_voice(author, date, tasks, persona, hi: int) -> str:
-    items = [t["title"].rstrip("。")[:36] for t in tasks[:4]]
-    text = "今天主要推进了这么几件事：%s。以上就是今天的进展。" % "；".join(items)
-    return _clip(text, hi) if _cjk_len(text) > hi else text
+def _fallback_voice(author, date, tasks, persona, lo: int, hi: int) -> str:
+    """模型不可用时也交付可直接朗读、且满足配置区间的确定性口播稿。"""
+    paragraphs = ["今天的工作按已经记录的事实整理，主要有下面这些进展。"]
+    labels = {"done": "已经完成", "wip": "仍在推进", "blocked": "目前受阻",
+              "unknown": "当前状态尚未确认"}
+    for task in tasks[:4]:
+        updates = task.get("updates") or []
+        snippets = [u.get("content_md", "").strip().splitlines()[0]
+                    for u in updates if u.get("content_md")]
+        statuses = [u.get("completion_status", "unknown") for u in updates]
+        if "blocked" in statuses:
+            status = "blocked"
+        elif "wip" in statuses:
+            status = "wip"
+        elif statuses and all(value == "done" for value in statuses):
+            status = "done"
+        else:
+            status = "unknown"
+        detail = "；".join(snippets[:3]) or task.get("title", "这项工作")
+        paragraphs.append("关于%s，%s。具体记录是：%s。" % (
+            task.get("title", "这项工作").rstrip("。")[:36], labels[status], detail))
+
+    paragraphs.append("以上就是今天已经确认的工作进展，后续有新结果再继续更新。")
+    safeguards = [
+        "这份口播只根据今天已经记录的事实整理，不补充尚未发生或尚未确认的内容。",
+        "已经完成的部分按完成说明，仍在推进和受阻的部分保留当前状态，避免把计划写成成果。",
+        "如果后续补充了新进展、修正了任务归属或调整了状态，再重新生成一版即可。",
+        "目前先以这份记录作为今天的工作基线，方便明天开工时继续跟进。",
+        "回顾时重点看结果、阻塞原因和已经做出的决定，不需要回放完整对话。",
+        "没有记录到的细节保持空白，宁可少写，也不把推测混入正式工作日志。",
+    ]
+    text = "\n\n".join(paragraphs)
+    for sentence in safeguards:
+        if _cjk_len(text) >= lo:
+            break
+        text += "\n\n" + sentence
+    if _cjk_len(text) > hi:
+        text = _clip(text, hi)
+    return text
 
 
 def _clip(text: str, hi: int) -> str:
@@ -271,6 +343,57 @@ _VERIFY_PROMPT = """下面是同一个人一天里记下的工作进展。请判
 """
 
 
+def _verification_fingerprint(rows: List[Dict[str, Any]],
+                              issues: List[Dict[str, Any]]) -> str:
+    payload = {
+        "prompt": VERIFY_PROMPT_VERSION,
+        "model": config.LLM_MODEL,
+        "rows": [[r["update_id"], r.get("revision", 1), r["content_md"],
+                  r.get("issue_key"), r.get("assignment_locked", 0)] for r in rows],
+        "issues": [[i["issue_key"], i.get("title"), i.get("state"), i.get("updated_at")]
+                   for i in issues],
+    }
+    blob = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _issue_cache_error(issues: List[Dict[str, Any]]) -> Optional[str]:
+    if not issues:
+        return "Mobius issue 缓存为空，跳过交叉验证；请先 sync_issues"
+    try:
+        latest = max(datetime.fromisoformat(i["synced_at"].replace("Z", "+00:00"))
+                     for i in issues if i.get("synced_at"))
+        if latest.tzinfo is None:
+            latest = latest.replace(tzinfo=timezone.utc)
+        age_hours = (datetime.now(timezone.utc) - latest.astimezone(timezone.utc)).total_seconds() / 3600
+    except (ValueError, TypeError):
+        return "Mobius issue 缓存时间无效，视为已过期；请先 sync_issues"
+    if age_hours > config.MOBIUS_CACHE_MAX_AGE_HOURS:
+        return "Mobius issue 缓存已过期（%.1f 小时），跳过交叉验证；请先 sync_issues" % age_hours
+    return None
+
+
+def _verification_cached(author: str, date: str, fp: str) -> bool:
+    with db.cursor() as conn:
+        row = conn.execute(
+            "SELECT fingerprint FROM assignment_verifications WHERE author=? AND date=?",
+            (author, date),
+        ).fetchone()
+    return bool(row and row["fingerprint"] == fp)
+
+
+def _cache_verification(author: str, date: str, fp: str) -> None:
+    with db.cursor() as conn:
+        conn.execute(
+            "INSERT INTO assignment_verifications"
+            " (author,date,fingerprint,model,prompt_version,verified_at) VALUES (?,?,?,?,?,?)"
+            " ON CONFLICT(author,date) DO UPDATE SET fingerprint=excluded.fingerprint,"
+            " model=excluded.model,prompt_version=excluded.prompt_version,"
+            " verified_at=excluded.verified_at",
+            (author, date, fp, config.LLM_MODEL, VERIFY_PROMPT_VERSION, store.now_iso()),
+        )
+
+
 def verify_assignments(author: str, date: str) -> Dict[str, Any]:
     """把当天所有进展的归属重判一次，不管它当初是怎么归的。
 
@@ -280,16 +403,25 @@ def verify_assignments(author: str, date: str) -> Dict[str, Any]:
     """
     from . import mobius
 
-    out: Dict[str, Any] = {"checked": 0, "changed": [], "error": None}
+    out: Dict[str, Any] = {"checked": 0, "changed": [], "error": None, "cached": False}
     if not config.llm_configured():
         out["error"] = "没配 LLM，跳过交叉验证"
         return out
 
-    rows = db.day_updates(author, date)
+    # 人工在 Review 页确认/改过的归属已经是最终判断，模型不得覆盖。
+    rows = [r for r in db.day_updates(author, date) if not r.get("assignment_locked")]
     if not rows:
         return out
     issues = mobius.cached_issues(author)
+    cache_error = _issue_cache_error(issues)
+    if cache_error:
+        out["error"] = cache_error
+        return out
     valid = {i["issue_key"] for i in issues}
+    before_fp = _verification_fingerprint(rows, issues)
+    if _verification_cached(author, date, before_fp):
+        out["cached"] = True
+        return out
 
     listing = ("候选 issue（只能从这里选）：\n"
                + "\n".join("- %s：%s" % (i["issue_key"], i["title"]) for i in issues)
@@ -327,6 +459,10 @@ def verify_assignments(author: str, date: str) -> Dict[str, Any]:
                 "from": have or "自由任务", "to": want or "自由任务",
                 "was": row["match_method"],
             })
+    # reassign 会递增 revision/改变 task，缓存最终状态的指纹，下一次相同输入零调用。
+    if verdicts:
+        final_rows = [r for r in db.day_updates(author, date) if not r.get("assignment_locked")]
+        _cache_verification(author, date, _verification_fingerprint(final_rows, issues))
     return out
 
 
@@ -422,11 +558,29 @@ def generate(author: str, date: str, force: bool = False,
                 voice = _clip(voice, hi)
                 warnings.append("重试后仍 %d 字，已按句号边界裁剪至 %d 字" % (n, _cjk_len(voice)))
             elif n < lo:
-                warnings.append("重试后 %d 字，短于目标下限，按原样输出" % n)
+                # 真实模型复验里第二版仍只有 173 字。再给一次“结构性展开”机会，
+                # 仍不要求模型数字数，避免推理模型把预算耗在计数上。
+                voice = llm.chat(_voice_prompt(
+                    author, date, daily, persona, min(4, items + 1),
+                    feedback="仍然太短。把每件事的结果、关键做法和影响各讲一句，"
+                             "结尾补充下一步，保持自然口语。"),
+                    temperature=0.4, max_tokens=4000)
+                n = _cjk_len(voice)
+                if n > hi:
+                    voice = _clip(voice, hi)
+                    warnings.append("二次重试后 %d 字，已按句号边界裁剪至 %d 字"
+                                    % (n, _cjk_len(voice)))
+                elif n < lo:
+                    warnings.append("二次重试后仍 %d 字，短于目标下限，按原样输出" % n)
         voice_gen = "llm"
     except llm.LLMError as exc:
         warnings.append("口播稿 LLM 失败（%s），已输出兜底稿" % str(exc)[:160])
-        voice = _fallback_voice(author, date, tasks, persona, hi)
+        voice = _fallback_voice(author, date, tasks, persona, lo, hi)
+        voice_gen = "fallback"
+
+    if _cjk_len(voice) < lo:
+        warnings.append("口播稿仍短于目标下限，已切换到满足区间的确定性兜底稿")
+        voice = _fallback_voice(author, date, tasks, persona, lo, hi)
         voice_gen = "fallback"
 
     generator = daily_gen if daily_gen == voice_gen else "%s+%s" % (daily_gen, voice_gen)
@@ -436,9 +590,9 @@ def generate(author: str, date: str, force: bool = False,
         warnings.append("当日为 PTO，日报已降级标注")
 
     _persist(author, date, "daily", daily, fp, daily_gen,
-             model if daily_gen == "llm" else None, n_updates)
+             model if daily_gen == "llm" else None, n_updates, warnings)
     _persist(author, date, "voice", voice, fp, voice_gen,
-             model if voice_gen == "llm" else None, n_updates)
+             model if voice_gen == "llm" else None, n_updates, warnings)
     paths = _write_files(author, date, daily, voice, persona)
     _stamp_pto(author, date, pto_status)
 
@@ -462,7 +616,8 @@ def _stamp_pto(author: str, date: str, status: str) -> None:
                      (status, author, date))
 
 
-def _persist(author, date, kind, content, fp, generator, model, n) -> None:
+def _persist(author, date, kind, content, fp, generator, model, n,
+             warnings: Optional[List[str]] = None) -> None:
     prev = db.get_report(author, date, kind)
     with db.cursor() as conn:
         if prev:
@@ -472,13 +627,15 @@ def _persist(author, date, kind, content, fp, generator, model, n) -> None:
                 (author, date, kind, prev["content_md"], prev["generator"], prev["created_at"]))
         conn.execute(
             "INSERT INTO reports (report_id,author,date,kind,content_md,fingerprint,"
-            "generator,model,entry_count,char_count,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)"
+            "generator,model,entry_count,char_count,warnings,created_at)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)"
             " ON CONFLICT(author,date,kind) DO UPDATE SET content_md=excluded.content_md,"
             " fingerprint=excluded.fingerprint, generator=excluded.generator,"
             " model=excluded.model, entry_count=excluded.entry_count,"
-            " char_count=excluded.char_count, created_at=excluded.created_at",
+            " char_count=excluded.char_count, warnings=excluded.warnings,"
+            " created_at=excluded.created_at",
             (str(uuid.uuid4()), author, date, kind, content, fp, generator, model,
-             n, _cjk_len(content), store.now_iso()))
+             n, _cjk_len(content), json.dumps(warnings or [], ensure_ascii=False), store.now_iso()))
 
 
 def _write_files(author, date, daily, voice, persona) -> Dict[str, str]:

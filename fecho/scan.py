@@ -21,15 +21,16 @@ MCP server 看不见上下文（协议上就不可能），能观察对话的只
 一天从早上切断）。
 """
 import json
+import glob
+import hashlib
 import re
+import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from . import config, db, scope, store
 from .match import ISSUE_RE
-
-CLAUDE_PROJECTS = Path.home() / ".claude" / "projects"
 
 # 单次请求的输入上限（字符）。实测 24K tokens 打推理模型会超时。
 CHUNK_CHARS = int(config.get("scan_chunk_chars", "FECHO_SCAN_CHUNK_CHARS", 18000))
@@ -61,6 +62,7 @@ PROMPT = """你在读一段「人和 coding agent 一起干活」的对话记录
 - 真的都不属于就写 `-`，系统会归到自由任务。**宁可写 `-` 也不要硬凑**——
   归错了下游的日报全跟着错，归不上只是多一个自由任务。
 - 只能从下面给的列表里选，不许自己编 issue 号。
+- 如果这段没有任何已经完成、推进或明确踩坑的内容，只输出一行 `NONE`。
 
 {issues}
 
@@ -140,7 +142,78 @@ def _text_of(rec: Dict[str, Any]) -> str:
     return "" if _BOILERPLATE.search(body) else body
 
 
-def collect(days: int = 1) -> Tuple[Dict[Tuple[str, str, str], List[Dict]],
+def discover_transcripts() -> List[Dict[str, Any]]:
+    """按配置发现各宿主会话文件；路径只决定适配器，不读取内容。"""
+    found: List[Dict[str, Any]] = []
+    seen = set()
+    for producer, patterns in config.SCAN_SOURCES.items():
+        for pattern in patterns:
+            for value in glob.glob(str(Path(pattern).expanduser()), recursive=True):
+                path = Path(value)
+                key = (producer, str(path))
+                if path.is_file() and key not in seen:
+                    seen.add(key)
+                    found.append({"producer_agent": producer, "path": path})
+    return sorted(found, key=lambda x: (x["producer_agent"], str(x["path"])))
+
+
+def _parts_text(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return ""
+    return "\n".join(
+        str(p.get("text", "")) for p in content
+        if isinstance(p, dict) and p.get("type") in ("text", "input_text", "output_text")
+    )
+
+
+def _normalized_records(source: Dict[str, Any]) -> Tuple[str, List[Dict[str, Any]]]:
+    """把 Claude/Codex/Hermes 的 JSONL 收敛成同一种最小事件结构。"""
+    producer, path = source["producer_agent"], source["path"]
+    raw_rows = list(_iter_records(path))
+    if producer == "claude-code":
+        session_id = path.stem
+        out = []
+        for rec in raw_rows:
+            if rec.get("type") not in ("user", "assistant"):
+                continue
+            out.append({"timestamp": rec.get("timestamp"), "role": rec.get("type"),
+                        "cwd": rec.get("cwd") or path.parent.name, "text": _text_of(rec)})
+        return session_id, out
+
+    cwd, sid = "", path.stem
+    out = []
+    for rec in raw_rows:
+        payload = rec.get("payload") or {}
+        if rec.get("type") == "session_meta":
+            cwd = payload.get("cwd") or cwd
+            sid = payload.get("id") or payload.get("session_id") or sid
+            continue
+        if rec.get("type") == "turn_context":
+            cwd = payload.get("cwd") or cwd
+            continue
+
+        role, content = None, None
+        if rec.get("type") == "response_item" and payload.get("type") == "message":
+            role, content = payload.get("role"), payload.get("content")
+        elif isinstance(rec.get("message"), dict):
+            role = rec["message"].get("role") or rec.get("type")
+            content = rec["message"].get("content")
+        else:  # Hermes/OpenAI 风格：顶层 role + content
+            role, content = rec.get("role"), rec.get("content")
+        if role not in ("user", "assistant"):
+            continue
+        body = _parts_text(content)
+        if _BOILERPLATE.search(body):
+            body = ""
+        out.append({"timestamp": rec.get("timestamp") or rec.get("created_at"),
+                    "role": role, "cwd": rec.get("cwd") or payload.get("cwd") or cwd,
+                    "text": body})
+    return "%s:%s" % (producer, sid), out
+
+
+def collect(days: int = 1) -> Tuple[Dict[Tuple[str, str, str, str], List[Dict]],
                                     Dict[str, set], Dict[str, List[str]]]:
     """返回 (分组, 被跳过的目录, 每个会话的最新时间戳)。
 
@@ -156,12 +229,13 @@ def collect(days: int = 1) -> Tuple[Dict[Tuple[str, str, str], List[Dict]],
     stamps: Dict[str, List[str]] = {}   # session -> 本轮看到的所有时间戳
     verdicts: Dict[str, str] = {}
 
-    for path in sorted(CLAUDE_PROJECTS.glob("*/*.jsonl")):
-        session_id = path.stem
+    for source in discover_transcripts():
+        producer = source["producer_agent"]
+        session_id, records = _normalized_records(source)
         mark = get_mark(session_id)
-        for rec in _iter_records(path):
+        for rec in records:
             ts = rec.get("timestamp")
-            if not ts or rec.get("type") not in ("user", "assistant"):
+            if not ts:
                 continue
             if mark and ts <= mark:            # 水位线之前的，已经处理过
                 continue
@@ -169,7 +243,7 @@ def collect(days: int = 1) -> Tuple[Dict[Tuple[str, str, str], List[Dict]],
             if when < floor:                   # 太老的不追，避免首次扫描炸开
                 continue
 
-            cwd = rec.get("cwd") or path.parent.name
+            cwd = rec.get("cwd") or source["path"].parent.name
             v = verdicts.get(cwd)
             if v is None:
                 v = verdicts[cwd] = scope.classify(cwd)[0]
@@ -179,14 +253,14 @@ def collect(days: int = 1) -> Tuple[Dict[Tuple[str, str, str], List[Dict]],
                 stamps.setdefault(session_id, []).append(ts)
                 continue
 
-            body = _text_of(rec).strip()
+            body = (rec.get("text") or "").strip()
             if not body:
                 stamps.setdefault(session_id, []).append(ts)
                 continue
 
-            key = (session_id, cwd, when.strftime("%Y-%m-%d"))
+            key = (producer, session_id, cwd, when.strftime("%Y-%m-%d"))
             groups.setdefault(key, []).append(
-                {"at": when, "ts": ts, "role": rec["type"], "text": body})
+                {"at": when, "ts": ts, "role": rec["role"], "text": body})
             stamps.setdefault(session_id, []).append(ts)
 
     return groups, skipped, {k: sorted(v) for k, v in stamps.items()}
@@ -248,6 +322,43 @@ def parse_entries(raw: str, valid_keys: Optional[set] = None) -> List[Dict[str, 
     return out
 
 
+def _parse_response(raw: str, valid_keys: set) -> List[Dict[str, str]]:
+    cleaned = re.sub(r"^```\w*\s*|\s*```$", "", (raw or "").strip())
+    if cleaned.upper() == "NONE":
+        return []
+    entries = parse_entries(cleaned, valid_keys)
+    if not entries:
+        raise ValueError("模型输出不符合约定格式，未推进扫描水位线")
+    return entries
+
+
+def _scan_run_start(author: str, producer: str, session_id: str, project: str,
+                    date: str, rows: List[Dict[str, Any]], chunks: int) -> str:
+    run_id = str(uuid.uuid4())
+    with db.cursor() as conn:
+        conn.execute(
+            "INSERT INTO scan_runs (run_id,author,producer_agent,session_id,project,date,"
+            "group_start_ts,group_end_ts,status,chunks,started_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (run_id, author, producer, session_id, project, date,
+             min(r["ts"] for r in rows), max(r["ts"] for r in rows), "running", chunks,
+             store.now_iso()),
+        )
+    return run_id
+
+
+def _scan_run_finish(run_id: str, status: str, entries: int = 0,
+                     error: Optional[str] = None) -> None:
+    with db.cursor() as conn:
+        conn.execute("UPDATE scan_runs SET status=?, entries=?, error=?, finished_at=?"
+                     " WHERE run_id=?", (status, entries, error, store.now_iso(), run_id))
+
+
+def _event_key(producer: str, session_id: str, part: List[Dict[str, Any]],
+               item_index: int) -> str:
+    seed = "|".join((producer, session_id, part[0]["ts"], part[-1]["ts"], str(item_index)))
+    return "scan:" + hashlib.sha256(seed.encode("utf-8")).hexdigest()
+
+
 # ---------- 主流程 ----------
 
 def scan(days: int = 1, dry_run: bool = False, author: Optional[str] = None) -> Dict[str, Any]:
@@ -276,10 +387,12 @@ def scan(days: int = 1, dry_run: bool = False, author: Optional[str] = None) -> 
     valid_keys = {i["issue_key"] for i in open_issues}
 
     blocked: Dict[str, str] = {}     # session_id -> 失败组里最早的时间戳
-    for (session_id, project, date), rows in sorted(groups.items()):
+    for (producer, session_id, project, date), rows in sorted(groups.items()):
         convo = render(rows)
         bound = match.project_binding(project)
-        g = {"session": session_id[:8], "project": project, "date": date,
+        g = {"session": session_id[:8], "session_id": session_id,
+             "producer_agent": producer, "ingestion_method": "transcript-scan",
+             "project": project, "date": date,
              "messages": len(rows), "tokens_in": int(len(convo) / 1.5),
              "bound": bound, "entries": []}
         result["tokens_in"] += g["tokens_in"]
@@ -292,13 +405,18 @@ def scan(days: int = 1, dry_run: bool = False, author: Optional[str] = None) -> 
         # 一天的活本来就是分段发生的，切开反而更贴近事实。
         chunks = _split(rows, CHUNK_CHARS)
         g["chunks"] = len(chunks)
-        raw_parts, failed = [], False
+        run_id = _scan_run_start(author, producer, session_id, project, date, rows, len(chunks))
+        extracted: List[Tuple[Dict[str, str], str]] = []
+        failed = False
         for part in chunks:
             try:
-                raw_parts.append(llm.chat(
+                raw = llm.chat(
                     [{"role": "user", "content": _prompt(open_issues) + render(part)}],
-                    temperature=0.3, max_tokens=4000))
-            except llm.LLMError as exc:
+                    temperature=0.1, max_tokens=4000)
+                parsed = _parse_response(raw, valid_keys)
+                for item_index, entry in enumerate(parsed, 1):
+                    extracted.append((entry, _event_key(producer, session_id, part, item_index)))
+            except (llm.LLMError, ValueError) as exc:
                 g["error"] = str(exc)[:200]
                 failed = True
                 break
@@ -309,14 +427,21 @@ def scan(days: int = 1, dry_run: bool = False, author: Optional[str] = None) -> 
             # 记下这组最早的时间戳，稍后把该会话的水位线卡在它之前。
             first = min(r["ts"] for r in rows)
             blocked[session_id] = min(blocked.get(session_id, first), first)
+            _scan_run_finish(run_id, "failed", error=g["error"])
+            result["ok"] = False
             continue
 
-        for e in parse_entries("\n".join(raw_parts), valid_keys):
+        for e, source_event_key in extracted:
             rec = store.record_progress(
-                author, e["content"], date=date, source_agent="scan",
+                author, e["content"], date=date, source_agent=producer,
+                ingestion_method="transcript-scan",
+                completion_status="done" if e["kind"] in ("done", "decision") else "unknown",
+                content_kind=e["kind"] if e["kind"] in ("pitfall", "decision") else "progress",
                 session_id=session_id, project=project,
                 issue=e.get("issue"),        # 模型判的归属，当确定信号用
-                meta={"kind": e["kind"], "source": "transcript"},
+                source_event_key=source_event_key,
+                meta={"kind": e["kind"], "source": "transcript",
+                      "ingestion_method": "transcript-scan"},
             )
             g["entries"].append({
                 "content": e["content"], "kind": e["kind"],
@@ -325,6 +450,7 @@ def scan(days: int = 1, dry_run: bool = False, author: Optional[str] = None) -> 
             })
             if rec["verdict"] != "duplicate":
                 result["recorded"] += 1
+        _scan_run_finish(run_id, "succeeded", entries=len(g["entries"]))
         result["groups"].append(g)
 
     # 水位线只在真写入之后推进——dry-run 不该让下次扫描漏掉这段。
@@ -338,7 +464,7 @@ def scan(days: int = 1, dry_run: bool = False, author: Optional[str] = None) -> 
             if not usable:
                 continue                     # 整个会话都卡在失败组里，水位线不动
             n = sum(len(g["entries"]) for g in result["groups"]
-                    if g["session"] == session_id[:8])
+                    if g.get("session_id") == session_id)
             set_mark(session_id, usable[-1], n)
         if blocked:
             result["retry_next_time"] = sorted(blocked)

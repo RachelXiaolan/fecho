@@ -12,6 +12,8 @@ import shutil
 import sys
 import tempfile
 import unittest
+from pathlib import Path
+from unittest import mock
 
 TMP = tempfile.mkdtemp(prefix="fecho-test-")
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -63,15 +65,20 @@ def seed_issues(author="t"):
         for i in ISSUES:
             c.execute("INSERT INTO mobius_issues (issue_key,author,title,state,url,"
                       "updated_at,synced_at,raw) VALUES (?,?,?,?,?,?,?,?)",
-                      (i["issue_key"], author, i["title"], "In Progress", "", "", "now", "{}"))
+                      (i["issue_key"], author, i["title"], "In Progress", "", "",
+                       store.now_iso(), "{}"))
 
 
 def reset():
     db.init()
     with db.cursor() as c:
+        c.execute("DELETE FROM task_events")
+        c.execute("DELETE FROM assignment_events")
         c.execute("DELETE FROM updates")
         c.execute("DELETE FROM tasks")
         c.execute("DELETE FROM reports")
+        c.execute("DELETE FROM scan_runs")
+        c.execute("DELETE FROM assignment_verifications")
     seed_issues()
 
 
@@ -134,6 +141,18 @@ class TestMatching(unittest.TestCase):
         self.assertEqual(b["match"]["method"], "explicit")
         self.assertEqual(b["task"]["issue_key"], "AI-2460")
 
+    def test_invalid_calendar_date_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "有效日期"):
+            store.record_progress("t", "一条进展", date="2030-99-99")
+
+    def test_unknown_explicit_issue_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "不在已同步的 Mobius issue"):
+            store.record_progress("t", "一条进展", date=D, issue="AI-999999")
+
+    def test_unknown_issue_mentioned_in_content_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "不在已同步的 Mobius issue"):
+            store.record_progress("t", "完成了 AI-999999", date=D)
+
 
 class TestNoSemanticGuessing(unittest.TestCase):
     """真实翻车：闲鱼选品的内容被配进「写一个提交工作日志的系统」，唯一的共同点
@@ -173,6 +192,16 @@ class TestScanDoesNotCascade(unittest.TestCase):
                                   session_id="s1", source_agent="scan")
         b = store.record_progress("t", "闲鱼那边抓了十六个商品的详情", date=D,
                                   session_id="s1", source_agent="scan")
+        self.assertNotEqual(b["task"]["task_id"], a["task"]["task_id"])
+        self.assertEqual(b["match"]["method"], "new-task")
+
+    def test_named_scan_producer_does_not_inherit_session_task(self):
+        a = store.record_progress(
+            "t", "开始做 AI-2541 的工作日志系统", date=D, session_id="codex:s1",
+            source_agent="codex", ingestion_method="transcript-scan")
+        b = store.record_progress(
+            "t", "闲鱼那边抓了十六个商品的详情", date=D, session_id="codex:s1",
+            source_agent="codex", ingestion_method="transcript-scan")
         self.assertNotEqual(b["task"]["task_id"], a["task"]["task_id"])
         self.assertEqual(b["match"]["method"], "new-task")
 
@@ -273,6 +302,25 @@ class TestDedupeKeepsData(unittest.TestCase):
         tasks = db.day_tasks("t", D)
         self.assertEqual(sum(len(t["updates"]) for t in tasks), 2)
 
+    def test_cli_dedupe_finds_named_transcript_producers(self):
+        from argparse import Namespace
+        from fecho import cli
+
+        a = store.record_progress(
+            "t", "反向链路 catch_up 做完了，agent 开工时拉回昨日日报", date=D,
+            issue="AI-2541", source_agent="codex", ingestion_method="transcript-scan")
+        b = store.record_progress(
+            "t", "catch_up 反向链路做完，agent 开工时拉回昨天的日报", date=D,
+            issue="AI-2541", source_agent="codex", ingestion_method="transcript-scan")
+        with db.cursor() as conn:
+            conn.execute("UPDATE updates SET status='active' WHERE update_id=?", (b["update_id"],))
+        with contextlib.redirect_stdout(__import__("io").StringIO()):
+            cli.cmd_dedupe(Namespace(date=D, apply=True))
+        with db.cursor() as conn:
+            status = conn.execute("SELECT status FROM updates WHERE update_id=?",
+                                  (b["update_id"],)).fetchone()["status"]
+        self.assertEqual(status, "superseded")
+
 
 class TestCrossValidation(unittest.TestCase):
     """出稿前把归属重判一次。连 agent 明确填的 issue 号也要重判——那同样是模型的
@@ -325,6 +373,69 @@ class TestCrossValidation(unittest.TestCase):
         rows = {u["update_id"]: u for u in db.day_updates("t", D)}
         self.assertEqual(rows[r["update_id"]]["issue_key"], "AI-2541")
 
+    def test_human_correction_updates_the_same_row_and_writes_audit_event(self):
+        r = store.record_progress("t", "闲鱼抓了十六个商品详情", date=D, issue="AI-2541")
+        changed = store.correct_progress(
+            r["update_id"], "t", issue_key="AI-2224",
+            content_md="闲鱼抓取并整理了十六个商品详情")
+
+        self.assertTrue(changed["changed"])
+        rows = db.list_updates(date=D, author="t")
+        self.assertEqual(len(rows), 1, "纠错必须原地修订，不能靠重记制造重复进展")
+        self.assertEqual(rows[0]["update_id"], r["update_id"])
+        self.assertEqual(rows[0]["content_md"], "闲鱼抓取并整理了十六个商品详情")
+        self.assertEqual(rows[0]["assignment_source"], "human")
+        self.assertEqual(rows[0]["assignment_locked"], 1)
+        self.assertEqual(rows[0]["revision"], 2)
+        with db.cursor() as conn:
+            event = conn.execute(
+                "SELECT * FROM assignment_events WHERE update_id=?", (r["update_id"],)
+            ).fetchone()
+        self.assertEqual(event["from_issue_key"], "AI-2541")
+        self.assertEqual(event["to_issue_key"], "AI-2224")
+
+    def test_human_correction_is_not_overwritten_by_llm_verification(self):
+        r = store.record_progress("t", "闲鱼抓了十六个商品详情", date=D, issue="AI-2541")
+        store.correct_progress(r["update_id"], "t", issue_key="AI-2224")
+        with mock_llm("1 | AI-2541"):
+            res = digest.verify_assignments("t", D)
+        self.assertEqual(res["checked"], 0, "人工锁定的归属不应再交给模型重判")
+        rows = {u["update_id"]: u for u in db.day_updates("t", D)}
+        self.assertEqual(rows[r["update_id"]]["issue_key"], "AI-2224")
+
+    def test_empty_issue_cache_skips_verification_without_erasing_assignment(self):
+        r = store.record_progress("t", "配对引擎写完了", date=D, issue="AI-2541")
+        with db.cursor() as conn:
+            conn.execute("DELETE FROM mobius_issues WHERE author='t'")
+        with mock.patch.object(config, "llm_configured", return_value=True), \
+             mock.patch("fecho.llm.chat") as chat:
+            res = digest.verify_assignments("t", D)
+        chat.assert_not_called()
+        self.assertIn("缓存为空", res["error"])
+        rows = {u["update_id"]: u for u in db.day_updates("t", D)}
+        self.assertEqual(rows[r["update_id"]]["issue_key"], "AI-2541")
+
+    def test_stale_issue_cache_skips_verification(self):
+        store.record_progress("t", "配对引擎写完了", date=D, issue="AI-2541")
+        with db.cursor() as conn:
+            conn.execute("UPDATE mobius_issues SET synced_at='2000-01-01T00:00:00+00:00'"
+                         " WHERE author='t'")
+        with mock.patch.object(config, "llm_configured", return_value=True), \
+             mock.patch("fecho.llm.chat") as chat:
+            res = digest.verify_assignments("t", D)
+        chat.assert_not_called()
+        self.assertIn("已过期", res["error"])
+
+    def test_unchanged_verification_uses_fingerprint_cache(self):
+        store.record_progress("t", "配对引擎写完了", date=D, issue="AI-2541")
+        with mock.patch.object(config, "llm_configured", return_value=True), \
+             mock.patch("fecho.llm.chat", return_value="1 | AI-2541") as chat:
+            first = digest.verify_assignments("t", D)
+            second = digest.verify_assignments("t", D)
+        self.assertEqual(chat.call_count, 1)
+        self.assertFalse(first.get("cached", False))
+        self.assertTrue(second["cached"])
+
 
 class TestWebEndpoints(unittest.TestCase):
     """HTTP 层。SSE 那套握手是两条腿（GET 开流 + POST 发消息），
@@ -366,6 +477,69 @@ class TestWebEndpoints(unittest.TestCase):
         got = [t["name"] for t in r.json()["result"]["tools"]]
         self.assertEqual(got, [t["name"] for t in mcp_server.TOOLS],
                          "工具集不该按客户端分——谁连上都是同一套")
+
+    def test_http_clients_keep_separate_agent_and_session_context(self):
+        from fastapi.testclient import TestClient
+
+        a = TestClient(self.web.build_app(), headers={"Authorization": "Bearer t3st-token"})
+        b = TestClient(self.web.build_app(), headers={"Authorization": "Bearer t3st-token"})
+
+        def initialize(client, name):
+            r = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1,
+                                           "method": "initialize", "params": {
+                                               "protocolVersion": "2024-11-05",
+                                               "clientInfo": {"name": name}}})
+            self.assertEqual(r.status_code, 200)
+            return r.headers["Mcp-Session-Id"]
+
+        def log(client, sid, content, issue=None):
+            args = {"content": content, "date": D}
+            if issue:
+                args["issue"] = issue
+            return client.post("/mcp", headers={"Mcp-Session-Id": sid}, json={
+                "jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
+                    "name": "log_progress", "arguments": args}})
+
+        sid_a = initialize(a, "codex")
+        sid_b = initialize(b, "claude-code")
+        self.assertNotEqual(sid_a, sid_b)
+        self.assertFalse(log(a, sid_a, "Fecho 接口完成", "AI-2541").json()["result"]["isError"])
+        self.assertFalse(log(b, sid_b, "闲鱼调研完成", "AI-2224").json()["result"]["isError"])
+
+        updates = db.list_updates(date=D, author="t")
+        self.assertEqual({u["source_agent"] for u in updates}, {"codex", "claude-code"})
+        self.assertEqual(len({u["session_id"] for u in updates}), 2)
+
+    def test_log_progress_does_not_allow_callers_to_spoof_agent(self):
+        from fecho import mcp_server
+        schema = next(t for t in mcp_server.TOOLS if t["name"] == "log_progress")
+        self.assertNotIn("agent", schema["inputSchema"]["properties"])
+
+    def test_log_progress_returns_update_id_and_assignment_as_structured_data(self):
+        r = self.c.post("/mcp", json={
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {
+                "name": "log_progress", "arguments": {
+                    "content": "Fecho MCP 结构化返回完成", "issue": "AI-2541", "date": D}}})
+        result = r.json()["result"]
+        self.assertFalse(result["isError"])
+        self.assertRegex(result["structuredContent"]["update_id"], r"^[0-9a-f-]{36}$")
+        self.assertEqual(result["structuredContent"]["issue_key"], "AI-2541")
+        self.assertEqual(result["structuredContent"]["match_method"], "explicit")
+
+    def test_correct_progress_tool_revises_in_place_and_locks_assignment(self):
+        rec = store.record_progress("t", "最初归错的进展", date=D, issue="AI-2541")
+        r = self.c.post("/mcp", json={
+            "jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
+                "name": "correct_progress", "arguments": {
+                    "update_id": rec["update_id"], "issue": "AI-2224",
+                    "content": "修正后的闲鱼进展"}}})
+        result = r.json()["result"]
+        self.assertFalse(result["isError"])
+        self.assertEqual(result["structuredContent"]["update_id"], rec["update_id"])
+        rows = db.list_updates(date=D, author="t")
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["assignment_locked"], 1)
+        self.assertEqual(db.get_task(rows[0]["task_id"])["issue_key"], "AI-2224")
 
     def test_sse_full_roundtrip_against_a_real_server(self):
         """SSE 是两条腿：GET 开流拿到 POST 地址，响应再顺着流推回来。
@@ -444,13 +618,109 @@ class TestWebEndpoints(unittest.TestCase):
         rows = {u["update_id"]: u for u in db.day_updates("t", D)}
         self.assertEqual(rows[rec["update_id"]]["issue_key"], "AI-2224")
 
-    def test_review_queue_skips_explicit_entries(self):
+    def test_review_queue_includes_explicit_entries_until_a_human_confirms_them(self):
         store.record_progress("t", "明确写了 AI-2541 的进展", date=D, issue="AI-2541")
         store.record_progress("t", "没有任何线索的一条", date=D)
         from fecho import web
         items = web.review_queue("t", D)
-        self.assertEqual(len(items), 1, "明确写了 issue 号的没什么可复核的")
-        self.assertEqual(items[0]["method"], "new-task")
+        self.assertEqual(len(items), 2, "agent 明确填的 issue 也可能错，人工确认前必须可见")
+        self.assertEqual({item["method"] for item in items}, {"explicit", "new-task"})
+
+    def test_dashboard_payload_is_complete_and_honors_historical_date(self):
+        store.record_progress("t", "AI-2541 历史进展", date=D,
+                              source_agent="codex", completion_status="done")
+        store.record_progress("t", "AI-2224 今天进展", date="2030-01-02")
+        r = self.c.get("/api/dashboard", params={"date": D})
+        self.assertEqual(r.status_code, 200)
+        payload = r.json()
+        self.assertEqual(payload["date"], D)
+        self.assertEqual(payload["overview"]["updates"], 1)
+        self.assertTrue({"overview", "review", "tasks", "reports", "hidden",
+                         "timeline", "issues", "system", "filters"} <= set(payload))
+        self.assertEqual(payload["review"]["items"][0]["source_agent"], "codex")
+        self.assertRegex(payload["system"]["doctor"]["version"], r"^\d+\.\d+\.\d+$")
+
+    def test_mutation_returns_refreshed_dashboard_and_marks_report_dirty(self):
+        rec = store.record_progress("t", "闲鱼抓了十六个商品", date=D, issue="AI-2541")
+        digest.generate("t", D, force=True)
+        r = self.c.post("/api/reassign", json={
+            "update_id": rec["update_id"], "issue_key": "AI-2224", "date": D})
+        self.assertEqual(r.status_code, 200)
+        payload = r.json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["dashboard"]["date"], D)
+        self.assertTrue(payload["dashboard"]["reports"]["dirty"])
+
+    def test_fresh_report_is_not_marked_dirty_by_dashboard_persona_loading(self):
+        store.record_progress("t", "AI-2541 完成可靠性复验", date=D)
+        digest.generate("t", D, force=True)
+        r = self.c.get("/api/dashboard", params={"date": D})
+        self.assertEqual(r.status_code, 200)
+        self.assertFalse(r.json()["reports"]["dirty"])
+
+    def test_dashboard_tasks_include_updates_for_global_filters(self):
+        store.record_progress(
+            "t", "AI-2541 Codex 完成测试", date=D, source_agent="codex",
+            ingestion_method="transcript-scan", completion_status="done")
+        task = self.c.get("/api/dashboard", params={"date": D}).json()["tasks"]["items"][0]
+        self.assertEqual(task["updates"][0]["source_agent"], "codex")
+        self.assertEqual(task["updates"][0]["ingestion_method"], "transcript-scan")
+
+    def test_bad_mutation_is_a_clear_client_error_not_a_500(self):
+        r = self.c.post("/api/reassign", json={
+            "update_id": "missing", "issue_key": "AI-2541", "date": D})
+        self.assertEqual(r.status_code, 400)
+        self.assertFalse(r.json()["ok"])
+        self.assertIn("不存在", r.json()["error"])
+
+    def test_correct_endpoint_edits_content_and_returns_selected_date(self):
+        rec = store.record_progress("t", "原正文", date=D, issue="AI-2541")
+        r = self.c.post("/api/correct", json={
+            "update_id": rec["update_id"], "issue_key": "AI-2224",
+            "content": "修正后的正文", "date": D})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["dashboard"]["date"], D)
+        row = db.list_updates(date=D, author="t")[0]
+        self.assertEqual(row["content_md"], "修正后的正文")
+        self.assertEqual(row["assignment_locked"], 1)
+
+    def test_task_mutation_keeps_historical_dashboard_date(self):
+        rec = store.record_progress("t", "AI-2541 历史进展", date=D)
+        r = self.c.post("/api/tasks/%s/complete" % rec["task"]["task_id"],
+                        json={"date": D})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["dashboard"]["date"], D)
+
+    def test_healthz_does_not_leak_author(self):
+        r = self.c.get("/healthz")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json(), {"ok": True})
+
+
+class TestOAuthRecovery(unittest.TestCase):
+    def test_sync_refreshes_and_retries_once_when_server_rejects_access_token(self):
+        from fecho import mobius, oauth, service
+
+        success = {"author": "t", "count": 11}
+        with mock.patch.object(oauth, "refresh_if_needed", side_effect=[None, "new-token"]) as refresh, \
+             mock.patch.object(config, "load", return_value={"mobius_auth": "oauth"}), \
+             mock.patch.object(config, "reload_module"), \
+             mock.patch.object(mobius, "sync", side_effect=[
+                 mobius.MobiusError("Mobius 401: Unauthorized"), success]) as sync:
+            self.assertEqual(service.sync_issues(author="t"), success)
+        self.assertEqual(refresh.call_args_list, [mock.call(), mock.call(force=True)])
+        self.assertEqual(sync.call_count, 2)
+
+    def test_sync_does_not_retry_non_auth_failures(self):
+        from fecho import mobius, oauth, service
+
+        with mock.patch.object(oauth, "refresh_if_needed") as refresh, \
+             mock.patch.object(mobius, "sync",
+                               side_effect=mobius.MobiusError("Mobius 请求失败: timeout")) as sync:
+            with self.assertRaisesRegex(mobius.MobiusError, "timeout"):
+                service.sync_issues(author="t")
+        refresh.assert_called_once_with()
+        self.assertEqual(sync.call_count, 1)
 
 
 class TestAggregation(unittest.TestCase):
@@ -563,6 +833,26 @@ class TestDigest(unittest.TestCase):
         self.assertEqual(r["generator"], "llm+fallback")
         self.assertEqual(db.get_report("t", D, "daily")["generator"], "llm")
         self.assertEqual(db.get_report("t", D, "voice")["generator"], "fallback")
+        self.assertGreaterEqual(r["voice_chars"], config.VOICE_MIN_CHARS)
+        self.assertLessEqual(r["voice_chars"], config.VOICE_MAX_CHARS)
+
+    def test_voice_that_is_short_twice_gets_one_structural_expansion_retry(self):
+        store.record_progress("t", "AI-2541 接口跑通并完成验收", date=D,
+                              completion_status="done")
+        calls = {"n": 0}
+
+        def replies(messages, **kw):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return "[1] done | 接口和验收都已完成\n- done | 核心链路跑通"
+            if calls["n"] in (2, 3):
+                return "今天把核心接口跑通了。"
+            return "今天把核心接口、数据写入和验收链路都完整跑通了。" * 9
+
+        with mock.patch("fecho.llm.chat", side_effect=replies):
+            result = digest.generate("t", D, force=True)
+        self.assertEqual(calls["n"], 4)
+        self.assertGreaterEqual(result["voice_chars"], config.VOICE_MIN_CHARS)
 
     def test_regeneration_is_skipped_when_inputs_unchanged(self):
         store.record_progress("t", "AI-2541 接口跑通了", date=D)
@@ -582,6 +872,20 @@ class TestDigest(unittest.TestCase):
     def test_empty_day_produces_nothing(self):
         self.assertEqual(digest.generate("t", "2030-01-03")["status"], "empty")
 
+    def test_report_fingerprint_changes_when_an_update_is_revised_in_place(self):
+        r = store.record_progress("t", "第一版正文", date=D, issue="AI-2541")
+        persona = __import__("fecho.personas", fromlist=["load"]).load("default")
+        before = digest.fingerprint(db.day_tasks("t", D), persona, "workday")
+        store.correct_progress(r["update_id"], "t", content_md="修正后的正文")
+        after = digest.fingerprint(db.day_tasks("t", D), persona, "workday")
+        self.assertNotEqual(before, after)
+
+    def test_fallback_does_not_claim_unknown_progress_is_done(self):
+        store.record_progress("t", "接口完成一部分，明天继续", date=D, issue="AI-2541")
+        result = digest.generate("t", D, force=True)
+        self.assertIn("## Updates", result["daily_md"])
+        self.assertNotIn("✅ [**", result["daily_md"])
+
 
 class TestScoping(unittest.TestCase):
     def setUp(self):
@@ -592,6 +896,48 @@ class TestScoping(unittest.TestCase):
         store.record_progress("other", "别人的事", date=D)
         self.assertEqual(len(db.day_tasks("t", D)), 1)
         self.assertEqual(len(db.list_updates(date=D)), 2)
+
+
+class TestTaskLifecycle(unittest.TestCase):
+    def setUp(self):
+        reset()
+
+    def test_complete_hides_task_from_my_tasks_and_new_progress_reopens_it(self):
+        from fecho import service
+        rec = store.record_progress("t", "AI-2541 第一阶段完成", date=D)
+        result = service.complete_task(rec["task"]["task_id"], author="t")
+        self.assertTrue(result["changed"])
+        self.assertEqual(service.open_tasks("t"), [])
+
+        store.record_progress("t", "AI-2541 后续又有新进展", date=D)
+        self.assertEqual(len(service.open_tasks("t")), 1)
+
+    def test_reopen_completed_task(self):
+        from fecho import service
+        rec = store.record_progress("t", "AI-2541 完成", date=D)
+        service.complete_task(rec["task"]["task_id"], author="t")
+        result = service.reopen_task(rec["task"]["task_id"], author="t")
+        self.assertTrue(result["changed"])
+        self.assertEqual(db.get_task(rec["task"]["task_id"])["status"], "open")
+
+    def test_merge_moves_updates_and_keeps_source_as_auditable_tombstone(self):
+        from fecho import service
+        source = store.record_progress("t", "临时自由任务进展", date=D, freeform=True)
+        target = store.record_progress("t", "AI-2541 正式任务进展", date=D)
+        result = service.merge_tasks(
+            source["task"]["task_id"], target["task"]["task_id"], author="t")
+        self.assertEqual(result["moved_updates"], 1)
+        self.assertEqual(db.get_task(source["task"]["task_id"])["status"], "merged")
+        self.assertEqual(len(db.list_updates(task_id=target["task"]["task_id"])), 2)
+        with db.cursor() as conn:
+            event = conn.execute("SELECT * FROM task_events WHERE event_type='merge'").fetchone()
+        self.assertEqual(event["from_task_id"], source["task"]["task_id"])
+        self.assertEqual(event["to_task_id"], target["task"]["task_id"])
+
+    def test_lifecycle_tools_are_exposed_by_mcp(self):
+        from fecho import mcp_server
+        names = {tool["name"] for tool in mcp_server.TOOLS}
+        self.assertTrue({"complete_task", "reopen_task", "merge_tasks"} <= names)
 
 
 class TestDailyFormat(unittest.TestCase):
@@ -640,10 +986,17 @@ class TestDailyFormat(unittest.TestCase):
         self.assertIn("* ✅ 这条做完了", md)
         self.assertIn("* ❌ 这条卡住了", md)
 
-    def test_missing_status_defaults_to_done(self):
+    def test_missing_status_defaults_to_unknown(self):
         items, _ = digest._parse_daily("[1] 没写状态的总结\n- 也没写状态的子弹点", 1)
-        self.assertEqual(items[1]["status"], "done")
-        self.assertEqual(items[1]["bullets"][0][0], "done")
+        self.assertEqual(items[1]["status"], "unknown")
+        self.assertEqual(items[1]["bullets"][0][0], "unknown")
+
+    def test_daily_groups_tasks_into_status_sections(self):
+        items = {1: {"status": "done", "summary": "完成", "bullets": []},
+                 2: {"status": "blocked", "summary": "受阻", "bullets": []}}
+        md = digest._assemble_daily("2026-09-04", self._tasks(), items, [], self.persona)
+        self.assertIn("## Done", md)
+        self.assertIn("## Blocked", md)
 
     def test_header_uses_slash_date(self):
         md = digest._assemble_daily("2026-09-04", self._tasks(), {}, [], self.persona)
@@ -757,6 +1110,14 @@ class TestProjectBinding(unittest.TestCase):
         self.assertEqual(r["task"]["source"], "freeform")
         self.assertIsNone(r["task"]["issue_key"])
 
+    def test_explicit_freeform_overrides_project_binding(self):
+        r = store.record_progress(
+            "t", "帮同事查了一个与本项目无关的问题", date=D,
+            project="/home/me/work/scripe", freeform=True)
+        self.assertEqual(r["match"]["method"], "explicit-freeform")
+        self.assertEqual(r["task"]["source"], "freeform")
+        self.assertIsNone(r["task"]["issue_key"])
+
 
 class TestScanWatermark(unittest.TestCase):
     """水位线。这一组盯的是一个数据丢失级的 bug：
@@ -824,6 +1185,77 @@ class TestScanWatermark(unittest.TestCase):
         self.assertEqual(self.scan._text_of(rec), "真话")
 
 
+class TestScanIntegrity(unittest.TestCase):
+    def setUp(self):
+        reset()
+        from fecho import scan
+        self.scan = scan
+        with db.cursor() as c:
+            c.execute("DELETE FROM scan_marks")
+
+    @staticmethod
+    def _group():
+        at = __import__("datetime").datetime.fromisoformat("2030-01-01T10:00:00+00:00")
+        rows = [{"at": at, "ts": "2030-01-01T10:00:00Z",
+                 "role": "assistant", "text": "完成了实现"}]
+        groups = {("codex", "codex:s1", "/work/project", D): rows}
+        return groups, {}, {"codex:s1": ["2030-01-01T10:00:00Z"]}
+
+    def test_malformed_model_output_fails_group_and_keeps_watermark(self):
+        with mock.patch.object(self.scan, "collect", return_value=self._group()), \
+             mock.patch.object(config, "llm_configured", return_value=True), \
+             mock.patch("fecho.mobius.cached_issues", return_value=ISSUES), \
+             mock.patch("fecho.llm.chat", return_value="这是解释，不是约定格式"):
+            result = self.scan.scan(author="t")
+        self.assertFalse(result["ok"])
+        self.assertIn("codex:s1", result["retry_next_time"])
+        self.assertIsNone(self.scan.get_mark("codex:s1"))
+        with db.cursor() as conn:
+            run = conn.execute("SELECT status FROM scan_runs ORDER BY started_at DESC LIMIT 1").fetchone()
+        self.assertEqual(run["status"], "failed")
+
+    def test_explicit_none_is_a_valid_zero_result_and_advances_watermark(self):
+        with mock.patch.object(self.scan, "collect", return_value=self._group()), \
+             mock.patch.object(config, "llm_configured", return_value=True), \
+             mock.patch("fecho.mobius.cached_issues", return_value=ISSUES), \
+             mock.patch("fecho.llm.chat", return_value="NONE"):
+            result = self.scan.scan(author="t")
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["recorded"], 0)
+        self.assertEqual(self.scan.get_mark("codex:s1"), "2030-01-01T10:00:00Z")
+
+    def test_source_event_key_makes_scan_replay_idempotent(self):
+        a = store.record_progress(
+            "t", "第一种模型措辞", date=D, source_agent="codex",
+            issue="AI-2541", source_event_key="codex:s1:chunk-1:item-1")
+        b = store.record_progress(
+            "t", "重跑后模型换了一种措辞", date=D, source_agent="codex",
+            issue="AI-2541", source_event_key="codex:s1:chunk-1:item-1")
+        self.assertEqual(b["verdict"], "duplicate")
+        self.assertEqual(b["update_id"], a["update_id"])
+        self.assertEqual(len(db.list_updates(date=D, author="t")), 1)
+
+    def test_scan_preserves_producer_separately_from_ingestion_method(self):
+        a = store.record_progress(
+            "t", "Codex 扫描抽出的进展", date=D, source_agent="codex",
+            ingestion_method="transcript-scan", issue="AI-2541")
+        row = db.list_updates(task_id=a["task"]["task_id"])[0]
+        self.assertEqual(row["source_agent"], "codex")
+        self.assertEqual(row["ingestion_method"], "transcript-scan")
+
+    def test_discovers_configured_claude_codex_and_hermes_adapters(self):
+        root = Path(tempfile.mkdtemp(prefix="fecho-adapters-"))
+        self.addCleanup(shutil.rmtree, root, True)
+        paths = {}
+        for name in ("claude-code", "codex", "hermes"):
+            p = root / (name + ".jsonl")
+            p.write_text("{}\n", encoding="utf-8")
+            paths[name] = [str(p)]
+        with mock.patch.object(config, "SCAN_SOURCES", paths):
+            found = self.scan.discover_transcripts()
+        self.assertEqual({x["producer_agent"] for x in found}, set(paths))
+
+
 class TestCollector(unittest.TestCase):
     """team_reports 是 collector 的全部——没有 entries/tasks 表，隐私边界是结构性的。
     这里盯的是唯一真正重要的安全属性：author 只能从 token 反查，body 里传什么都不算。"""
@@ -885,6 +1317,6 @@ class TestCollector(unittest.TestCase):
 
 if __name__ == "__main__":
     try:
-        unittest.main(verbosity=2, exit=False)
+        unittest.main(verbosity=2)
     finally:
         shutil.rmtree(TMP, ignore_errors=True)

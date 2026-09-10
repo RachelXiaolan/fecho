@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # Fecho 验收剧本。全程真机：真 Mobius、真 LLM、真 MCP stdio。
-# 用独立 FECHO_HOME，不碰你日常的 ~/.fecho。
+# 默认用随机的独立 FECHO_HOME，不碰你日常的 ~/.fecho；也可显式设置
+# FECHO_ACCEPTANCE_HOME 以便保留同一验收目录。
 #   ./scripts/acceptance.sh
-set -uo pipefail
+set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$PWD"
 [ -f .env ] && set -a && . ./.env && set +a
 
-export FECHO_HOME="${ROOT}/.acceptance"
-rm -rf "$FECHO_HOME"; mkdir -p "$FECHO_HOME"
+export FECHO_HOME="${FECHO_ACCEPTANCE_HOME:-$(mktemp -d "${TMPDIR:-/tmp}/fecho-acceptance.XXXXXX")}"
+mkdir -p "$FECHO_HOME"
 TODAY="$(date +%F)"
 
 step() { printf '\n\033[1;36m━━━ %s\033[0m\n' "$*"; }
@@ -17,27 +18,38 @@ mcp()  { FECHO_SESSION_ID="$2" python3 scripts/mcp_probe.py --client "$1" call "
 
 step "0. 干净安装状态：fecho doctor"
 python3 -m fecho.cli doctor
-python3 tests/test_core.py 2>&1 | tail -3
+python3 -m unittest discover -s tests -p 'test_*.py'
 
 step "1. MCP 工具清单（真 stdio 子进程）"
 python3 scripts/mcp_probe.py --client claude-code list
+python3 - <<'PY'
+from scripts.mcp_probe import MCPSession
+s = MCPSession("acceptance-tool-count")
+try:
+    tools = s.list_tools()
+    assert len(tools) == 13, "期望 13 个 MCP 工具，实际 %d" % len(tools)
+    assert "correct_progress" in {tool["name"] for tool in tools}
+finally:
+    s.close()
+print("  ✓ 13 个工具及纠错入口齐全")
+PY
 
-step "2. 连 Mobius（走 token，跳过浏览器；生产环境走 mobius_login 会开浏览器）"
+step "2. 用当前验收凭证同步 Mobius（OAuth 流另见验收记录）"
 python3 scripts/mcp_probe.py --client claude-code call sync_issues '{}'
 python3 -m fecho.cli doctor | sed -n '1,6p'
 
 step "3. 一个对话里推进同一个任务，两条进展要自动接续"
-mcp claude-code sess-A log_progress '{"content":"读完 AI-2541 的 PRD 重构说明，理解了任务模型要换掉"}'
-mcp claude-code sess-A log_progress '{"content":"验收脚本重写完了，走单进程 CLI，不用先起服务"}'
+mcp claude-code sess-A log_progress '{"content":"读完 AI-2541 的 PRD 重构说明，完成任务模型调整","issue":"AI-2541","completion_status":"done"}'
+mcp claude-code sess-A log_progress '{"content":"验收脚本重写完了，走单进程 CLI，不用先起服务","completion_status":"done"}'
 
-step "4. 另一个对话，内容自动配到别的 Mobius issue（没点名 issue 号）"
-mcp codex sess-B log_progress '{"content":"本地试了下 awesome-gpt-image-2，出图质量一般，不值得复用"}'
+step "4. 另一个 Agent 明确提交到另一个 Mobius issue"
+mcp codex sess-B log_progress '{"content":"本地试了 awesome-gpt-image-2，确认不值得复用","issue":"AI-2539","completion_status":"done","kind":"decision"}'
 
-step "5. 完全不相关的话，应该新立自由任务"
-mcp hermes sess-C log_progress '{"content":"帮同事看了下他那个爬虫为什么超时，是 DNS 解析卡住了"}'
+step "5. 明确不属于 Mobius 的工作，应新立自由任务"
+mcp hermes sess-C log_progress '{"content":"帮同事定位爬虫超时，确认是 DNS 解析卡住","freeform":true,"completion_status":"done","kind":"pitfall"}'
 
 step "6. 逐字重复提交：应该被挡，不产生新记录"
-mcp claude-code sess-A log_progress '{"content":"验收脚本重写完了，走单进程 CLI，不用先起服务"}'
+mcp claude-code sess-A log_progress '{"content":"验收脚本重写完了，走单进程 CLI，不用先起服务","completion_status":"done"}'
 ok "重复提交被挡，任务数没有虚增"
 
 step "7. 当前任务视图"
@@ -136,4 +148,5 @@ print(' '.join(r[0] for r in c.execute(
 fi
 ok "只有 team_reports —— entries / tasks / updates 在这台机器上根本不存在"
 
-printf '\n\033[1;32m验收完成。\033[0m 个人产物在 %s\n' "${FECHO_HOME#$ROOT/}/logs/${TODAY}/"
+printf '\n\033[1;32m验收完成。\033[0m 隔离目录：%s\n' "$FECHO_HOME"
+printf '个人产物：%s\n' "$FECHO_HOME/logs/${TODAY}/"

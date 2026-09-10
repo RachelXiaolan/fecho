@@ -1,186 +1,397 @@
 <!doctype html>
-<meta charset="utf-8">
-<title>fecho</title>
-<style>
-:root{--bg:#faf9f7;--card:#fff;--line:#e6e3de;--ink:#1c1a17;--dim:#6b665e;
-      --accent:#3b6ea5;--warn:#b5701f;--ok:#2f7d4f;--bad:#a8433a}
-@media(prefers-color-scheme:dark){:root{--bg:#161513;--card:#1e1d1a;--line:#33312d;
-      --ink:#eae7e1;--dim:#9a948a;--accent:#7aa7d9;--warn:#d69a4e;--ok:#6bbd8a;--bad:#d98078}}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);
-     font:14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif}
-header{padding:20px 24px 0;max-width:1080px;margin:0 auto}
-h1{font-size:19px;margin:0 0 2px;font-weight:600}
-.sub{color:var(--dim);font-size:13px}
-main{max-width:1080px;margin:0 auto;padding:16px 24px 60px}
-section{background:var(--card);border:1px solid var(--line);border-radius:10px;
-        padding:16px 18px;margin-bottom:16px}
-h2{font-size:14px;margin:0 0 4px;font-weight:600}
-h2 .n{color:var(--dim);font-weight:400}
-.hint{color:var(--dim);font-size:12.5px;margin:0 0 12px}
-.stats{display:flex;gap:26px;flex-wrap:wrap}
-.stat b{display:block;font-size:22px;font-weight:600;line-height:1.2}
-.stat span{color:var(--dim);font-size:12px}
-.row{border-top:1px solid var(--line);padding:11px 0;display:flex;gap:12px;align-items:flex-start}
-.row:first-of-type{border-top:none}
-.txt{flex:1;min-width:0}
-.meta{color:var(--dim);font-size:12px;margin-top:3px}
-select,button{font:inherit;padding:5px 9px;border:1px solid var(--line);
-       border-radius:7px;background:var(--card);color:var(--ink);cursor:pointer}
-select{max-width:230px}
-button:hover{border-color:var(--accent)}
-button.p{background:var(--accent);color:#fff;border-color:var(--accent)}
-.tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:20px;
-     border:1px solid var(--line);color:var(--dim)}
-.tag.guess{color:var(--warn);border-color:var(--warn)}
-.tag.free{color:var(--bad);border-color:var(--bad)}
-.tag.ok{color:var(--ok);border-color:var(--ok)}
-pre{white-space:pre-wrap;font:12.5px/1.65 ui-monospace,SFMono-Regular,Menlo,monospace;
-    background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:14px;
-    max-height:460px;overflow:auto;margin:0}
-.day{margin:10px 0 0}
-.day b{color:var(--dim);font-weight:500;font-size:12px}
-.day ul{margin:3px 0 0;padding-left:18px}
-.day li{margin:2px 0}
-.grp{border-top:1px solid var(--line);padding:12px 0}
-.grp:first-of-type{border-top:none}
-a{color:var(--accent)}
-.empty{color:var(--dim);padding:6px 0}
-.bar{height:6px;border-radius:4px;background:var(--line);overflow:hidden;margin:8px 0 4px}
-.bar i{display:block;height:100%;background:var(--warn)}
-</style>
-<header>
-  <h1>fecho</h1>
-  <div class="sub" id="sub">加载中…</div>
-</header>
-<main>
-  <section>
-    <h2>今天</h2>
-    <div class="stats" id="ov"></div>
-  </section>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Fecho · 工作日志</title>
+  <style>
+    :root{
+      --nav:#1b1938;--nav-deep:#100e24;--nav-text:#f7f5ff;--violet:#c9b4fa;
+      --teal:#0e3030;--canvas:#f7f6f2;--surface:#fff;--surface-soft:#f1f0eb;
+      --ink:#292827;--muted:#73706d;--faint:#9a9794;--line:#e5e2db;
+      --success:#23634d;--success-bg:#e8f3ed;--warning:#8a5b17;--warning-bg:#fff3d9;
+      --danger:#9a3f3a;--danger-bg:#fbe9e7;--shadow:0 1px 2px rgba(25,22,18,.05);
+    }
+    *{box-sizing:border-box}
+    html{background:var(--canvas)}
+    body{margin:0;min-height:100vh;color:var(--ink);background:var(--canvas);
+      font:460 14px/1.5 "Avenir Next","SF Pro Text","PingFang SC","Microsoft YaHei",sans-serif}
+    button,input,select,textarea{font:inherit;color:inherit}
+    button{cursor:pointer}
+    button:disabled{cursor:wait;opacity:.55}
+    a{color:inherit}
+    .shell{min-height:100vh;display:grid;grid-template-columns:232px minmax(0,1fr)}
+    .sidebar{position:sticky;top:0;height:100vh;padding:26px 18px 20px;background:var(--nav);
+      color:var(--nav-text);display:flex;flex-direction:column}
+    .brand{display:flex;align-items:center;gap:11px;padding:0 10px 28px}
+    .brand-mark{width:32px;height:32px;border-radius:9px;background:var(--violet);color:var(--nav);
+      display:grid;place-items:center;font-size:17px;font-weight:700;letter-spacing:-1px}
+    .brand-name{font-size:19px;font-variation-settings:"wght" 540;font-weight:600;letter-spacing:-.4px}
+    .brand-copy{font-size:11px;color:#bcbac9;margin-top:-1px}
+    .nav-label{padding:0 10px 8px;color:#77738f;font-size:10px;font-weight:700;
+      letter-spacing:1.2px;text-transform:uppercase}
+    .nav{display:grid;gap:4px}
+    .nav button{width:100%;border:0;background:transparent;color:#bcbac9;text-align:left;
+      border-radius:8px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between}
+    .nav button:hover{background:rgba(255,255,255,.06);color:#fff}
+    .nav button.active{background:rgba(201,180,250,.15);color:#fff}
+    .nav .count{min-width:22px;padding:1px 6px;text-align:center;border-radius:99px;
+      background:rgba(255,255,255,.09);font-size:11px}
+    .nav button.active .count{background:var(--violet);color:var(--nav)}
+    .sidebar-foot{margin-top:auto;padding:16px 10px 0;border-top:1px solid #3f3a52}
+    .connection{display:flex;gap:8px;align-items:center;color:#bcbac9;font-size:12px}
+    .pulse{width:7px;height:7px;border-radius:50%;background:#7dd5ac;box-shadow:0 0 0 4px rgba(125,213,172,.1)}
+    .workspace{min-width:0}
+    .topbar{min-height:86px;padding:19px 34px;border-bottom:1px solid var(--line);
+      background:rgba(247,246,242,.94);backdrop-filter:blur(12px);display:flex;
+      align-items:center;justify-content:space-between;gap:24px;position:sticky;top:0;z-index:10}
+    .page-title h1{font-size:24px;line-height:1.08;letter-spacing:-.6px;margin:0;font-weight:600}
+    .page-title p{margin:5px 0 0;color:var(--muted);font-size:12px}
+    .toolbar{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+    .field{display:grid;gap:4px}
+    .field label{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.5px}
+    input,select,textarea{border:1px solid var(--line);background:var(--surface);border-radius:7px;
+      min-height:38px;padding:7px 10px;outline:none}
+    input:focus,select:focus,textarea:focus{border-color:#7771a6;box-shadow:0 0 0 3px rgba(119,113,166,.1)}
+    .toolbar select{max-width:142px}
+    main{max-width:1240px;margin:0 auto;padding:30px 34px 72px}
+    .view{display:none}.view.active{display:block;animation:enter .24s ease both}
+    @keyframes enter{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+    .loading{display:none;padding:80px 20px;text-align:center;color:var(--muted)}
+    .loading.show{display:block}
+    .spinner{width:22px;height:22px;border:2px solid var(--line);border-top-color:var(--nav);
+      border-radius:50%;margin:0 auto 12px;animation:spin .8s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .error-state{display:none;background:var(--danger-bg);color:var(--danger);padding:14px 16px;
+      border-radius:8px;margin-bottom:18px}.error-state.show{display:flex;justify-content:space-between;gap:16px}
+    .hero{background:var(--nav);color:#fff;border-radius:16px;padding:27px 30px;position:relative;
+      overflow:hidden;box-shadow:0 12px 32px rgba(27,25,56,.16)}
+    .hero:after{content:"";position:absolute;width:360px;height:280px;right:-80px;top:-130px;
+      background:radial-gradient(circle,rgba(201,180,250,.46),rgba(201,180,250,0) 68%)}
+    .eyebrow{font-size:10px;font-weight:700;letter-spacing:1.3px;text-transform:uppercase;color:#bcbac9}
+    .hero h2{font-size:30px;line-height:1.1;letter-spacing:-.8px;margin:7px 0 8px;font-weight:600;max-width:700px}
+    .hero p{margin:0;color:#bcbac9;max-width:640px}
+    .hero .hero-action{position:absolute;right:28px;bottom:27px;z-index:1}
+    .metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:16px 0 24px}
+    .metric{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:17px 18px;box-shadow:var(--shadow)}
+    .metric strong{display:block;font-size:27px;line-height:1;font-weight:600;letter-spacing:-.7px}
+    .metric span{display:block;color:var(--muted);font-size:11px;margin-top:7px}
+    .metric.attention strong{color:var(--warning)}
+    .section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin:28px 0 12px}
+    .section-head h2{font-size:17px;line-height:1.2;margin:0;font-weight:600;letter-spacing:-.25px}
+    .section-head p{margin:3px 0 0;color:var(--muted);font-size:12px}
+    .panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);overflow:hidden}
+    .panel-pad{padding:20px}
+    .item{padding:16px 18px;border-top:1px solid var(--line)}.item:first-child{border-top:0}
+    .item-head{display:flex;gap:14px;justify-content:space-between;align-items:flex-start}
+    .item-title{font-size:14px;font-weight:600}.item-body{margin-top:5px;color:#45433f}
+    .meta{font-size:11px;color:var(--muted);margin-top:7px;display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+    .tag{display:inline-flex;align-items:center;min-height:22px;border-radius:99px;padding:2px 8px;
+      background:var(--surface-soft);color:var(--muted);font-size:10px;font-weight:700;letter-spacing:.2px}
+    .tag.done,.tag.human{background:var(--success-bg);color:var(--success)}
+    .tag.blocked,.tag.low{background:var(--danger-bg);color:var(--danger)}
+    .tag.wip,.tag.medium{background:var(--warning-bg);color:var(--warning)}
+    .tag.unknown{background:#eceaf5;color:#5e587f}
+    .btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;min-height:38px;
+      padding:8px 13px;font-weight:600;font-size:12px}
+    .btn:hover{border-color:#85809d;background:#faf9ff}.btn:active{transform:translateY(1px)}
+    .btn.primary{border-color:var(--nav);background:var(--nav);color:#fff}
+    .btn.primary:hover{background:var(--nav-deep)}
+    .btn.danger{color:var(--danger)}
+    .btn.small{min-height:32px;padding:6px 10px}
+    .empty{padding:44px 20px;text-align:center;color:var(--muted)}
+    .empty strong{display:block;color:var(--ink);font-size:14px;margin-bottom:4px}
+    details.timeline{border-top:1px solid var(--line)}details.timeline:first-child{border-top:0}
+    details.timeline summary{list-style:none;cursor:pointer;padding:16px 18px;display:flex;justify-content:space-between;gap:14px}
+    details.timeline summary::-webkit-details-marker{display:none}
+    details.timeline[open] summary{background:#fbfaf7}
+    .timeline-body{padding:0 18px 17px 34px}.progress-line{position:relative;padding:8px 0 8px 18px;border-left:1px solid var(--line)}
+    .progress-line:before{content:"";position:absolute;width:7px;height:7px;border-radius:50%;background:#7771a6;left:-4px;top:15px}
+    .two-col{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(280px,.75fr);gap:18px}
+    .review-card{padding:18px;border-top:1px solid var(--line)}.review-card:first-child{border-top:0}
+    .review-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(230px,310px);gap:22px;align-items:start}
+    .review-actions{display:grid;gap:8px}.review-actions select,.review-actions textarea{width:100%}
+    .review-actions textarea{min-height:76px;resize:vertical}
+    .button-row{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+    .task-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:18px;align-items:center;padding:17px 18px;border-top:1px solid var(--line)}
+    .task-row:first-child{border-top:0}.task-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+    .task-actions select{max-width:210px}
+    .segmented{display:flex;gap:3px;background:var(--surface-soft);padding:3px;border-radius:9px;width:max-content}
+    .segmented button{border:0;background:transparent;padding:7px 11px;border-radius:7px;color:var(--muted);font-size:11px;font-weight:700}
+    .segmented button.active{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+    .dirty{display:none;align-items:center;justify-content:space-between;gap:16px;padding:14px 16px;
+      border-radius:10px;background:var(--warning-bg);color:var(--warning);margin-bottom:14px}
+    .dirty.show{display:flex}
+    .report-layout{display:grid;grid-template-columns:190px minmax(0,1fr);min-height:520px}
+    .report-nav{padding:14px;border-right:1px solid var(--line);background:#fbfaf7}
+    .report-nav button{width:100%;border:0;background:transparent;text-align:left;padding:9px 10px;border-radius:7px;font-size:12px}
+    .report-nav button.active{background:var(--surface);box-shadow:var(--shadow);font-weight:600}
+    .report-paper{padding:28px 32px;white-space:pre-wrap;font:13px/1.75 ui-monospace,SFMono-Regular,Menlo,monospace;overflow:auto}
+    .warning-list{margin:0;padding:0;list-style:none}.warning-list li{padding:10px 0;border-top:1px solid var(--line)}
+    .check{display:flex;gap:12px;align-items:flex-start;padding:13px 0;border-top:1px solid var(--line)}.check:first-child{border-top:0}
+    .check-mark{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;background:var(--success-bg);color:var(--success);font-size:11px;font-weight:700}
+    .check.bad .check-mark{background:var(--danger-bg);color:var(--danger)}
+    table{width:100%;border-collapse:collapse;font-size:12px}th,td{text-align:left;padding:11px 12px;border-top:1px solid var(--line);vertical-align:top}
+    th{border-top:0;color:var(--muted);font-size:10px;letter-spacing:.4px;background:#fbfaf7}
+    .toast{position:fixed;right:24px;bottom:24px;z-index:30;display:none;align-items:center;gap:14px;
+      max-width:430px;background:var(--teal);color:#fff;border-radius:10px;padding:13px 15px;box-shadow:0 14px 38px rgba(14,48,48,.25)}
+    .toast.show{display:flex;animation:toast-in .2s ease both}@keyframes toast-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+    .toast button{border:1px solid rgba(255,255,255,.3);background:transparent;color:#fff;border-radius:7px;padding:5px 9px}
+    .toast.error{background:#6e2725}
+    @media(max-width:900px){
+      .shell{grid-template-columns:78px minmax(0,1fr)}.sidebar{padding:22px 10px}.brand{padding:0 8px 26px}.brand-copy,.brand-name,.nav-label,.nav button span:first-child,.sidebar-foot span{display:none}
+      .nav button{justify-content:center;min-height:44px}.topbar{padding:17px 22px;align-items:flex-start}.toolbar{max-width:480px}
+      main{padding:24px 22px 64px}.two-col,.report-layout{grid-template-columns:1fr}.report-nav{border-right:0;border-bottom:1px solid var(--line);display:flex;overflow:auto}.report-nav button{width:auto;white-space:nowrap}
+      .review-grid{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}
+    }
+    @media(max-width:640px){
+      .shell{display:block}.sidebar{position:fixed;z-index:20;top:auto;bottom:0;width:100%;height:62px;padding:7px 8px;background:var(--nav-deep)}
+      .brand,.nav-label,.sidebar-foot{display:none}.nav{grid-template-columns:repeat(5,1fr);gap:2px}.nav button{padding:6px 3px;display:grid;place-items:center;gap:2px;font-size:10px}.nav button span:first-child{display:block}.nav .count{font-size:9px;min-width:18px;padding:0 4px}
+      .topbar{position:static;display:block;padding:18px 16px}.toolbar{margin-top:15px;display:grid;grid-template-columns:1fr 1fr}.toolbar .field:first-child{grid-column:1/-1}.toolbar input,.toolbar select{width:100%;max-width:none}
+      main{padding:20px 14px 92px}.hero{padding:23px 21px}.hero h2{font-size:25px}.hero .hero-action{position:static;margin-top:18px}.metrics{gap:8px}.metric{padding:14px}.metric strong{font-size:23px}
+      .two-col{display:block}.two-col>div+div{margin-top:18px}.task-row{grid-template-columns:1fr}.task-actions{justify-content:flex-start}.report-paper{padding:22px 18px}.toast{left:14px;right:14px;bottom:76px}
+    }
+  </style>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar" aria-label="主导航">
+    <div class="brand"><div class="brand-mark">f°</div><div><div class="brand-name">fecho</div><div class="brand-copy">work, remembered</div></div></div>
+    <div class="nav-label">Workspace</div>
+    <nav class="nav">
+      <button class="active" data-view="today"><span>Today</span><span class="count" id="nav-today">—</span></button>
+      <button data-view="review"><span>Review</span><span class="count" id="nav-review">—</span></button>
+      <button data-view="tasks"><span>Tasks</span><span class="count" id="nav-tasks">—</span></button>
+      <button data-view="reports"><span>Reports</span><span class="count" id="nav-reports">—</span></button>
+      <button data-view="system"><span>System</span><span class="count" id="nav-system">—</span></button>
+    </nav>
+    <div class="sidebar-foot"><div class="connection"><i class="pulse"></i><span id="connection-copy">本地服务已连接</span></div></div>
+  </aside>
 
-  <section>
-    <h2>归属复核 <span class="n" id="rn"></span></h2>
-    <p class="hint">日报准不准，取决于这些条目归对没有。改完点「重新生成日报」。
-       明确写了 issue 号的不在这里。</p>
-    <div id="review"></div>
-  </section>
+  <div class="workspace">
+    <header class="topbar">
+      <div class="page-title"><h1 id="page-title">Today</h1><p id="page-subtitle">今天发生了什么，一眼看清。</p></div>
+      <div class="toolbar" aria-label="全局筛选">
+        <div class="field"><label for="work-date">工作日期</label><input id="work-date" type="date"></div>
+        <div class="field"><label for="agent-filter">Agent</label><select id="agent-filter"><option value="">全部</option></select></div>
+        <div class="field"><label for="source-filter">记录方式</label><select id="source-filter"><option value="">全部</option></select></div>
+        <div class="field"><label for="status-filter">完成状态</label><select id="status-filter"><option value="">全部</option></select></div>
+      </div>
+    </header>
 
-  <section>
-    <h2>被挡掉的进展 <span class="n" id="hn"></span></h2>
-    <p class="hint">判为近似重复、没进日报的。判错了捞回来。</p>
-    <div id="hidden"></div>
-  </section>
+    <main>
+      <div id="error-state" class="error-state"><span id="error-copy"></span><button class="btn small" id="retry">重试</button></div>
+      <div id="loading" class="loading show"><div class="spinner"></div>正在整理工作现场…</div>
 
-  <section>
-    <h2>日报</h2>
-    <p class="hint"><button class="p" onclick="regen()">重新生成日报</button>
-       <span id="regen"></span></p>
-    <pre id="report">—</pre>
-  </section>
+      <section class="view active" data-page="today" aria-labelledby="today-heading">
+        <div class="hero"><div class="eyebrow" id="today-date">WORK LOG</div><h2 id="today-heading">你的工作，会被好好记住。</h2><p id="today-summary">加载当天进展、归属和报告状态。</p><button class="btn primary hero-action" data-go="review">开始复核</button></div>
+        <div class="metrics" id="metrics"></div>
+        <div class="two-col">
+          <div><div class="section-head"><div><h2>当天任务</h2><p>按任务聚合，不按对话切碎。</p></div></div><div class="panel" id="today-tasks"></div></div>
+          <div><div class="section-head"><div><h2>需要留意</h2><p>归属、重复和报告状态。</p></div></div><div class="panel" id="attention"></div></div>
+        </div>
+        <div class="section-head"><div><h2>14 天轨迹</h2><p>展开任务查看每日推进。</p></div></div><div class="panel" id="timeline"></div>
+      </section>
 
-  <section>
-    <h2>最近 7 天 · 按任务</h2>
-    <p class="hint">写周报的原料。</p>
-    <div id="tl"></div>
-  </section>
+      <section class="view" data-page="review" aria-labelledby="review-heading">
+        <div class="section-head"><div><h2 id="review-heading">Review inbox</h2><p>Agent 点名的 issue 也可能错；人工确认后才锁定。</p></div><span class="tag" id="review-total">0 条</span></div>
+        <div class="panel" id="review-list"></div>
+        <div class="section-head"><div><h2>被挡掉的进展</h2><p>扫描近似重复不会删除，只是暂时不进入日报。</p></div></div>
+        <div class="panel" id="hidden-list"></div>
+      </section>
 
-  <section>
-    <h2>归属健康度</h2>
-    <p class="hint">落自由任务的比例，是这套机制在你身上灵不灵最直接的信号——
-       它目前只在一个人一周的数据上验证过。</p>
-    <div id="health"></div>
-  </section>
-</main>
+      <section class="view" data-page="tasks" aria-labelledby="tasks-heading">
+        <div class="section-head"><div><h2 id="tasks-heading">Tasks</h2><p>完成、重开，或把误拆的任务合并回来。</p></div>
+          <div class="segmented" id="task-tabs"><button class="active" data-task-status="all">全部</button><button data-task-status="open">进行中</button><button data-task-status="done">已完成</button><button data-task-status="merged">已合并</button></div></div>
+        <div class="panel" id="task-list"></div>
+      </section>
+
+      <section class="view" data-page="reports" aria-labelledby="reports-heading">
+        <div class="section-head"><div><h2 id="reports-heading">Reports</h2><p>日报、口播和每一次生成历史都在这里。</p></div><button class="btn primary" id="regenerate">重新生成</button></div>
+        <div id="report-dirty" class="dirty"><span>进展或归属已经变化，这份报告需要重新生成。</span><button class="btn small" id="dirty-regenerate">现在生成</button></div>
+        <div class="panel report-layout"><div class="report-nav" id="report-tabs"><button class="active" data-report-tab="daily">日报</button><button data-report-tab="voice">口播稿</button><button data-report-tab="history">历史版本</button><button data-report-tab="warnings">生成提示</button></div><div class="report-paper" id="report-content">尚未生成。</div></div>
+      </section>
+
+      <section class="view" data-page="system" aria-labelledby="system-heading">
+        <div class="section-head"><div><h2 id="system-heading">System</h2><p>连接、模型、Mobius 和扫描是否真的在工作。</p></div></div>
+        <div class="two-col"><div><div class="panel panel-pad" id="doctor"></div></div><div><div class="panel panel-pad" id="sources"></div></div></div>
+        <div class="section-head"><div><h2>最近扫描</h2><p>失败会保留重试边界，不会静默跳过。</p></div></div><div class="panel" style="overflow:auto"><table><thead><tr><th>时间</th><th>Agent</th><th>项目</th><th>状态</th><th>结果</th></tr></thead><tbody id="scan-runs"></tbody></table></div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"><span id="toast-copy"></span><button id="undo-action">撤销</button></div>
+
 <script>
-const $ = s => document.querySelector(s);
-const esc = s => (s||'').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-const get = p => fetch('/api'+p).then(r=>r.json());
-const post = (p,b) => fetch('/api'+p,{method:'POST',headers:{'Content-Type':'application/json'},
-                              body:JSON.stringify(b||{})}).then(r=>r.json());
-let ISSUES = [];
+  const $ = (selector, root=document) => root.querySelector(selector);
+  const $$ = (selector, root=document) => [...root.querySelectorAll(selector)];
+  const esc = value => String(value == null ? '' : value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+  const state = {data:null, view:'today', taskStatus:'all', reportTab:'daily', undo:null, toastTimer:null};
+  const pageCopy = {
+    today:['Today','今天发生了什么，一眼看清。'], review:['Review inbox','把自动判断变成人工确认。'],
+    tasks:['Tasks','一件事是一条持续生长的任务。'], reports:['Reports','让成品和事实始终同步。'],
+    system:['System','知道系统哪里正常，哪里需要处理。']
+  };
 
-const LABEL = {'task-continue':['猜的','guess'], 'new-task':['自由任务','free'],
-               'verified':['验证订正','ok'], 'project-bound':['目录绑定','']};
+  async function request(path, options={}){
+    const response = await fetch(path, options);
+    let payload = {};
+    try { payload = await response.json(); } catch (_) { payload = {}; }
+    if (!response.ok) throw new Error(payload.error || `请求失败（${response.status}）`);
+    if (payload.ok === false) throw new Error(payload.error || '操作失败');
+    return payload;
+  }
+  const post = (path, body) => request(path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body || {})});
 
-async function boot(){
-  ISSUES = (await get('/issues')).issues;
-  const o = await get('/overview');
-  $('#sub').textContent = o.date + ' · ' + (o.has_report ? '日报已生成' : '日报未生成');
-  $('#ov').innerHTML = [
-    ['进展', o.updates], ['任务', o.tasks], ['被挡掉', o.hidden],
-  ].map(([k,v])=>`<div class="stat"><b>${v}</b><span>${k}</span></div>`).join('')
-   + `<div class="stat"><b>${o.has_report?'✓':'—'}</b><span>日报</span></div>`;
-  review(); hidden(); report(); timeline(); health();
-}
+  function localDate(){ const now=new Date(); return new Date(now-now.getTimezoneOffset()*60000).toISOString().slice(0,10); }
+  async function loadDashboard({quiet=false}={}){
+    const date = $('#work-date').value || localDate();
+    if (!quiet) $('#loading').classList.add('show');
+    $('#error-state').classList.remove('show');
+    try{
+      state.data = await request(`/api/dashboard?date=${encodeURIComponent(date)}`);
+      hydrateFilters(); renderAll();
+    }catch(error){ showError(error.message); }
+    finally{ $('#loading').classList.remove('show'); }
+  }
 
-async function review(){
-  const {items} = await get('/review');
-  $('#rn').textContent = items.length ? items.length + ' 条待看' : '都明确';
-  $('#review').innerHTML = items.length ? items.map(it=>{
-    const [txt,cls] = LABEL[it.method] || [it.method,''];
-    const opts = ['<option value="">— 自由任务 —</option>'].concat(
-      ISSUES.map(i=>`<option value="${i.issue_key}" ${i.issue_key===it.issue_key?'selected':''}
-        >${esc(i.issue_key+' '+i.title.slice(0,26))}</option>`)).join('');
-    return `<div class="row"><div class="txt">${esc(it.content)}
-      <div class="meta"><span class="tag ${cls}">${txt}</span>
-      现归 ${esc(it.issue_key || it.title)}</div></div>
-      <select onchange="move('${it.update_id}',this.value,this)">${opts}</select></div>`;
-  }).join('') : '<div class="empty">没有需要复核的。</div>';
-}
+  function hydrateFilters(){
+    const data=state.data;
+    fillSelect($('#agent-filter'), data.filters.agents, '全部');
+    fillSelect($('#source-filter'), data.filters.ingestion_methods, '全部');
+    const statusLabels={done:'已完成',wip:'进行中',blocked:'受阻',unknown:'未标注'};
+    fillSelect($('#status-filter'), data.filters.completion_statuses, '全部', statusLabels);
+  }
+  function fillSelect(select, values, first, labels={}){
+    const current=select.value; select.innerHTML=`<option value="">${first}</option>`+
+      values.map(v=>`<option value="${esc(v)}">${esc(labels[v]||v)}</option>`).join('');
+    if(values.includes(current)) select.value=current;
+  }
+  function matches(update){
+    const agent=$('#agent-filter').value, source=$('#source-filter').value, status=$('#status-filter').value;
+    return (!agent || update.source_agent===agent) && (!source || update.ingestion_method===source) &&
+      (!status || update.completion_status===status);
+  }
+  function statusTag(status){ const labels={done:'Done',wip:'In progress',blocked:'Blocked',unknown:'Unknown'}; return `<span class="tag ${esc(status)}">${labels[status]||esc(status)}</span>`; }
+  function issueLabel(task){ return task.issue_key ? `${esc(task.issue_key)} · ${esc(task.title)}` : `${esc(task.title)} · 自由任务`; }
+  function empty(title, copy){ return `<div class="empty"><strong>${esc(title)}</strong>${esc(copy)}</div>`; }
 
-async function move(id, key, el){
-  el.disabled = true;
-  await post('/reassign', {update_id:id, issue_key:key});
-  await review(); await timeline(); await health();
-}
+  function renderAll(){
+    const d=state.data, o=d.overview;
+    $('#nav-today').textContent=o.updates; $('#nav-review').textContent=d.review.items.length;
+    $('#nav-tasks').textContent=d.tasks.items.filter(t=>t.status==='open').length;
+    $('#nav-reports').textContent=d.reports.dirty?'!':(d.reports.daily?'1':'—');
+    $('#nav-system').textContent=d.system.scan_runs.some(r=>r.status==='failed')?'!':'✓';
+    renderToday(); renderReview(); renderTasks(); renderReports(); renderSystem();
+  }
 
-async function hidden(){
-  const {items} = await get('/hidden');
-  $('#hn').textContent = items.length ? items.length + ' 条' : '';
-  $('#hidden').innerHTML = items.length ? items.slice(0,30).map(it=>
-    `<div class="row"><div class="txt">${esc(it.content_md)}
-      <div class="meta">${it.date} · ${it.status==='duplicate-ignored'?'近似重复':'dedupe 清理'}
-      ${it.k?' · '+esc(it.k):''}</div></div>
-      <button onclick="restore('${it.update_id}',this)">捞回来</button></div>`).join('')
-    : '<div class="empty">没有被挡掉的。</div>';
-}
+  function renderToday(){
+    const d=state.data,o=d.overview;
+    $('#today-date').textContent=d.date.replaceAll('-',' / ');
+    const visibleTasks=d.today.tasks.map(t=>({...t,updates:t.updates.filter(matches)})).filter(t=>t.updates.length);
+    $('#today-heading').textContent=o.updates ? `今天推进了 ${o.tasks} 件事。` : '这一天还没有工作进展。';
+    $('#today-summary').textContent=o.updates ? `${o.updates} 条进展来自 ${new Set(d.today.tasks.flatMap(t=>t.updates.map(u=>u.source_agent))).size} 个 Agent；${d.review.items.length} 条等待确认。` : '选择其他日期，或让 Agent 在完成一段工作后调用 log_progress。';
+    $('#metrics').innerHTML=[['进展',o.updates,''],['任务',o.tasks,''],['待复核',d.review.items.length,'attention'],['隐藏',o.hidden,'']]
+      .map(([label,value,kind])=>`<div class="metric ${kind}"><strong>${value}</strong><span>${label}</span></div>`).join('');
+    $('#today-tasks').innerHTML=visibleTasks.length?visibleTasks.map(task=>{
+      const statuses=task.updates.map(u=>u.completion_status); const taskStatus=statuses.includes('blocked')?'blocked':statuses.includes('wip')?'wip':statuses.every(s=>s==='done')?'done':'unknown';
+      return `<details class="timeline" open><summary><span><span class="item-title">${issueLabel(task)}</span><span class="meta">${task.updates.length} 条进展</span></span>${statusTag(taskStatus)}</summary><div class="timeline-body">${task.updates.map(u=>`<div class="progress-line"><div>${esc(u.content_md)}</div><div class="meta">${esc(u.source_agent)} · ${esc(u.ingestion_method)} · ${esc((u.created_at||'').slice(11,16))} ${statusTag(u.completion_status)}</div></div>`).join('')}</div></details>`;
+    }).join(''):empty('没有匹配筛选的进展','试试清空顶部筛选条件。');
+    const notices=[];
+    if(d.review.items.length) notices.push(`<div class="item"><div class="item-title">${d.review.items.length} 条归属待确认</div><div class="meta">人工确认后，模型不会再覆盖</div></div>`);
+    if(d.reports.dirty) notices.push(`<div class="item"><div class="item-title">日报需要更新</div><div class="meta">事实或归属在生成后发生了变化</div></div>`);
+    if(o.hidden) notices.push(`<div class="item"><div class="item-title">${o.hidden} 条扫描结果被挡下</div><div class="meta">可以在 Review 中恢复</div></div>`);
+    $('#attention').innerHTML=notices.join('')||empty('状态清爽','归属、重复和报告都没有待处理项。');
+    $('#timeline').innerHTML=d.timeline.groups.length?d.timeline.groups.map(group=>`<details class="timeline"><summary><span class="item-title">${group.issue_key?`<a href="https://mobius.feedmob.com/issue/${esc(group.issue_key)}" target="_blank" rel="noreferrer">${esc(group.issue_key)}</a> · `:''}${esc(group.title)}</span><span class="meta">${Object.values(group.days).flat().length} 条</span></summary><div class="timeline-body">${Object.entries(group.days).sort().reverse().map(([date,items])=>`<div class="progress-line"><b>${esc(date)}</b>${items.map(text=>`<div>${esc(text)}</div>`).join('')}</div>`).join('')}</div></details>`).join(''):empty('还没有轨迹','有进展后会按任务聚合在这里。');
+  }
 
-async function restore(id, el){ el.disabled=true; await post('/restore',{update_id:id});
-  await hidden(); await review(); }
+  function issueOptions(selected){
+    return `<option value="" ${selected?'':'selected'}>自由任务</option>`+state.data.issues.items.map(issue=>`<option value="${esc(issue.issue_key)}" ${issue.issue_key===selected?'selected':''}>${esc(issue.issue_key)} · ${esc(issue.title)}</option>`).join('');
+  }
+  function renderReview(){
+    const items=state.data.review.items.filter(matches); $('#review-total').textContent=`${items.length} 条`;
+    $('#review-list').innerHTML=items.length?items.map(item=>`<article class="review-card" data-update="${esc(item.update_id)}" data-old-issue="${esc(item.issue_key||'')}"><div class="review-grid"><div><div class="item-body">${esc(item.content)}</div><div class="meta"><span class="tag ${esc(item.confidence)}">${esc(item.confidence)} confidence</span><span>${esc(item.method)}</span><span>${esc(item.source_agent)} · ${esc(item.ingestion_method)}</span><span>${esc((item.created_at||'').slice(11,16))}</span>${statusTag(item.completion_status)}</div></div><div class="review-actions"><label class="field"><span style="font-size:10px;color:var(--muted);font-weight:700">归属到</span><select data-role="issue">${issueOptions(item.issue_key)}</select></label><textarea data-role="content" aria-label="修正进展正文">${esc(item.content)}</textarea><div class="button-row"><button class="btn primary small" data-action="confirm-update">确认并锁定</button></div></div></div></article>`).join(''):empty('Inbox 已清空','这一天的归属都经过了人工确认。');
+    const hidden=state.data.hidden.items;
+    $('#hidden-list').innerHTML=hidden.length?hidden.map(item=>`<div class="item item-head"><div><div class="item-body">${esc(item.content_md)}</div><div class="meta">${esc(item.status)} ${item.k?'· '+esc(item.k):''}</div></div><button class="btn small" data-action="restore" data-id="${esc(item.update_id)}">恢复</button></div>`).join(''):empty('没有隐藏条目','扫描去重没有挡下任何内容。');
+  }
 
-async function report(){
-  const r = await get('/report');
-  $('#report').textContent = r.daily || '还没生成。';
-}
+  function renderTasks(){
+    $$('#task-tabs button').forEach(button=>button.classList.toggle('active',button.dataset.taskStatus===state.taskStatus));
+    const hasGlobalFilter=$('#agent-filter').value||$('#source-filter').value||$('#status-filter').value;
+    const tasks=state.data.tasks.items.filter(t=>(state.taskStatus==='all'||t.status===state.taskStatus)&&
+      (!hasGlobalFilter||t.updates.some(matches)));
+    $('#task-list').innerHTML=tasks.length?tasks.map(task=>{
+      const targets=state.data.tasks.items.filter(t=>t.task_id!==task.task_id&&t.status!=='merged').map(t=>`<option value="${esc(t.task_id)}">${issueLabel(t)}</option>`).join('');
+      const action=task.status==='open'?`<button class="btn small" data-action="complete-task" data-id="${esc(task.task_id)}">完成</button>`:task.status==='done'?`<button class="btn small" data-action="reopen-task" data-id="${esc(task.task_id)}">重开</button>`:'';
+      return `<div class="task-row"><div><div class="item-title">${issueLabel(task)}</div><div class="item-body">${esc(task.last_progress||'暂无进展')}</div><div class="meta"><span class="tag ${task.status==='done'?'done':''}">${esc(task.status)}</span><span>${task.update_count} 条进展</span><span>最后更新 ${esc((task.last_update||'').slice(0,16).replace('T',' '))}</span></div></div><div class="task-actions">${action}${task.status!=='merged'&&targets?`<select aria-label="合并目标" data-merge-target="${esc(task.task_id)}"><option value="">合并到…</option>${targets}</select><button class="btn small" data-action="merge-task" data-id="${esc(task.task_id)}">合并</button>`:''}</div></div>`;
+    }).join(''):empty('这个分组没有任务','切换上方状态查看其他任务。');
+  }
 
-async function regen(){
-  $('#regen').textContent = ' 生成中，要等模型…';
-  const r = await post('/regenerate', {});
-  $('#regen').textContent = ' ' + (r.status || '完成');
-  await report(); await boot();
-}
+  function renderReports(){
+    const report=state.data.reports; $('#report-dirty').classList.toggle('show',report.dirty);
+    $$('#report-tabs button').forEach(button=>button.classList.toggle('active',button.dataset.reportTab===state.reportTab));
+    let content='';
+    if(state.reportTab==='daily') content=report.daily||'尚未生成日报。';
+    if(state.reportTab==='voice') content=report.voice||'尚未生成口播稿。';
+    if(state.reportTab==='history') content=report.history.length?report.history.map((item,index)=>`版本 ${index+1} · ${item.kind} · ${item.created_at}\n${item.content_md}`).join('\n\n────────\n\n'):'还没有历史版本。';
+    if(state.reportTab==='warnings') content=report.warnings.length?report.warnings.map(text=>`• ${text}`).join('\n'):'本次生成没有警告。';
+    $('#report-content').textContent=content;
+  }
 
-async function timeline(){
-  const {groups} = await get('/timeline?days=7');
-  $('#tl').innerHTML = groups.length ? groups.map(g=>{
-    const head = g.issue_key
-      ? `<a href="https://mobius.feedmob.com/issue/${g.issue_key}" target="_blank">${g.issue_key}</a> ${esc(g.title)}`
-      : esc(g.title) + ' <span class="tag">自由任务</span>';
-    const days = Object.entries(g.days).sort().reverse().map(([d,list])=>
-      `<div class="day"><b>${d}</b><ul>${list.map(c=>`<li>${esc(c)}</li>`).join('')}</ul></div>`).join('');
-    return `<div class="grp"><div><b>${head}</b></div>${days}</div>`;
-  }).join('') : '<div class="empty">最近 7 天没有进展。</div>';
-}
+  function renderSystem(){
+    const doctor=state.data.system.doctor;
+    $('#doctor').innerHTML=`<div class="item-title">运行检查</div><div class="meta" style="margin-bottom:8px">Fecho ${esc(doctor.version||'')} · 本地优先</div>`+doctor.checks.map(check=>`<div class="check ${check.ok?'':'bad'}"><span class="check-mark">${check.ok?'✓':'!'}</span><div><div class="item-title">${esc(check.name)}</div><div class="meta">${esc(check.detail)}</div>${check.fix?`<div class="meta">建议：${esc(check.fix)}</div>`:''}</div></div>`).join('');
+    const filters=state.data.filters;
+    $('#sources').innerHTML=`<div class="item-title">已识别来源</div><div class="item"><div class="meta">Agent</div><div style="margin-top:7px">${filters.agents.map(a=>`<span class="tag">${esc(a)}</span>`).join(' ')||'暂无'}</div></div><div class="item"><div class="meta">进入方式</div><div style="margin-top:7px">${filters.ingestion_methods.map(a=>`<span class="tag">${esc(a)}</span>`).join(' ')||'暂无'}</div></div>`;
+    const runs=state.data.system.scan_runs;
+    $('#scan-runs').innerHTML=runs.length?runs.map(run=>`<tr><td>${esc((run.started_at||'').slice(0,16).replace('T',' '))}</td><td>${esc(run.producer_agent)}</td><td>${esc(run.project.split('/').pop())}</td><td>${run.status==='succeeded'?'<span class="tag done">成功</span>':'<span class="tag blocked">失败</span>'}</td><td>${run.error?esc(run.error):`${run.entries} 条 / ${run.chunks} 块`}</td></tr>`).join(''):`<tr><td colspan="5">还没有扫描记录。</td></tr>`;
+  }
 
-async function health(){
-  const h = await get('/health-stats');
-  const rows = Object.entries(h.by_method).sort((a,b)=>b[1]-a[1])
-    .map(([m,n])=>`<div class="row"><div class="txt">${(LABEL[m]||[m])[0]}</div><b>${n}</b></div>`).join('');
-  $('#health').innerHTML =
-    `<div class="bar"><i style="width:${Math.min(h.freeform_pct,100)}%"></i></div>
-     <div class="meta">最近 ${h.days} 天 ${h.total} 条，其中 ${h.freeform} 条落在自由任务
-     （${h.freeform_pct}%）</div>${rows}`;
-}
-boot();
+  function switchView(view){ state.view=view; $$('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===view)); $$('.view').forEach(p=>p.classList.toggle('active',p.dataset.page===view)); const copy=pageCopy[view]; $('#page-title').textContent=copy[0]; $('#page-subtitle').textContent=copy[1]; window.scrollTo({top:0,behavior:'smooth'}); }
+  function showError(message){ $('#error-copy').textContent=message; $('#error-state').classList.add('show'); }
+  function toast(message, undo=null, isError=false){ clearTimeout(state.toastTimer); state.undo=undo; $('#toast-copy').textContent=message; $('#undo-action').style.display=undo?'block':'none'; $('#toast').classList.toggle('error',isError); $('#toast').classList.add('show'); state.toastTimer=setTimeout(()=>$('#toast').classList.remove('show'),6000); }
+  async function mutate(path, body, success, undo=null){
+    try{ const result=await post(path,body); if(result.dashboard){state.data=result.dashboard;renderAll();}else await loadDashboard({quiet:true}); toast(success,undo); return result; }
+    catch(error){ toast(error.message,null,true); throw error; }
+  }
+
+  document.addEventListener('click', async event=>{
+    const nav=event.target.closest('[data-view]'); if(nav){switchView(nav.dataset.view);return;}
+    const go=event.target.closest('[data-go]'); if(go){switchView(go.dataset.go);return;}
+    const reportTab=event.target.closest('[data-report-tab]'); if(reportTab){state.reportTab=reportTab.dataset.reportTab;renderReports();return;}
+    const taskTab=event.target.closest('[data-task-status]'); if(taskTab){state.taskStatus=taskTab.dataset.taskStatus;renderTasks();return;}
+    const action=event.target.closest('[data-action]'); if(!action)return;
+    action.disabled=true;
+    try{
+      if(action.dataset.action==='confirm-update'){
+        const card=action.closest('[data-update]'), updateId=card.dataset.update, oldIssue=card.dataset.oldIssue;
+        const issue=$('[data-role="issue"]',card).value, content=$('[data-role="content"]',card).value;
+        await mutate('/api/correct',{update_id:updateId,issue_key:issue,content,date:state.data.date},'进展已确认并锁定',()=>mutate('/api/reassign',{update_id:updateId,issue_key:oldIssue,date:state.data.date},'已撤销归属修改'));
+      }
+      if(action.dataset.action==='restore') await mutate('/api/restore',{update_id:action.dataset.id,date:state.data.date},'进展已恢复');
+      if(action.dataset.action==='complete-task') await mutate(`/api/tasks/${action.dataset.id}/complete`,{date:state.data.date},'任务已完成');
+      if(action.dataset.action==='reopen-task') await mutate(`/api/tasks/${action.dataset.id}/reopen`,{date:state.data.date},'任务已重新打开');
+      if(action.dataset.action==='merge-task'){
+        const select=$(`[data-merge-target="${action.dataset.id}"]`); if(!select.value)throw new Error('请先选择合并目标');
+        await mutate('/api/tasks/merge',{source_task_id:action.dataset.id,target_task_id:select.value,date:state.data.date},'任务已合并');
+      }
+    }catch(error){ if(!$('#toast').classList.contains('show'))toast(error.message,null,true); }
+    finally{action.disabled=false;}
+  });
+
+  async function regenerate(){
+    const buttons=[$('#regenerate'),$('#dirty-regenerate')]; buttons.forEach(b=>b.disabled=true);
+    toast('正在调用模型整理日报…');
+    try{ const result=await post('/api/regenerate',{date:state.data.date}); state.data=result.dashboard; renderAll(); toast('日报和口播稿已更新'); }
+    catch(error){toast(error.message,null,true)} finally{buttons.forEach(b=>b.disabled=false)}
+  }
+  $('#regenerate').addEventListener('click',regenerate); $('#dirty-regenerate').addEventListener('click',regenerate);
+  $('#undo-action').addEventListener('click',async()=>{const undo=state.undo;state.undo=null;if(undo)await undo();});
+  $('#retry').addEventListener('click',()=>loadDashboard());
+  $('#work-date').value=localDate(); $('#work-date').addEventListener('change',()=>loadDashboard());
+  ['agent-filter','source-filter','status-filter'].forEach(id=>$('#'+id).addEventListener('change',renderAll));
+  loadDashboard();
 </script>
+</body>
+</html>
