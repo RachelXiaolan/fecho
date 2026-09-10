@@ -10,6 +10,10 @@ logs/
 .acceptance/
 .worktrees/
 
-# 共享 LLM 配置里有 API key，而这个仓库是公开的——绝不能进版本控制
+# 共享 LLM 配置里有 API key，而这个仓库是公开的——绝不能进版本控制。
+# 分发用的那份就放在仓库根目录（方便找、方便发），全靠这几条规则挡住。
+fecho-团队LLM配置.json
+*团队LLM配置*.json
 shared-llm-config.json
 *shared-config*.json
+*.secret.json

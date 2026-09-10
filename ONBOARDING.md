@@ -1,25 +1,24 @@
-# Fecho 验收指南
+# Fecho 安装与使用指南
 
-> 给同事的安装和试用说明。全程约 10 分钟。
+Fecho 让 **agent 边干活边记进展**，每晚自动整理成日报和口播稿。
 
-Fecho 让 **agent 边干活边记进展**，每晚自动整理成日报和口播稿。你要做的只有两件事：
-装一次，然后每天晚上看一眼日报对不对。
+你要做的只有两件事：装一次，然后每天晚上花两分钟看一眼日报对不对。
 
 ---
 
 ## 零、先确认你符合条件
 
-| 条件 | 说明 |
+| 条件 | 怎么确认 |
 |---|---|
 | **macOS** | 自动任务用的是 macOS 的 launchd，其他系统装不了后台服务 |
 | **Python 3.9 以上** | 终端跑 `python3 --version` 看一下 |
-| **能连公司内网** | 要访问 `api.feedmob.it.com`，不通的话日报出不来 |
+| **能连公司内网** | 跑 `curl -s -o /dev/null -w "%{http_code}" http://api.feedmob.it.com`，有响应就行 |
 | **用 Claude Code / Codex / Hermes 之一干活** | Fecho 靠读这些工具的会话记录来自动记进展 |
-| **一份共享配置文件** | 找 Rachel 要 `shared-llm-config.json`，**里面有密钥，别转发到群里** |
+| **拿到配置文件** | 找 Rachel 要 `fecho-团队LLM配置.json`。**里面有密钥，别转发** |
 
 ---
 
-## 一、安装（3 条命令）
+## 一、安装
 
 ```bash
 python3 -m venv ~/.fecho/venv
@@ -27,7 +26,7 @@ python3 -m venv ~/.fecho/venv
 echo 'export PATH="$HOME/.fecho/venv/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
 ```
 
-**`[server]` 不能省** —— 少了它 Dashboard 起不来。
+**`[server]` 不能省** —— 少了它面板起不来。
 
 验证：
 
@@ -43,7 +42,7 @@ fecho --version
 
 ---
 
-## 二、初始化（1 条命令）
+## 二、初始化
 
 把下面这行的三个地方换成你自己的，然后执行：
 
@@ -53,7 +52,7 @@ fecho onboard \
   --display-name "你的中文名" \
   --mobius-assignee 你的邮箱@feedmob.com \
   --work-prefix ~/Documents/work \
-  --shared-config ~/Downloads/shared-llm-config.json
+  --shared-config ~/Downloads/fecho-团队LLM配置.json
 ```
 
 | 参数 | 填什么 | 举例 |
@@ -62,7 +61,7 @@ fecho onboard \
 | `--display-name` | 日报上显示的名字 | `"Rachel Lu"` |
 | `--mobius-assignee` | 你的 Mobius 邮箱 | `rachel.lu@feedmob.com` |
 | `--work-prefix` | **你放工作仓库的父目录** | `~/Documents/work` |
-| `--shared-config` | 刚拿到的配置文件路径 | `~/Downloads/shared-llm-config.json` |
+| `--shared-config` | 刚拿到的配置文件路径 | `~/Downloads/fecho-团队LLM配置.json` |
 
 **关于 `--work-prefix`：这是隐私边界。** Fecho 默认**不读任何目录**，只有这里登记过的才会被扫描。
 个人项目、私人笔记不要放进来。可以写多次登记多个目录。
@@ -72,7 +71,7 @@ fecho onboard \
 1. 读共享配置，配好 LLM
 2. 给检测到的 agent（Claude Code / Codex / Hermes）注册 Fecho
 3. **打开浏览器让你登录 Mobius** ← 这一步要你点授权，每个人必须自己登
-4. 装两个后台服务（每日任务 + Dashboard）
+4. 装两个后台服务（每日任务 + 面板）
 5. 跑一次自检
 
 想先看看会做什么而不真的执行，加 `--dry-run`。
@@ -113,7 +112,7 @@ open http://127.0.0.1:8900
 
 ---
 
-## 四、怎么用
+## 四、平时怎么用
 
 ### 平时：什么都不用做
 
@@ -204,7 +203,7 @@ fecho bind AI-2541
 
 之后这个目录的进展默认归它。
 
-### Dashboard 打不开
+### 面板打不开
 
 ```bash
 fecho schedule install --time 21:00
@@ -236,7 +235,7 @@ fecho hidden --restore <id>      # 捞回某一条
 ~/.fecho/config.json   配置（含密钥，权限 600）
 ```
 
-Dashboard 只监听 `127.0.0.1`，外面连不进来。
+面板只监听 `127.0.0.1`，外面连不进来。
 
 **唯一会离开你电脑的**是日报和口播稿成品，前提是你配了团队汇总（默认没配）。
 原始进展记录永远不会外发 —— 汇总端的数据库里根本没有存它们的表。
@@ -247,57 +246,3 @@ Dashboard 只监听 `127.0.0.1`，外面连不进来。
 fecho schedule uninstall         # 卸掉后台服务
 rm -rf ~/.fecho                  # 删掉所有数据
 ```
-
----
-
-## 八、给 Rachel：分发前要做的
-
-### 1. 生成共享配置
-
-```bash
-fecho export-shared-config
-```
-
-默认写到 `~/.fecho/shared-llm-config.json`，权限 600，只含 LLM 那几个字段
-（Mobius token 是一人一份的身份凭证，不会被导出）。
-
-它导出的就是这三个必需字段：
-
-```json
-{
-  "llm_base_url": "http://api.feedmob.it.com",
-  "llm_api_key": "……",
-  "llm_model": "minimax-m3"
-}
-```
-
-### 2. 怎么发给同事
-
-**这个文件里有 API key，仓库又是公开的。**
-
-- ✅ 私聊单独发，或者放内网共享盘
-- ❌ 不要发群里、不要进 Git、不要传公开网盘
-
-仓库的 `.gitignore` 已经挡了 `shared-llm-config.json` 和 `*shared-config*.json`，
-但换个文件名还是会漏，注意别乱改名。
-
-### 3. 千万别用 `pip install -e`
-
-后台服务必须用**普通安装**（`pip install .`），不能用可编辑安装。
-
-踩过的坑：可编辑安装靠一个 `.pth` 钩子定位代码，`import fecho` 能成功，但
-`import fecho.cli` 在 launchd 那种干净环境里会失败 —— 两个后台服务会一直起不来，
-日志里刷 `No module named fecho.cli`，而在终端里手动跑一切正常，非常难查。
-
-改代码之后要让服务用上新代码：
-
-```bash
-~/.fecho/venv/bin/pip install ".[server]"
-fecho schedule install --time 21:00
-```
-
-### 4. 收集反馈时重点问
-
-- 归属准不准（**这是唯一没在第二个人身上验证过的部分**）
-- 日报有没有漏掉重要的事
-- 21:00 那个时间点合不合适
