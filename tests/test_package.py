@@ -8,18 +8,27 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class TestPackageContents(unittest.TestCase):
-    def test_dashboard_template_is_declared_as_package_data(self):
-        pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-        package_data = pyproject.split("[tool.setuptools.package-data]", 1)[1]
-        self.assertRegex(
-            package_data,
-            re.compile(r'fecho\s*=\s*\[[^\]]*"presets/dashboard\.html"', re.S),
-        )
 
     def test_onboarding_skill_is_declared_as_package_data(self):
         pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
         package_data = pyproject.split("[tool.setuptools.package-data]", 1)[1]
         self.assertIn('"presets/skill/*.md"', package_data)
+
+    def test_every_page_is_shipped(self):
+        """presets 下的每个页面和说明都要进安装包。
+
+        真踩过：打包清单里只写了 dashboard.html 一个文件，后来加的登录页、
+        onboarding 页都没被打进去——本地跑一切正常，部署上去才会打不开。
+        """
+        import fnmatch
+        pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        patterns = pyproject.split("[tool.setuptools.package-data]", 1)[1].split("]", 1)[0]
+        patterns = [x.strip().strip('"') for x in patterns.split("[", 1)[1].split(",")]
+        presets = ROOT / "fecho" / "presets"
+        for f in list(presets.glob("*.html")) + list(presets.glob("*.md")):
+            rel = "presets/" + f.name
+            self.assertTrue(any(fnmatch.fnmatch(rel, pat) for pat in patterns),
+                            "%s 不会被打进安装包" % rel)
 
     def test_version_is_consistent_everywhere(self):
         """两处版本号必须一致。

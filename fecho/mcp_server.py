@@ -159,6 +159,61 @@ TOOLS = [
     },
 ]
 
+# 云端版才有的工具。本机版的 tools/list 里看不到它们。
+CLOUD_TOOLS = [
+    {
+        "name": "submit_scan",
+        "description": (
+            "【夜间扫描专用】把本机扫描聊天记录提取出的候选进展批量交上来。"
+            "每条都会走和 log_progress 一样的归属、去重规则；同一个 source_event_key 重复交只记一次；"
+            "不在工作文件夹白名单里的会被服务器丢掉。最后一批带 finished=true，服务器记下「这天已扫」。"
+        ),
+        "inputSchema": {"type": "object", "properties": {
+            "date": {"type": "string", "description": "这一轮扫的是哪天，YYYY-MM-DD（由「该扫了吗」给出）"},
+            "entries": {"type": "array", "items": {"type": "object", "properties": {
+                "content": {"type": "string", "description": "做成了什么，一两句话"},
+                "kind": {"type": "string", "enum": ["done", "pitfall", "decision"]},
+                "issue": {"type": "string", "description": "判断属于哪个 issue，不确定就不填"},
+                "date": {"type": "string", "description": "这条发生在哪天（北京时间）"},
+                "project": {"type": "string", "description": "这段对话所在文件夹的绝对路径"},
+                "agent": {"type": "string", "description": "哪个 agent 的聊天记录：claude-code / codex / hermes"},
+                "session_id": {"type": "string"},
+                "source_event_key": {"type": "string", "description": "稳定的去重键，同一条每次扫都一样"}},
+                "required": ["content", "project"]}},
+            "finished": {"type": "boolean", "description": "这是最后一批"},
+            "error": {"type": "string", "description": "扫描失败时写原因，服务器会半小时后让你再试"}},
+            "required": ["entries"]},
+    },
+    {
+        "name": "report_work_folders",
+        "description": (
+            "【安装时用】上报「用户用 agent 干过活的文件夹」清单，只传绝对路径，不传内容。"
+            "从 Claude Code / Codex 的聊天记录里读每段对话所在的目录即可。"
+            "上报后用户在网页上勾选哪些算工作（白名单）；新上报的默认不勾。"
+        ),
+        "inputSchema": {"type": "object", "properties": {
+            "folders": {"type": "array", "items": {"type": "object", "properties": {
+                "path": {"type": "string"}, "last_used": {"type": "string"}},
+                "required": ["path"]}}},
+            "required": ["folders"]},
+    },
+    {
+        "name": "set_work_folders",
+        "description": "把工作文件夹白名单设成这一组绝对路径（用户说「把某个目录加进/移出白名单」时用）。"
+                       "会整组替换，所以要带上想保留的全部路径。",
+        "inputSchema": {"type": "object", "properties": {
+            "folders": {"type": "array", "items": {"type": "string"}}},
+            "required": ["folders"]},
+    },
+    {
+        "name": "set_daily_time",
+        "description": "改每天出日报的时间（北京时间 HH:MM，00:15–21:45）。本机扫描会自动提前 15 分钟。",
+        "inputSchema": {"type": "object", "properties": {
+            "time": {"type": "string", "description": "如 20:30"}},
+            "required": ["time"]},
+    },
+]
+
 _METHOD_LABEL = {
     "explicit": "你点名了 issue",
     "explicit-freeform": "你明确指定了自由任务",
@@ -197,9 +252,99 @@ def _fmt_report(r: Dict[str, Any]) -> str:
     return "\n".join(out)
 
 
+
+def _cloud_call(name: str, args: Dict[str, Any], me: str, context: MCPContext) -> Optional[str]:
+    """云端版里做法不同的工具。返回 None 表示照本机版的做法处理。"""
+    from . import accounts, cloudscan, jobs, mobius, mobius_login, store
+
+    url = config.PUBLIC_URL
+    if name == "submit_scan":
+        producer = cloudscan.agent_id(context.client_name) or "scan"
+        r = cloudscan.submit(me, args.get("entries") or [], date=args.get("date"),
+                             finished=bool(args.get("finished")), error=args.get("error"),
+                             producer=producer)
+        lines = ["收到：新记 %d 条，重复 %d 条" % (r["recorded"], r["duplicate"])]
+        if r["out_of_scope"]:
+            lines.append("⚠️ 有 %d 条不在工作文件夹白名单里，已丢弃" % r["out_of_scope"])
+        if r["rejected"]:
+            lines.append("⚠️ 有 %d 条没记上：%s" % (len(r["rejected"]), r["rejected"][0]["error"]))
+        if r["regenerate_queued"]:
+            lines.append("这些日期已经出过日报，已排队重新生成：%s" % "、".join(r["regenerate_queued"]))
+        if args.get("finished"):
+            lines.append("这一轮扫描已标记为%s。" % ("失败，半小时后会再让你试" if args.get("error")
+                                                  else "完成"))
+        return "\n".join(lines)
+
+    if name == "report_work_folders":
+        r = cloudscan.report_folders(me, args.get("folders") or [])
+        return ("收到 %d 个文件夹。请让用户打开 %s/onboard 勾选哪些算工作——"
+                "没勾的不会被扫描。" % (r["reported"], url))
+
+    if name == "set_work_folders":
+        chosen = cloudscan.set_selected(me, args.get("folders") or [])
+        return ("工作文件夹白名单现在是：\n" + "\n".join("- " + p for p in chosen)
+                if chosen else "白名单已清空——本机扫描不会读任何聊天记录。")
+
+    if name == "set_daily_time":
+        t = accounts.set_daily_time(me, args["time"])
+        h, m = map(int, t.split(":"))
+        scan = h * 60 + m - accounts.SCAN_LEAD_MINUTES
+        return "已改：每天 %s 出日报，本机 %02d:%02d 扫描。最多 15 分钟内生效。" % (t, *divmod(scan, 60))
+
+    if name == "end_of_day":
+        # 出日报要好几分钟，放在请求里做会超时——排队交给后台程序
+        date = args.get("date") or store.today()
+        job = jobs.enqueue(me, "regenerate", date)
+        return "已排队生成 %s 的日报（%s），几分钟后在 %s 能看到。" % (date, job["status"], url)
+
+    if name == "mobius_login":
+        return "云端版在网页上连 Mobius：打开 %s/login 用 Mobius 登录即可。" % url
+
+    if name == "sync_issues":
+        token = mobius_login.access_token(me)
+        s = mobius.sync(me, assignee=me, token=token)
+        return "已同步 %d 个在办 issue。" % s["count"]
+
+    if name == "fecho_doctor":
+        user = accounts.get_user(me) or {}
+        due = cloudscan.due(me)
+        on = [a["label"] for a in cloudscan.agents(me) if a["scan_enabled"]]
+        lines = [
+            "Fecho %s · 云端版 · %s" % (__version__, me),
+            "%s Mobius：%s" % (("✓", "已连接") if mobius_login.connected(me)
+                               else ("✗", "未连接，去 %s/login 登录" % url)),
+            "✓ 每天 %s 出日报，本机 %s 扫描" % (user.get("daily_time", "21:00"), due["scan_at"]),
+            "%s 工作文件夹：%s" % (("✓", "%d 个" % len(due["folders"])) if due["folders"]
+                                  else ("✗", "还没选，去 %s/onboard 勾选" % url)),
+            "%s 扫描的 agent：%s" % ("✓" if on else "✗", "、".join(on) or "一个都没开"),
+            "· 扫描状态：%s" % due["reason"],
+        ]
+        lines += ["⚠️ " + n for n in due["notices"]]
+        return "\n".join(lines)
+
+    if name == "team_digest":
+        if not accounts.is_admin(me):
+            return "团队汇总只有 admin 能看。需要的话在网页 %s 的 Admin 面板里申请。" % url
+        date = args.get("date") or store.today()
+        out = ["# %s 团队日报" % date]
+        for u in accounts.list_users():
+            rep = db.get_report(u["author"], date, "daily")
+            out.append("\n## %s\n\n%s" % (u["display_name"],
+                                            rep["content_md"] if rep else "（当天没有日报）"))
+        return "\n".join(out)
+
+    return None
+
 def call_tool(name: str, args: Dict[str, Any], context: Optional[MCPContext] = None) -> Any:
     context = context or DEFAULT_CONTEXT
     me = context.author or service.whoami()
+    cloud_only = {t["name"] for t in CLOUD_TOOLS}
+    if config.CLOUD:
+        reply = _cloud_call(name, args, me, context)
+        if reply is not None:
+            return reply
+    elif name in cloud_only:
+        raise RuntimeError("%s 只有云端版才有" % name)
     if name == "log_progress":
         res = service.record(
             args["content"], author=me, date=args.get("date"),
@@ -389,6 +534,9 @@ def handle(msg: Dict[str, Any], context: Optional[MCPContext] = None) -> Optiona
     if method == "initialize":
         info = (msg.get("params") or {}).get("clientInfo") or {}
         context.client_name = info.get("name") or context.client_name
+        if config.CLOUD and context.author:
+            from . import cloudscan
+            cloudscan.touch_agent(context.author, context.client_name)   # 网页上的「已连接」靠这个
         log("client=%s session=%s home=%s" % (
             context.client_name, context.session_id[:8], config.HOME))
         return {"jsonrpc": "2.0", "id": mid, "result": {
@@ -401,7 +549,8 @@ def handle(msg: Dict[str, Any], context: Optional[MCPContext] = None) -> Optiona
     if method == "ping":
         return {"jsonrpc": "2.0", "id": mid, "result": {}}
     if method == "tools/list":
-        return {"jsonrpc": "2.0", "id": mid, "result": {"tools": TOOLS}}
+        tools = TOOLS + CLOUD_TOOLS if config.CLOUD else TOOLS
+        return {"jsonrpc": "2.0", "id": mid, "result": {"tools": tools}}
     if method == "tools/call":
         params = msg.get("params") or {}
         try:

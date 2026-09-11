@@ -27,4 +27,4 @@ fecho-mcp = "fecho.mcp_server:main"
 packages = ["fecho"]
 
 [tool.setuptools.package-data]
-fecho = ["presets/personas/*.json", "presets/dashboard.html", "presets/skill/*.md"]
+fecho = ["presets/*.md", "presets/personas/*.json", "presets/*.html", "presets/skill/*.md"]

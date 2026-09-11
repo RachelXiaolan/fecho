@@ -355,7 +355,10 @@ def build_app():
 
     @app.get("/healthz")
     def healthz(request: Request, authorization: Optional[str] = Header(None)):
-        me = guard(request, authorization)
+        # 云端版不要求登录：部署平台和监控要靠它判断服务活没活。只返回版本号，
+        # 不带任何身份信息，所以公开没问题。本机版照旧只让本机访问。
+        if not config.CLOUD:
+            guard(request, authorization)
         return {"ok": True, "version": __version__}
 
     # ---- dashboard 数据 ----
@@ -610,6 +613,54 @@ def build_app():
         _cloud_only()
         me = guard(request, authorization)
         return {"ok": True, "daily_time": accounts.set_daily_time(me, body["daily_time"])}
+
+    # ---- 云端版：扫描、agent、工作文件夹 ----
+    @app.get("/api/scan/due")
+    def api_scan_due(request: Request, authorization: Optional[str] = Header(None)):
+        """本机小脚本每 15 分钟来问一次。只是个查表，不经过任何大模型。"""
+        from . import cloudscan
+        _cloud_only()
+        me = guard(request, authorization)
+        return cloudscan.due(me)
+
+    @app.get("/api/agents")
+    def api_agents(request: Request, authorization: Optional[str] = Header(None)):
+        from . import cloudscan
+        _cloud_only()
+        me = guard(request, authorization)
+        return {"items": cloudscan.agents(me)}
+
+    @app.post("/api/agents/{agent}")
+    def api_agent_toggle(agent: str, request: Request, body: Dict[str, Any] = Body(...),
+                         authorization: Optional[str] = Header(None)):
+        from . import cloudscan
+        _cloud_only()
+        me = guard(request, authorization)
+        return cloudscan.set_scan_enabled(me, agent, bool(body.get("scan_enabled")))
+
+    @app.get("/api/folders")
+    def api_folders(request: Request, authorization: Optional[str] = Header(None)):
+        from . import cloudscan
+        _cloud_only()
+        me = guard(request, authorization)
+        return {"items": cloudscan.folders_of(me)}
+
+    @app.post("/api/folders")
+    def api_folders_set(request: Request, body: Dict[str, Any] = Body(...),
+                        authorization: Optional[str] = Header(None)):
+        from . import cloudscan
+        _cloud_only()
+        me = guard(request, authorization)
+        return {"selected": cloudscan.set_selected(me, body.get("selected") or [])}
+
+    @app.get("/install")
+    @app.get("/install.md")
+    def install_doc():
+        """给 agent 看的安装说明。onboarding 那句 prompt 指向这里。"""
+        from fastapi.responses import PlainTextResponse
+        _cloud_only()
+        text = _page("install.md").replace("__URL__", config.PUBLIC_URL)
+        return PlainTextResponse(text, media_type="text/markdown; charset=utf-8")
 
     # ---- 云端版：admin ----
     @app.post("/api/admin/request")

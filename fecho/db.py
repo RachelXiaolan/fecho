@@ -244,6 +244,39 @@ CREATE TABLE IF NOT EXISTS jobs (
 CREATE INDEX IF NOT EXISTS idx_jobs_queue ON jobs(status, run_after);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_daily ON jobs(author, kind, date) WHERE kind = 'daily';
 
+-- 工作文件夹：扫描的隐私边界。安装时 agent 从聊天记录里找出「你用 agent 干过活的
+-- 文件夹」传上来（只有路径，没有内容），网页上勾选。勾中的就是白名单，所有 agent 共用。
+CREATE TABLE IF NOT EXISTS work_folders (
+    author        TEXT NOT NULL,
+    path          TEXT NOT NULL,
+    selected      INTEGER NOT NULL DEFAULT 0,
+    last_used     TEXT,                 -- 最近一次在这里用 agent 的时间
+    reported_at   TEXT NOT NULL,
+    PRIMARY KEY (author, path)
+);
+
+-- 每个人的 agent：连没连上、要不要扫它的聊天记录。
+-- 两件事是独立的：没接 MCP 的 agent，本机照样可以扫它的聊天记录。
+CREATE TABLE IF NOT EXISTS agent_connections (
+    author        TEXT NOT NULL,
+    agent         TEXT NOT NULL,        -- claude-code / codex / hermes
+    scan_enabled  INTEGER NOT NULL DEFAULT 1,
+    first_seen    TEXT,
+    last_seen     TEXT,
+    PRIMARY KEY (author, agent)
+);
+
+-- 每天的本机扫描做完没有。本机每 15 分钟来问一次「该扫了吗」，靠这张表回答。
+CREATE TABLE IF NOT EXISTS scan_checkins (
+    author        TEXT NOT NULL,
+    date          TEXT NOT NULL,
+    status        TEXT NOT NULL,        -- done / failed
+    uploaded      INTEGER NOT NULL DEFAULT 0,
+    error         TEXT,
+    finished_at   TEXT NOT NULL,
+    PRIMARY KEY (author, date)
+);
+
 -- 服务器级的小配置。现在只放一样：在 Mobius 注册过的 OAuth 客户端。
 -- 不缓存的话每登录一次就去 Mobius 注册一个新客户端，那边会越堆越多。
 CREATE TABLE IF NOT EXISTS app_settings (
