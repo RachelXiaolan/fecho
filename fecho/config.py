@@ -71,6 +71,9 @@ def _path(key: str, env: str, default: Path) -> Path:
 
 # ---- 数据位置 ----
 DB_PATH = _path("db", "FECHO_DB", HOME / "fecho.db")
+# 设了就走 Postgres（云端版，Supabase），不设就是本机 SQLite。
+# 只从环境变量读：连接串里带数据库密码，不该落进任何配置文件。
+DATABASE_URL = os.getenv("FECHO_DATABASE_URL", "")
 LOGS_DIR = _path("logs_dir", "FECHO_LOGS_DIR", HOME / "logs")
 PERSONAS_DIR = _path("personas_dir", "FECHO_PERSONAS_DIR",
                      Path(__file__).resolve().parent / "presets" / "personas")

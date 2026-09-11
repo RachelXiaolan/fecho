@@ -1,7 +1,10 @@
-"""SQLite 存元数据。
+"""存元数据：本机版用 SQLite，云端版用 Postgres（Supabase）。
 
 核心是**任务**，不是记录。一件事一个 task，进展一条条挂在它下面：
 一个任务可以横跨很多天、很多个对话、很多个 agent。
+
+两种数据库共用同一套 SQL：写法只挑两边都认的（ON CONFLICT、日期在 Python 里算好
+再传），不做方言翻译。唯一的适配是占位符——上层一律写 ?，Postgres 那边换成 %s。
 """
 import json
 import sqlite3
@@ -9,6 +12,10 @@ from contextlib import contextmanager
 from typing import Any, Dict, Iterator, List, Optional
 
 from . import config
+
+
+def backend() -> str:
+    return "postgres" if config.DATABASE_URL else "sqlite"
 
 SCHEMA = """
 -- 任务：一件要做的事。可能对应 Mobius 上的 issue，也可能不对应。
@@ -161,6 +168,140 @@ CREATE TABLE IF NOT EXISTS report_history (
 """
 
 
+# 云端版多出来的表：人、登录凭证、权限、后台任务。本机版建了也不用，不碍事。
+SCHEMA_CLOUD = """
+-- 用户。author 字段全库通用：本机版是配置里的名字，云端版是邮箱。
+CREATE TABLE IF NOT EXISTS users (
+    author        TEXT PRIMARY KEY,     -- 邮箱，全小写
+    display_name  TEXT NOT NULL,
+    mobius_user_id TEXT,
+    is_admin      INTEGER NOT NULL DEFAULT 0,
+    daily_time    TEXT NOT NULL DEFAULT '21:00',   -- 北京时间，服务器在这个点出日报
+    created_at    TEXT NOT NULL,
+    last_seen_at  TEXT
+);
+
+-- agent 用的个人 token。只存哈希：库被读走也拿不到能用的 token。
+-- 有效期是滑动的：每用一次顺延 7 天，连续 7 天不用才失效。
+CREATE TABLE IF NOT EXISTS api_tokens (
+    token_hash    TEXT PRIMARY KEY,
+    author        TEXT NOT NULL,
+    label         TEXT NOT NULL DEFAULT '',
+    created_at    TEXT NOT NULL,
+    last_used_at  TEXT,
+    expires_at    TEXT NOT NULL,
+    revoked_at    TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_api_tokens_author ON api_tokens(author);
+
+-- 网页登录会话，同样只存哈希。
+CREATE TABLE IF NOT EXISTS web_sessions (
+    session_hash  TEXT PRIMARY KEY,
+    author        TEXT NOT NULL,
+    created_at    TEXT NOT NULL,
+    expires_at    TEXT NOT NULL
+);
+
+-- 每个人的 Mobius 授权，服务器替他去同步 issue。refresh_token 加密后存。
+CREATE TABLE IF NOT EXISTS mobius_credentials (
+    author            TEXT PRIMARY KEY,
+    access_token_enc  TEXT,
+    access_expires_at INTEGER,
+    refresh_token_enc TEXT,
+    client_id         TEXT,
+    token_endpoint    TEXT,
+    resource          TEXT,
+    scope             TEXT,
+    updated_at        TEXT NOT NULL
+);
+
+-- admin 申请：非 admin 点按钮提交，由现有 admin 在面板里批。
+CREATE TABLE IF NOT EXISTS admin_requests (
+    request_id    TEXT PRIMARY KEY,
+    author        TEXT NOT NULL,
+    status        TEXT NOT NULL DEFAULT 'pending',   -- pending / approved / denied
+    created_at    TEXT NOT NULL,
+    decided_by    TEXT,
+    decided_at    TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_admin_requests_status ON admin_requests(status, created_at);
+
+-- 后台任务：网页上点「重新生成」、到点出日报，都变成一行排队，由 lu2 上的程序去跑。
+-- 出日报要好几分钟，放在网页请求里做会超时。
+CREATE TABLE IF NOT EXISTS jobs (
+    job_id        TEXT PRIMARY KEY,
+    author        TEXT NOT NULL,
+    kind          TEXT NOT NULL,        -- daily / regenerate
+    date          TEXT NOT NULL,
+    status        TEXT NOT NULL DEFAULT 'queued',    -- queued / running / succeeded / failed
+    attempts      INTEGER NOT NULL DEFAULT 0,
+    run_after     TEXT NOT NULL,        -- 失败补跑时往后排
+    error         TEXT,
+    created_at    TEXT NOT NULL,
+    started_at    TEXT,
+    finished_at   TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_jobs_queue ON jobs(status, run_after);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_daily ON jobs(author, kind, date) WHERE kind = 'daily';
+"""
+
+
+def _pg_sql(sql: str) -> str:
+    # 上层 SQL 一律用 ? 占位。换成 %s 之前先把字面的 % 转义，免得 LIKE '%x%'
+    # 被 psycopg 当成占位符。
+    return sql.replace("%", "%%").replace("?", "%s")
+
+
+class _PgConn:
+    """让 psycopg 连接用起来像 sqlite3 连接：? 占位、按列名取行、executescript。
+
+    上层代码几十处 conn.execute(...)，靠这一层就不用逐个改。
+    """
+
+    def __init__(self, conn: Any) -> None:
+        self._c = conn
+
+    def execute(self, sql: str, params: Any = ()) -> Any:
+        params = tuple(params) if params else ()
+        return self._c.execute(_pg_sql(sql) if params else sql, params or None)
+
+    def executemany(self, sql: str, seq: Any) -> Any:
+        cur = self._c.cursor()
+        cur.executemany(_pg_sql(sql), [tuple(x) for x in seq])
+        return cur
+
+    def executescript(self, script: str) -> None:
+        self._c.execute(script)
+
+    def commit(self) -> None:
+        self._c.commit()
+
+    def rollback(self) -> None:
+        self._c.rollback()
+
+
+_pool: Any = None
+
+
+def _pg_pool() -> Any:
+    """一个进程一个连接池。
+
+    每次操作都新建连接的话，每次都要和云上的数据库握手一遍；而一个页面会连着查
+    好几次（按任务取进展就是一任务一查），全是新连接会慢得明显。
+    prepare_threshold=None：Supabase 的连接池是事务模式，不支持预编译语句。
+    """
+    global _pool
+    if _pool is None:
+        from psycopg.rows import dict_row
+        from psycopg_pool import ConnectionPool
+
+        _pool = ConnectionPool(
+            config.DATABASE_URL, min_size=1, max_size=5, open=True,
+            kwargs={"row_factory": dict_row, "prepare_threshold": None, "autocommit": False},
+        )
+    return _pool
+
+
 def connect() -> sqlite3.Connection:
     config.DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(config.DB_PATH))
@@ -170,9 +311,26 @@ def connect() -> sqlite3.Connection:
     return conn
 
 
+def _schema_for(kind: str) -> str:
+    if kind == "postgres":
+        # 两边唯一不兼容的建表写法：自增主键
+        return SCHEMA.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "BIGSERIAL PRIMARY KEY")
+    return SCHEMA
+
+
 def init() -> None:
+    if backend() == "postgres":
+        # 云端版是全新的库，建表语句本身就带全了所有列，不需要下面那些老库补列。
+        with cursor() as conn:
+            conn.executescript(_schema_for("postgres"))
+            conn.executescript(SCHEMA_CLOUD)
+            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_updates_source_event"
+                         " ON updates(source_event_key) WHERE source_event_key IS NOT NULL")
+        return
+
     with connect() as conn:
         conn.executescript(SCHEMA)
+        conn.executescript(SCHEMA_CLOUD)
         # 老库增量升级。CREATE TABLE IF NOT EXISTS 不会替已有表补列，必须显式迁移。
         columns = {r["name"] for r in conn.execute("PRAGMA table_info(updates)").fetchall()}
         if "assignment_source" not in columns:
@@ -201,7 +359,18 @@ def init() -> None:
 
 
 @contextmanager
-def cursor() -> Iterator[sqlite3.Connection]:
+def cursor() -> Iterator[Any]:
+    if backend() == "postgres":
+        with _pg_pool().connection() as raw:
+            conn = _PgConn(raw)
+            try:
+                yield conn
+                conn.commit()
+            except BaseException:
+                conn.rollback()
+                raise
+        return
+
     conn = connect()
     try:
         yield conn
@@ -231,7 +400,8 @@ def list_updates(
             args.append(val)
     if not include_ignored:
         sql += " AND status = 'active'"
-    sql += " ORDER BY created_at ASC, rowid ASC"
+    # 同一毫秒写入的两条，用 update_id 定个稳定顺序（rowid 只有 SQLite 有）
+    sql += " ORDER BY created_at ASC, update_id ASC"
     with cursor() as conn:
         return [_row(r) for r in conn.execute(sql, args).fetchall()]
 

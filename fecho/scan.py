@@ -110,7 +110,7 @@ def set_mark(session_id: str, last_ts: str, entries: int) -> None:
             "INSERT INTO scan_marks (session_id, last_ts, last_scan_at, entries)"
             " VALUES (?,?,?,?)"
             " ON CONFLICT(session_id) DO UPDATE SET last_ts=excluded.last_ts,"
-            " last_scan_at=excluded.last_scan_at, entries=entries+excluded.entries",
+            " last_scan_at=excluded.last_scan_at, entries=scan_marks.entries+excluded.entries",
             (session_id, last_ts, store.now_iso(), entries),
         )
 

@@ -26,6 +26,12 @@ TOKEN = os.getenv("FECHO_WEB_TOKEN") or config.get("web_token", "FECHO_WEB_TOKEN
 
 # ---------- dashboard 用的数据 ----------
 
+
+def _days_ago(days: int) -> str:
+    from datetime import timedelta
+    from . import clock
+    return (clock.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+
 def overview(author: str, date: str) -> Dict[str, Any]:
     """今天到底干活了没。"""
     with db.cursor() as conn:
@@ -92,14 +98,17 @@ def hidden_entries(author: str, date: Optional[str] = None) -> List[Dict[str, An
 
 def timeline(author: str, days: int = 7, end_date: Optional[str] = None) -> List[Dict[str, Any]]:
     """按 issue 看这几天的进展。写周报的原料。"""
+    from datetime import datetime, timedelta
+
+    end = end_date or store.today()
+    start = (datetime.strptime(end, "%Y-%m-%d") - timedelta(days=days - 1)).strftime("%Y-%m-%d")
     with db.cursor() as conn:
         rows = conn.execute(
             "SELECT u.date, u.content_md, COALESCE(t.issue_key,'') k, t.title, t.source"
             " FROM updates u JOIN tasks t ON t.task_id=u.task_id"
             " WHERE u.author=? AND u.status='active'"
-            " AND u.date BETWEEN date(?, ?) AND date(?) ORDER BY t.issue_key, u.date",
-            (author, end_date or store.today(), "-%d days" % (days - 1),
-             end_date or store.today())).fetchall()
+            " AND u.date BETWEEN ? AND ? ORDER BY t.issue_key, u.date",
+            (author, start, end)).fetchall()
     grouped: Dict[str, Dict[str, Any]] = {}
     for r in rows:
         key = r["k"] or ("freeform:" + r["title"])
@@ -117,16 +126,19 @@ def health(author: str, days: int = 14) -> Dict[str, Any]:
     落自由任务的比例是这套机制在**这个人身上**灵不灵的最直接信号——
     整套目前只在一个人一周的数据上验证过，这个数字是唯一的预警。
     """
+    # 起始日期在 Python 里按北京时间算好再传。原来写的 date('now', ?) 一是只有
+    # SQLite 认，二是取的 UTC 日期——北京早上 8 点前算「最近 N 天」会差一天。
+    since = _days_ago(days)
     with db.cursor() as conn:
         rows = conn.execute(
             "SELECT u.match_method m, COUNT(*) n FROM updates u"
             " JOIN tasks t ON t.task_id=u.task_id WHERE u.author=? AND u.status='active'"
-            " AND u.date >= date('now', ?) GROUP BY u.match_method",
-            (author, "-%d days" % days)).fetchall()
+            " AND u.date >= ? GROUP BY u.match_method",
+            (author, since)).fetchall()
         free = conn.execute(
             "SELECT COUNT(*) n FROM updates u JOIN tasks t ON t.task_id=u.task_id"
             " WHERE u.author=? AND u.status='active' AND t.issue_key IS NULL"
-            " AND u.date >= date('now', ?)", (author, "-%d days" % days)).fetchone()["n"]
+            " AND u.date >= ?", (author, since)).fetchone()["n"]
     by = {r["m"]: r["n"] for r in rows}
     total = sum(by.values())
     return {"days": days, "total": total, "by_method": by, "freeform": free,

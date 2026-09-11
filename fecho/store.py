@@ -53,7 +53,7 @@ def _session_last_task(session_id: Optional[str], author: str) -> Optional[str]:
     with db.cursor() as conn:
         row = conn.execute(
             "SELECT task_id FROM updates WHERE session_id=? AND author=? AND status='active'"
-            " ORDER BY created_at DESC, rowid DESC LIMIT 1",
+            " ORDER BY created_at DESC, update_id DESC LIMIT 1",
             (session_id, author),
         ).fetchone()
     return row["task_id"] if row else None

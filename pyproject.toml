@@ -15,6 +15,9 @@ dependencies = [
 
 [project.optional-dependencies]
 server = ["fastapi>=0.110", "uvicorn>=0.27", "pydantic>=2"]
+# 云端版：数据放 Supabase（Postgres）
+cloud = ["fastapi>=0.110", "uvicorn>=0.27", "pydantic>=2",
+         "psycopg[binary]>=3.1", "psycopg-pool>=3.2", "cryptography>=41"]
 
 [project.scripts]
 fecho = "fecho.cli:main"

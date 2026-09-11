@@ -18,6 +18,14 @@ class MobiusError(RuntimeError):
     pass
 
 
+
+# 已有同一条就覆盖。写成 ON CONFLICT 而不是 INSERT OR REPLACE：
+# 后者只有 SQLite 认，前者 SQLite 和 Postgres 都认。
+_UPSERT_ISSUE = (
+    " ON CONFLICT (issue_key, author) DO UPDATE SET"
+    " title=excluded.title, state=excluded.state, url=excluded.url,"
+    " updated_at=excluded.updated_at, synced_at=excluded.synced_at, raw=excluded.raw")
+
 def configured() -> bool:
     return bool(config.MOBIUS_URL and config.MOBIUS_TOKEN)
 
@@ -79,9 +87,9 @@ def fetch_issue(author: str, identifier: str) -> Dict[str, Any]:
     now = store.now_iso()
     with db.cursor() as conn:
         conn.execute(
-            "INSERT OR REPLACE INTO mobius_issues"
+            "INSERT INTO mobius_issues"
             " (issue_key, author, title, state, url, updated_at, synced_at, raw)"
-            " VALUES (?,?,?,?,?,?,?,?)",
+            " VALUES (?,?,?,?,?,?,?,?)" + _UPSERT_ISSUE,
             (identifier, author, issue.get("title", ""), issue.get("state", ""),
              issue.get("url", ""), issue.get("updatedAt", ""), now,
              json.dumps(issue, ensure_ascii=False)),
@@ -100,9 +108,9 @@ def sync(author: str, assignee: Optional[str] = None) -> Dict[str, Any]:
         conn.execute("DELETE FROM mobius_issues WHERE author=?", (author,))
         for i in issues:
             conn.execute(
-                "INSERT OR REPLACE INTO mobius_issues"
+                "INSERT INTO mobius_issues"
                 " (issue_key, author, title, state, url, updated_at, synced_at, raw)"
-                " VALUES (?,?,?,?,?,?,?,?)",
+                " VALUES (?,?,?,?,?,?,?,?)" + _UPSERT_ISSUE,
                 (i["identifier"], author, i.get("title", ""), i.get("state", ""),
                  i.get("url", ""), i.get("updatedAt", ""), now,
                  json.dumps(i, ensure_ascii=False)),
