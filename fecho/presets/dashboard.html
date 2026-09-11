@@ -126,7 +126,29 @@
     .report-nav{padding:14px;border-right:1px solid var(--line);background:#fbfaf7}
     .report-nav button{width:100%;border:0;background:transparent;text-align:left;padding:9px 10px;border-radius:7px;font-size:12px}
     .report-nav button.active{background:var(--surface);box-shadow:var(--shadow);font-weight:600}
-    .report-paper{padding:28px 32px;white-space:pre-wrap;font:13px/1.75 ui-monospace,SFMono-Regular,Menlo,monospace;overflow:auto}
+    .report-paper{padding:30px 40px 36px;overflow:auto;font-size:14.5px;line-height:1.75;color:var(--ink)}
+    /* 渲染后的日报：参照 Obsidian 阅读视图——正文用无衬线、标题分层、列表缩进清楚 */
+    .report-paper>:first-child{margin-top:0}
+    .report-paper h1{font-size:24px;line-height:1.3;font-weight:650;letter-spacing:-.4px;margin:0 0 20px}
+    .report-paper h2{font-size:18px;line-height:1.35;font-weight:650;margin:30px 0 12px;
+      padding-bottom:6px;border-bottom:1px solid var(--line)}
+    .report-paper h3{font-size:15.5px;font-weight:650;margin:22px 0 8px}
+    .report-paper p{margin:0 0 12px}
+    .report-paper ol,.report-paper ul{margin:0 0 12px;padding-left:26px}
+    .report-paper li{margin:6px 0}
+    .report-paper li>ol,.report-paper li>ul{margin:6px 0 4px}
+    .report-paper li>ul{list-style:none;padding-left:18px}
+    .report-paper ol>li::marker{color:var(--muted);font-weight:600}
+    .report-paper strong{font-weight:650}
+    .report-paper a{color:#5b4fb0;text-decoration:none;border-bottom:1px solid rgba(91,79,176,.28)}
+    .report-paper a:hover{border-bottom-color:#5b4fb0}
+    .report-paper blockquote{margin:0 0 16px;padding:8px 14px;border-left:3px solid var(--violet);
+      background:var(--surface-soft);color:var(--muted);border-radius:0 6px 6px 0}
+    .report-paper code{font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace;
+      background:var(--surface-soft);padding:1px 5px;border-radius:4px}
+    .report-paper hr{border:0;border-top:1px dashed var(--line);margin:26px 0}
+    .report-paper .report-version{font-size:12px;color:var(--muted);font-weight:600;margin-bottom:12px}
+    .report-paper .report-empty{color:var(--muted)}
     .warning-list{margin:0;padding:0;list-style:none}.warning-list li{padding:10px 0;border-top:1px solid var(--line)}
     .check{display:flex;gap:12px;align-items:flex-start;padding:13px 0;border-top:1px solid var(--line)}.check:first-child{border-top:0}
     .check-mark{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;background:var(--success-bg);color:var(--success);font-size:11px;font-weight:700}
@@ -332,15 +354,79 @@
     }).join(''):empty('这个分组没有任务','切换上方状态查看其他任务。');
   }
 
+  // ---- Markdown → HTML ----
+  // 日报是我们自己的代码拼出来的，语法范围很小（标题、有序/嵌套列表、加粗、链接、
+  // 引用、行内代码），所以不引外部库：面板要保持零外部依赖，断网也能打开。
+  // 内容来自模型输出，一律先转义再加标记；链接只放行 http(s)，挡掉 javascript: 这类。
+  function mdInline(text){
+    // 行内代码先换成占位符，免得里面的 ** 被当成加粗。占位符用私有区字符的
+    // 转义写法——文件里不能夹原始控制字符，浏览器解析 script 时会把它们换掉。
+    const codes=[];
+    let s=esc(text).replace(/`([^`]+)`/g,(_,c)=>{codes.push(c);return '\uE000'+(codes.length-1)+'\uE001';});
+    s=s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,'<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+    s=s.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
+    return s.replace(/\uE000(\d+)\uE001/g,(_,i)=>'<code>'+codes[+i]+'</code>');
+  }
+
+  function md(src){
+    const lines=String(src||'').replace(/\r\n?/g,'\n').split('\n');
+    const out=[], lists=[];              // lists: 当前打开的列表栈 {indent, tag}
+    let para=[], quote=[];
+    const flushPara=()=>{ if(para.length){ out.push('<p>'+mdInline(para.join(' '))+'</p>'); para=[]; } };
+    const flushQuote=()=>{ if(quote.length){ out.push('<blockquote>'+quote.map(mdInline).join('<br>')+'</blockquote>'); quote=[]; } };
+    const closeLists=(indent)=>{ while(lists.length && lists[lists.length-1].indent>=indent) out.push('</li></'+lists.pop().tag+'>'); };
+    const flushAll=()=>{ flushPara(); flushQuote(); closeLists(0); };
+
+    for(const raw of lines){
+      const line=raw.replace(/\s+$/,'');
+      if(!line.trim()){ flushAll(); continue; }
+
+      const h=line.match(/^(#{1,6})\s+(.*)$/);
+      if(h){ flushAll(); const n=h[1].length; out.push(`<h${n}>${mdInline(h[2])}</h${n}>`); continue; }
+
+      if(/^\s*[─—-]{3,}\s*$/.test(line)){ flushAll(); out.push('<hr>'); continue; }
+
+      const q=line.match(/^>\s?(.*)$/);
+      if(q){ flushPara(); closeLists(0); quote.push(q[1]); continue; }
+
+      const li=line.match(/^(\s*)(\d+)\.\s+(.*)$/) || line.match(/^(\s*)([*\-•])\s+(.*)$/);
+      if(li){
+        flushPara(); flushQuote();
+        const indent=li[1].replace(/\t/g,'    ').length, ordered=/^\d+$/.test(li[2]), tag=ordered?'ol':'ul';
+        closeLists(indent+1);            // 比这一项缩进更深的都收掉
+        const top=lists[lists.length-1];
+        if(top && top.indent===indent && top.tag===tag){ out.push('</li><li>'); }
+        else{
+          if(top && top.indent===indent) out.push('</li></'+lists.pop().tag+'>');
+          // 保留原编号：Blocked 下面的「2.」不能被重新数成「1.」
+          out.push(`<${tag}${ordered&&li[2]!=='1'?` start="${li[2]}"`:''}><li>`);
+          lists.push({indent, tag});
+        }
+        out.push(mdInline(li[3]));
+        continue;
+      }
+
+      if(lists.length){ out.push(' '+mdInline(line.trim())); continue; }   // 列表项的续行
+      flushQuote(); para.push(line.trim());
+    }
+    flushAll();
+    return out.join('');
+  }
+
   function renderReports(){
     const report=state.data.reports; $('#report-dirty').classList.toggle('show',report.dirty);
     $$('#report-tabs button').forEach(button=>button.classList.toggle('active',button.dataset.reportTab===state.reportTab));
-    let content='';
-    if(state.reportTab==='daily') content=report.daily||'尚未生成日报。';
-    if(state.reportTab==='voice') content=report.voice||'尚未生成口播稿。';
-    if(state.reportTab==='history') content=report.history.length?report.history.map((item,index)=>`版本 ${index+1} · ${item.kind} · ${item.created_at}\n${item.content_md}`).join('\n\n────────\n\n'):'还没有历史版本。';
-    if(state.reportTab==='warnings') content=report.warnings.length?report.warnings.map(text=>`• ${text}`).join('\n'):'本次生成没有警告。';
-    $('#report-content').textContent=content;
+    const empty=text=>`<p class="report-empty">${esc(text)}</p>`;
+    let html='';
+    if(state.reportTab==='daily') html=report.daily?md(report.daily):empty('尚未生成日报。');
+    if(state.reportTab==='voice') html=report.voice?md(report.voice):empty('尚未生成口播稿。');
+    if(state.reportTab==='history') html=report.history.length
+      ?report.history.map((item,index)=>`<div class="report-version">版本 ${index+1} · ${esc(item.kind)} · ${esc(item.created_at)}</div>${md(item.content_md)}`).join('<hr>')
+      :empty('还没有历史版本。');
+    if(state.reportTab==='warnings') html=report.warnings.length
+      ?'<ul>'+report.warnings.map(text=>`<li>${esc(text)}</li>`).join('')+'</ul>'
+      :empty('本次生成没有警告。');
+    $('#report-content').innerHTML=html;
   }
 
   function renderSystem(){

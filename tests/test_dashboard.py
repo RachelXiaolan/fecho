@@ -11,6 +11,29 @@ class TestDashboardContract(unittest.TestCase):
     def setUpClass(cls):
         cls.html = HTML.read_text(encoding="utf-8")
 
+    def test_reports_are_rendered_not_shown_as_markdown_source(self):
+        """日报以渲染后的文档显示，不再把 # ** [](...) 这些源码原样吐给人看。"""
+        body = self.html[self.html.index("function renderReports"):]
+        body = body[:body.index("function renderSystem")]
+        self.assertIn("md(report.daily)", body)
+        self.assertIn("innerHTML", body)
+        self.assertNotIn("textContent=content", body)
+
+    def test_markdown_renderer_escapes_before_marking_up(self):
+        """日报内容来自模型输出。先转义再加标记，链接只放行 http(s)。"""
+        inline = self.html[self.html.index("function mdInline"):]
+        inline = inline[:inline.index("function md(")]
+        self.assertLess(inline.index("esc(text)"), inline.index("<a href"),
+                        "必须先转义再生成标签")
+        self.assertIn("https?:", inline, "链接只放行 http/https")
+        self.assertNotIn("\x00", self.html, "不能夹原始控制字符")
+
+    def test_dashboard_has_no_external_dependencies(self):
+        """面板要能断网打开，所以不引任何 CDN。"""
+        import re
+        self.assertIsNone(re.search(r'<script[^>]+src="https?:', self.html))
+        self.assertIsNone(re.search(r'<link[^>]+href="https?:', self.html))
+
     def test_has_five_product_views(self):
         for view in ("today", "review", "tasks", "reports", "system"):
             self.assertIn('data-view="%s"' % view, self.html)
