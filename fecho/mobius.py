@@ -30,19 +30,26 @@ def configured() -> bool:
     return bool(config.MOBIUS_URL and config.MOBIUS_TOKEN)
 
 
-def _rpc(method: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    if not configured():
+def endpoint() -> str:
+    return config.MOBIUS_URL or "https://mobius.feedmob.com/api/mcp"
+
+
+def _rpc(method: str, params: Optional[Dict[str, Any]] = None,
+         token: Optional[str] = None) -> Dict[str, Any]:
+    """token 不传就用本机配置里那一个（本机版）；云端版每个人传各自的。"""
+    if token is None and not configured():
         raise MobiusError("未配置 Mobius：需要 FECHO_MOBIUS_URL 与 FECHO_MOBIUS_TOKEN")
     body: Dict[str, Any] = {"jsonrpc": "2.0", "id": 1, "method": method}
     if params is not None:
         body["params"] = params
     headers = {
-        "Authorization": "Bearer %s" % config.MOBIUS_TOKEN,
+        "Authorization": "Bearer %s" % (token or config.MOBIUS_TOKEN),
         "Content-Type": "application/json",
         "Accept": "application/json, text/event-stream",
     }
     try:
-        r = httpx.post(config.MOBIUS_URL, json=body, headers=headers, timeout=60)
+        r = httpx.post(endpoint() if token else config.MOBIUS_URL,
+                       json=body, headers=headers, timeout=60)
     except httpx.HTTPError as exc:
         raise MobiusError("Mobius 请求失败: %s" % exc) from exc
     if r.status_code >= 400:
@@ -53,14 +60,14 @@ def _rpc(method: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]
     return data.get("result", {})
 
 
-def fetch_open_issues(assignee: str) -> List[Dict[str, Any]]:
+def fetch_open_issues(assignee: str, token: Optional[str] = None) -> List[Dict[str, Any]]:
     """拉某人名下"在办 + 待办"的 issue —— 配对只可能配到这些上面。"""
     out: Dict[str, Dict[str, Any]] = {}
     for state in ("started", "unstarted"):
         res = _rpc("tools/call", {
             "name": "list_issues",
             "arguments": {"assigneeEmail": assignee, "stateType": state, "limit": 100},
-        })
+        }, token=token)
         content = res.get("content") or []
         if not content:
             continue
@@ -97,12 +104,13 @@ def fetch_issue(author: str, identifier: str) -> Dict[str, Any]:
     return issue
 
 
-def sync(author: str, assignee: Optional[str] = None) -> Dict[str, Any]:
+def sync(author: str, assignee: Optional[str] = None,
+         token: Optional[str] = None) -> Dict[str, Any]:
     """把某人的 issue 同步进本地缓存。cron 或开工时调。"""
     assignee = assignee or config.MOBIUS_ASSIGNEE
     if not assignee:
         raise MobiusError("不知道要同步谁的 issue：设置 FECHO_MOBIUS_ASSIGNEE 或传 assignee")
-    issues = fetch_open_issues(assignee)
+    issues = fetch_open_issues(assignee, token=token)
     now = store.now_iso()
     with db.cursor() as conn:
         conn.execute("DELETE FROM mobius_issues WHERE author=?", (author,))

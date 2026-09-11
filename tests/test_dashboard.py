@@ -1,4 +1,5 @@
 """Dashboard 的静态交互契约；浏览器验收负责视觉和点击行为。"""
+import _env  # noqa: F401  必须在 import fecho 之前
 from pathlib import Path
 import unittest
 

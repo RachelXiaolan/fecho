@@ -74,6 +74,20 @@ DB_PATH = _path("db", "FECHO_DB", HOME / "fecho.db")
 # 设了就走 Postgres（云端版，Supabase），不设就是本机 SQLite。
 # 只从环境变量读：连接串里带数据库密码，不该落进任何配置文件。
 DATABASE_URL = os.getenv("FECHO_DATABASE_URL", "")
+
+# ---- 云端版 ----
+# 「用哪个数据库」和「要不要登录」是两件事，分开两个开关：
+# 本机版的行为测试要能原样跑在 Postgres 上，不能因为换了库就全被要求登录。
+CLOUD = os.getenv("FECHO_CLOUD", "") == "1"
+# 对外网址，Mobius 登录回调要用：https://fecho.techmob.net
+PUBLIC_URL = os.getenv("FECHO_PUBLIC_URL", "").rstrip("/")
+# 加密 Mobius 授权、签登录用的临时 cookie。丢了它，所有人的 Mobius 授权都得重来。
+SECRET_KEY = os.getenv("FECHO_SECRET_KEY", "")
+# 只放这个域名的邮箱进来
+ALLOWED_EMAIL_DOMAIN = os.getenv("FECHO_ALLOWED_EMAIL_DOMAIN", "feedmob.com").lower()
+# 第一批 admin。之后的 admin 靠面板里申请、由现有 admin 审批
+BOOTSTRAP_ADMINS = {e.strip().lower() for e in
+                    os.getenv("FECHO_BOOTSTRAP_ADMINS", "").split(",") if e.strip()}
 LOGS_DIR = _path("logs_dir", "FECHO_LOGS_DIR", HOME / "logs")
 PERSONAS_DIR = _path("personas_dir", "FECHO_PERSONAS_DIR",
                      Path(__file__).resolve().parent / "presets" / "personas")

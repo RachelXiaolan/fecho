@@ -3,6 +3,7 @@
 真跑 Postgres 要起数据库（见 scripts/test_postgres.sh），这里做两件不依赖数据库的事：
 盯住只有 SQLite 认的写法别再混进来，以及占位符转换本身。
 """
+import _env  # noqa: F401  必须在 import fecho 之前
 import re
 import unittest
 from pathlib import Path

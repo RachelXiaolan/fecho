@@ -10,14 +10,8 @@ from pathlib import Path
 from unittest import mock
 
 
-TMP = tempfile.mkdtemp(prefix="fecho-onboarding-test-")
-os.environ.setdefault("FECHO_HOME", os.path.join(TMP, "home"))
-os.environ.setdefault("FECHO_DB", os.path.join(TMP, "fecho.db"))
-os.environ.setdefault("FECHO_LOGS_DIR", os.path.join(TMP, "logs"))
-os.environ.setdefault("FECHO_LLM_BASE_URL", "")
-os.environ.setdefault("FECHO_LLM_API_KEY", "")
-os.environ.setdefault("FECHO_MOBIUS_URL", "")
-os.environ.setdefault("FECHO_MOBIUS_TOKEN", "")
+import _env  # noqa: E402,F401  必须在 import fecho 之前
+TMP = _env.TMP
 
 from fecho import store  # noqa: E402
 

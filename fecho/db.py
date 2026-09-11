@@ -243,6 +243,14 @@ CREATE TABLE IF NOT EXISTS jobs (
 );
 CREATE INDEX IF NOT EXISTS idx_jobs_queue ON jobs(status, run_after);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_daily ON jobs(author, kind, date) WHERE kind = 'daily';
+
+-- 服务器级的小配置。现在只放一样：在 Mobius 注册过的 OAuth 客户端。
+-- 不缓存的话每登录一次就去 Mobius 注册一个新客户端，那边会越堆越多。
+CREATE TABLE IF NOT EXISTS app_settings (
+    key           TEXT PRIMARY KEY,
+    value         TEXT NOT NULL,
+    updated_at    TEXT NOT NULL
+);
 """
 
 
@@ -309,6 +317,36 @@ def connect() -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
+
+
+def location() -> str:
+    if backend() == "postgres":
+        # 地址后面可能跟着 ?host=/一串/路径，按最后一个 / 切会切到路径尾巴上
+        from urllib.parse import urlparse
+        return "postgres:" + urlparse(config.DATABASE_URL).path.lstrip("/")
+    return str(config.DB_PATH)
+
+
+def is_disposable() -> bool:
+    """这个库能不能随便清空——只有测试专用的库才行。
+
+    真实翻车过：一个临时脚本先导入了 fecho、后导入测试文件，测试里「指向临时目录」
+    的设置没生效，每个测试开头的清表就在用户真实的 ~/.fecho/fecho.db 上执行了，
+    几百条进展被清掉，只救回一部分。所以清表之前必须过这一关。
+    """
+    import tempfile
+    if backend() == "postgres":
+        return "test" in location().split(":", 1)[1]
+    path = config.DB_PATH.resolve()
+    tmp = __import__("pathlib").Path(tempfile.gettempdir()).resolve()
+    return tmp in path.parents
+
+
+def require_disposable() -> None:
+    if not is_disposable():
+        raise RuntimeError("拒绝清空数据库：%s 不是测试用的临时库。"
+                           "测试必须在导入 fecho 之前把 FECHO_HOME/FECHO_DB 指到临时目录。"
+                           % location())
 
 
 def _schema_for(kind: str) -> str:

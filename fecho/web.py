@@ -14,12 +14,17 @@ MCP 那边直接复用 mcp_server.handle()——它本来就是纯 JSON-RPC 函�
 默认只监听 127.0.0.1。要从公网用（ChatGPT），走隧道并设 FECHO_WEB_TOKEN——
 不设 token 时拒绝非本机来源，免得隧道一开就裸奔。
 """
+import dataclasses
 import json
 import os
 import secrets
 from typing import Any, Dict, List, Optional
 
-from . import __version__, config, db, mcp_server, store
+from . import __version__, accounts, config, db, mcp_server, store
+
+# 云端版的两个 cookie：登录后的会话、跳去 Mobius 登录路上的临时状态
+SESSION_COOKIE = "fecho_session"
+OAUTH_COOKIE = "fecho_oauth"
 
 TOKEN = os.getenv("FECHO_WEB_TOKEN") or config.get("web_token", "FECHO_WEB_TOKEN", "")
 
@@ -221,20 +226,44 @@ def build_app():
         return JSONResponse(status_code=400, content={
             "ok": False, "error": "缺少参数: %s" % str(exc).strip("'")})
 
-    def guard(request: Request, authorization: Optional[str]) -> None:
-        """本机随便连；非本机必须带 token。
+    def guard(request: Request, authorization: Optional[str]) -> str:
+        """认人。返回这个请求是谁的（author）。
 
-        隧道一开，/mcp 就在公网上了。没设 token 时直接拒绝外部来源——
-        宁可连不上，也不要默认裸奔。
+        本机版：本机随便连，非本机必须带 FECHO_WEB_TOKEN；身份就是配置里那个名字。
+        隧道一开 /mcp 就在公网上了，没设 token 时直接拒绝外部来源——宁可连不上，
+        也不要默认裸奔。
+
+        云端版：agent 带个人 token（Authorization: Bearer），浏览器带登录 cookie。
+        两样都没有就是没登录。
         """
+        if config.CLOUD:
+            got = (authorization or "").removeprefix("Bearer ").strip()
+            if got:
+                author = accounts.resolve_token(got)
+                if not author:
+                    raise HTTPException(401, "token 无效或已过期（连续 7 天没用会失效），"
+                                             "请到 %s/onboard 重新获取" % config.PUBLIC_URL)
+                return author
+            author = accounts.resolve_session(request.cookies.get(SESSION_COOKIE, ""))
+            if not author:
+                raise HTTPException(401, "请先登录")
+            return author
+
         host = (request.client.host if request.client else "") or ""
         if host in ("127.0.0.1", "::1", "localhost"):
-            return
+            return config.AUTHOR
         if not TOKEN:
             raise HTTPException(403, "非本机访问需要先设 FECHO_WEB_TOKEN")
         got = (authorization or "").removeprefix("Bearer ").strip()
         if not secrets.compare_digest(got, TOKEN):
             raise HTTPException(401, "token 不对")
+        return config.AUTHOR
+
+    def admin_only(author: str) -> None:
+        if not config.CLOUD:
+            raise HTTPException(404, "本机版没有 admin 面板")
+        if not accounts.is_admin(author):
+            raise HTTPException(403, "需要 admin 权限")
 
     # ---- MCP over SSE ----
     # 老一档的 MCP 传输，但 ChatGPT 现在要的就是它，且 URL 必须以 /sse/ 结尾。
@@ -250,7 +279,10 @@ def build_app():
     async def sse_stream(request: Request, authorization: Optional[str] = Header(None)):
         from fastapi.responses import StreamingResponse
 
-        guard(request, authorization)
+        if config.CLOUD:
+            # 长连接 + 会话存内存，放到按请求运行的平台上撑不住。云端版只走 /mcp。
+            raise HTTPException(404, "云端版请用 %s/mcp" % config.PUBLIC_URL)
+        me = guard(request, authorization)
         sid = secrets.token_urlsafe(16)
         q: asyncio.Queue = asyncio.Queue()
         sessions[sid] = {"queue": q, "context": mcp_server.MCPContext(session_id=sid)}
@@ -277,7 +309,7 @@ def build_app():
     @app.post("/sse/messages")
     async def sse_messages(request: Request, session_id: str = Query(...),
                            authorization: Optional[str] = Header(None)):
-        guard(request, authorization)
+        me = guard(request, authorization)
         session = sessions.get(session_id)
         if session is None:
             raise HTTPException(404, "会话不存在或已断开，请重新连接 /sse/")
@@ -294,14 +326,27 @@ def build_app():
                            authorization: Optional[str] = Header(None),
                            mcp_session_id: Optional[str] = Header(None,
                                                                   alias="Mcp-Session-Id")):
-        guard(request, authorization)
+        me = guard(request, authorization)
         msg = await request.json()
         method = msg.get("method")
         sid = mcp_session_id
         if method == "initialize" and (not sid or sid not in http_contexts):
             sid = secrets.token_urlsafe(18)
             http_contexts[sid] = mcp_server.MCPContext(session_id=sid)
-        context = http_contexts.get(sid) if sid else mcp_server.MCPContext()
+        context = http_contexts.get(sid) if sid else None
+        if context is None:
+            # 云端版跑在多个实例上，这次请求落到的实例可能没见过这个会话号。
+            # 按会话号新建一个——不能退回默认上下文，那是本机版那一个人的身份，
+            # 退回去等于把这个人的进展记到别人头上。
+            context = mcp_server.MCPContext(session_id=sid or secrets.token_urlsafe(18))
+            if sid:
+                http_contexts[sid] = context
+        if config.CLOUD:
+            if method == "initialize":
+                context.author = me          # initialize 会往缓存里写客户端名，用原对象
+            else:
+                # 身份每次都按这次请求的 token 重填，不信任缓存里的
+                context = dataclasses.replace(context, author=me)
         resp = mcp_server.handle(msg, context)
         headers = {"Mcp-Session-Id": sid} if sid else {}
         if resp is None:                       # 通知类消息没有响应体
@@ -310,59 +355,59 @@ def build_app():
 
     @app.get("/healthz")
     def healthz(request: Request, authorization: Optional[str] = Header(None)):
-        guard(request, authorization)
+        me = guard(request, authorization)
         return {"ok": True, "version": __version__}
 
     # ---- dashboard 数据 ----
     @app.get("/api/overview")
     def api_overview(request: Request, date: Optional[str] = None,
                      authorization: Optional[str] = Header(None)):
-        guard(request, authorization)
-        return overview(config.AUTHOR, date or store.today())
+        me = guard(request, authorization)
+        return overview(me, date or store.today())
 
     @app.get("/api/dashboard")
     def api_dashboard(request: Request, date: Optional[str] = None,
                       authorization: Optional[str] = Header(None)):
-        guard(request, authorization)
-        return dashboard_payload(config.AUTHOR, date or store.today())
+        me = guard(request, authorization)
+        return dashboard_payload(me, date or store.today())
 
     @app.get("/api/review")
     def api_review(request: Request, date: Optional[str] = None,
                    authorization: Optional[str] = Header(None)):
-        guard(request, authorization)
-        return {"items": review_queue(config.AUTHOR, date or store.today())}
+        me = guard(request, authorization)
+        return {"items": review_queue(me, date or store.today())}
 
     @app.get("/api/issues")
     def api_issues(request: Request, authorization: Optional[str] = Header(None)):
-        guard(request, authorization)
+        me = guard(request, authorization)
         from . import mobius
-        return {"issues": mobius.cached_issues(config.AUTHOR)}
+        return {"issues": mobius.cached_issues(me)}
 
     @app.post("/api/reassign")
     def api_reassign(request: Request, body: Dict[str, Any] = Body(...),
                      authorization: Optional[str] = Header(None)):
-        guard(request, authorization)
+        me = guard(request, authorization)
         update_id = body["update_id"]
         with db.cursor() as conn:
             row = conn.execute("SELECT date FROM updates WHERE update_id=? AND author=?",
-                               (update_id, config.AUTHOR)).fetchone()
+                               (update_id, me)).fetchone()
         if row is None:
             raise ValueError("进展不存在: %s" % update_id)
         kw = ({"issue_key": body["issue_key"]} if body.get("issue_key")
               else {"freeform": True})
-        result = store.correct_progress(update_id, config.AUTHOR, **kw)
+        result = store.correct_progress(update_id, me, **kw)
         date_ = body.get("date") or row["date"]
         return {"ok": True, "changed": result["changed"],
-                "message": "归属已确认", "dashboard": dashboard_payload(config.AUTHOR, date_)}
+                "message": "归属已确认", "dashboard": dashboard_payload(me, date_)}
 
     @app.post("/api/correct")
     def api_correct(request: Request, body: Dict[str, Any] = Body(...),
                     authorization: Optional[str] = Header(None)):
-        guard(request, authorization)
+        me = guard(request, authorization)
         update_id = body["update_id"]
         with db.cursor() as conn:
             row = conn.execute("SELECT date FROM updates WHERE update_id=? AND author=?",
-                               (update_id, config.AUTHOR)).fetchone()
+                               (update_id, me)).fetchone()
         if row is None:
             raise ValueError("进展不存在: %s" % update_id)
         kw: Dict[str, Any] = {}
@@ -372,95 +417,245 @@ def build_app():
             kw["issue_key"] = body["issue_key"]
         elif "issue_key" in body:
             kw["freeform"] = True
-        result = store.correct_progress(update_id, config.AUTHOR, **kw)
+        result = store.correct_progress(update_id, me, **kw)
         date_ = body.get("date") or row["date"]
         return {"ok": True, "changed": result["changed"], "message": "进展已修订",
-                "dashboard": dashboard_payload(config.AUTHOR, date_)}
+                "dashboard": dashboard_payload(me, date_)}
 
     @app.post("/api/tasks/{task_id}/complete")
     def api_complete_task(task_id: str, request: Request,
                           body: Dict[str, Any] = Body(default={}),
                           authorization: Optional[str] = Header(None)):
-        guard(request, authorization)
+        me = guard(request, authorization)
         from . import service
-        result = service.complete_task(task_id)
+        result = service.complete_task(task_id, author=me)
         return {"ok": True, **result,
-                "dashboard": dashboard_payload(config.AUTHOR, body.get("date") or store.today())}
+                "dashboard": dashboard_payload(me, body.get("date") or store.today())}
 
     @app.post("/api/tasks/{task_id}/reopen")
     def api_reopen_task(task_id: str, request: Request,
                         body: Dict[str, Any] = Body(default={}),
                         authorization: Optional[str] = Header(None)):
-        guard(request, authorization)
+        me = guard(request, authorization)
         from . import service
-        result = service.reopen_task(task_id)
+        result = service.reopen_task(task_id, author=me)
         return {"ok": True, **result,
-                "dashboard": dashboard_payload(config.AUTHOR, body.get("date") or store.today())}
+                "dashboard": dashboard_payload(me, body.get("date") or store.today())}
 
     @app.post("/api/tasks/merge")
     def api_merge_tasks(request: Request, body: Dict[str, Any] = Body(...),
                         authorization: Optional[str] = Header(None)):
-        guard(request, authorization)
+        me = guard(request, authorization)
         from . import service
-        result = service.merge_tasks(body["source_task_id"], body["target_task_id"])
+        result = service.merge_tasks(body["source_task_id"], body["target_task_id"], author=me)
         return {"ok": True, **result,
-                "dashboard": dashboard_payload(config.AUTHOR, body.get("date") or store.today())}
+                "dashboard": dashboard_payload(me, body.get("date") or store.today())}
 
     @app.get("/api/hidden")
     def api_hidden(request: Request, date: Optional[str] = None,
                    authorization: Optional[str] = Header(None)):
-        guard(request, authorization)
-        return {"items": hidden_entries(config.AUTHOR, date)}
+        me = guard(request, authorization)
+        return {"items": hidden_entries(me, date)}
 
     @app.post("/api/restore")
     def api_restore(request: Request, body: Dict[str, Any] = Body(...),
                     authorization: Optional[str] = Header(None)):
-        guard(request, authorization)
+        me = guard(request, authorization)
         with db.cursor() as conn:
             row = conn.execute("SELECT date FROM updates WHERE update_id=? AND author=?",
-                               (body["update_id"], config.AUTHOR)).fetchone()
+                               (body["update_id"], me)).fetchone()
             if row is None:
                 raise ValueError("进展不存在: %s" % body["update_id"])
             n = conn.execute("UPDATE updates SET status='active',revision=revision+1"
                              " WHERE update_id=? AND author=?",
-                             (body["update_id"], config.AUTHOR)).rowcount
+                             (body["update_id"], me)).rowcount
         date_ = body.get("date") or row["date"]
         return {"ok": bool(n), "message": "进展已恢复",
-                "dashboard": dashboard_payload(config.AUTHOR, date_)}
+                "dashboard": dashboard_payload(me, date_)}
 
     @app.get("/api/timeline")
     def api_timeline(request: Request, days: int = Query(7, ge=1, le=90),
                      date: Optional[str] = None,
                      authorization: Optional[str] = Header(None)):
-        guard(request, authorization)
-        return {"groups": timeline(config.AUTHOR, days, date)}
+        me = guard(request, authorization)
+        return {"groups": timeline(me, days, date)}
 
     @app.get("/api/health-stats")
     def api_health(request: Request, days: int = Query(14, ge=1, le=180),
                    authorization: Optional[str] = Header(None)):
-        guard(request, authorization)
-        return health(config.AUTHOR, days)
+        me = guard(request, authorization)
+        return health(me, days)
 
     @app.get("/api/report")
     def api_report(request: Request, date: Optional[str] = None,
                    authorization: Optional[str] = Header(None)):
-        guard(request, authorization)
+        me = guard(request, authorization)
         d = date or store.today()
-        return {"date": d, **report_payload(config.AUTHOR, d)}
+        return {"date": d, **report_payload(me, d)}
 
     @app.post("/api/regenerate")
     def api_regenerate(request: Request, body: Dict[str, Any] = Body(default={}),
                        authorization: Optional[str] = Header(None)):
-        guard(request, authorization)
+        me = guard(request, authorization)
         from . import service
         date_ = body.get("date") or store.today()
-        result = service.end_of_day(date_, force=True)
+        if config.CLOUD:
+            # 出日报要好几分钟，网页请求等不了——排队交给 lu2 上的后台程序
+            from . import jobs
+            job = jobs.enqueue(me, "regenerate", date_)
+            return {"ok": True, "queued": True, "job": job,
+                    "message": "已排队，几分钟后刷新就能看到新的日报",
+                    "dashboard": dashboard_payload(me, date_)}
+        result = service.end_of_day(date_, author=me, force=True)
         return {"ok": True, "result": result,
-                "dashboard": dashboard_payload(config.AUTHOR, date_)}
+                "dashboard": dashboard_payload(me, date_)}
+
+    # ---- 云端版：登录 ----
+    from fastapi.responses import RedirectResponse
+
+    def _page(name: str) -> str:
+        from pathlib import Path
+        html = (Path(__file__).resolve().parent / "presets" / name).read_text(encoding="utf-8")
+        return html.replace("__DOMAIN__", config.ALLOWED_EMAIL_DOMAIN)
+
+    def _cookie_kw() -> Dict[str, Any]:
+        # 线上是 https，cookie 只走加密连接；本地调试是 http，不加这条否则浏览器不回传
+        return {"httponly": True, "samesite": "lax",
+                "secure": config.PUBLIC_URL.startswith("https://"), "path": "/"}
+
+    def _signed_in(request: Request) -> Optional[str]:
+        return accounts.resolve_session(request.cookies.get(SESSION_COOKIE, ""))
+
+    def _cloud_only() -> None:
+        if not config.CLOUD:
+            raise HTTPException(404, "本机版没有登录")
+
+    @app.get("/login", response_class=HTMLResponse)
+    def login_page():
+        _cloud_only()
+        return _page("login.html")
+
+    @app.get("/auth/login")
+    def auth_login():
+        from . import mobius_login
+        _cloud_only()
+        url, signed = mobius_login.start()
+        resp = RedirectResponse(url, status_code=302)
+        resp.set_cookie(OAUTH_COOKIE, signed, max_age=600, **_cookie_kw())
+        return resp
+
+    @app.get("/auth/callback")
+    def auth_callback(request: Request, code: str = "", state: str = "", error: str = ""):
+        from urllib.parse import quote
+        from . import mobius_login
+        _cloud_only()
+        try:
+            if error:
+                raise accounts.AccessDenied("Mobius 那边取消了授权")
+            author = mobius_login.finish(code, state, request.cookies.get(OAUTH_COOKIE, ""))
+        except (accounts.AccessDenied, mobius_login.mobius.MobiusError) as exc:
+            resp = RedirectResponse("/login?error=" + quote(str(exc)), status_code=302)
+            resp.delete_cookie(OAUTH_COOKIE, path="/")
+            return resp
+        resp = RedirectResponse("/onboard", status_code=302)
+        resp.set_cookie(SESSION_COOKIE, accounts.create_session(author),
+                        max_age=int(accounts.SESSION_TTL.total_seconds()), **_cookie_kw())
+        resp.delete_cookie(OAUTH_COOKIE, path="/")
+        return resp
+
+    @app.post("/auth/logout")
+    def auth_logout(request: Request):
+        _cloud_only()
+        raw = request.cookies.get(SESSION_COOKIE, "")
+        if raw:
+            accounts.end_session(raw)
+        resp = JSONResponse({"ok": True})
+        resp.delete_cookie(SESSION_COOKIE, path="/")
+        return resp
+
+    @app.get("/onboard", response_class=HTMLResponse)
+    def onboard_page(request: Request):
+        _cloud_only()
+        if not _signed_in(request):
+            return RedirectResponse("/login", status_code=302)
+        return _page("onboard.html")
+
+    # ---- 云端版：我是谁、设置、token ----
+    @app.get("/api/me")
+    def api_me(request: Request, authorization: Optional[str] = Header(None)):
+        from . import mobius_login
+        me = guard(request, authorization)
+        if not config.CLOUD:
+            return {"author": me, "display_name": config.DISPLAY_NAME or me,
+                    "is_admin": False, "cloud": False}
+        user = accounts.get_user(me) or {}
+        return {"author": me, "display_name": user.get("display_name", me),
+                "is_admin": bool(user.get("is_admin")), "daily_time": user.get("daily_time"),
+                "admin_request": accounts.pending_request(me),
+                "mobius_connected": mobius_login.connected(me), "cloud": True}
+
+    @app.post("/api/tokens")
+    def api_issue_token(request: Request):
+        # 只认浏览器登录，不认 agent token：拿着一个 token 不该能再生出更多 token
+        _cloud_only()
+        me = _signed_in(request)
+        if not me:
+            raise HTTPException(401, "请先登录")
+        raw = accounts.issue_token(me)
+        return {"token": raw, "ttl_days": accounts.TOKEN_TTL.days}
+
+    @app.post("/api/settings")
+    def api_settings(request: Request, body: Dict[str, Any] = Body(...),
+                     authorization: Optional[str] = Header(None)):
+        _cloud_only()
+        me = guard(request, authorization)
+        return {"ok": True, "daily_time": accounts.set_daily_time(me, body["daily_time"])}
+
+    # ---- 云端版：admin ----
+    @app.post("/api/admin/request")
+    def api_admin_request(request: Request, authorization: Optional[str] = Header(None)):
+        _cloud_only()
+        me = guard(request, authorization)
+        return accounts.request_admin(me)
+
+    @app.get("/api/admin/requests")
+    def api_admin_requests(request: Request, authorization: Optional[str] = Header(None)):
+        me = guard(request, authorization)
+        admin_only(me)
+        return {"items": accounts.admin_requests()}
+
+    @app.post("/api/admin/requests/{request_id}")
+    def api_admin_decide(request_id: str, request: Request, body: Dict[str, Any] = Body(...),
+                         authorization: Optional[str] = Header(None)):
+        me = guard(request, authorization)
+        admin_only(me)
+        return accounts.decide_admin_request(request_id, me, bool(body.get("approve")))
+
+    @app.get("/api/admin/users")
+    def api_admin_users(request: Request, authorization: Optional[str] = Header(None)):
+        me = guard(request, authorization)
+        admin_only(me)
+        return {"items": accounts.list_users()}
+
+    @app.get("/api/admin/dashboard")
+    def api_admin_dashboard(request: Request, author: str, date: Optional[str] = None,
+                            authorization: Optional[str] = Header(None)):
+        """admin 看别人的日志。只读：看别人的面板不能顺手改别人的数据。"""
+        me = guard(request, authorization)
+        admin_only(me)
+        if not accounts.get_user(author):
+            raise HTTPException(404, "没有这个人: %s" % author)
+        return dashboard_payload(author, date or store.today())
+
+    @app.exception_handler(accounts.AccessDenied)
+    async def access_denied_handler(_request: Request, exc: accounts.AccessDenied):
+        return JSONResponse(status_code=403, content={"ok": False, "error": str(exc)})
 
     @app.get("/", response_class=HTMLResponse)
-    def index():
+    def index(request: Request):
         from pathlib import Path
+        if config.CLOUD and not _signed_in(request):
+            return RedirectResponse("/login", status_code=302)
         return (Path(__file__).resolve().parent / "presets" / "dashboard.html").read_text(encoding="utf-8")
 
     return app

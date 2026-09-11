@@ -15,26 +15,10 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-TMP = tempfile.mkdtemp(prefix="fecho-test-")
+import _env  # noqa: E402,F401  必须在 import fecho 之前
+TMP = _env.TMP
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-os.environ.update({
-    "FECHO_DB": os.path.join(TMP, "t.db"),
-    "FECHO_LOGS_DIR": os.path.join(TMP, "logs"),
-    "FECHO_CONFIG_DIR": os.path.join(TMP, "config"),
-    "FECHO_TOKENS": os.path.join(TMP, "config", "tokens.json"),
-    "FECHO_HOME": os.path.join(TMP, "home"),
-    "FECHO_PERSONAS_DIR": os.path.join(ROOT, "fecho", "presets", "personas"),
-    "FECHO_PTO_FILE": os.path.join(TMP, "config", "pto.json"),
-    "FECHO_LLM_BASE_URL": "", "FECHO_LLM_API_KEY": "",
-    "FECHO_MOBIUS_URL": "", "FECHO_MOBIUS_TOKEN": "",
-})
-os.makedirs(os.path.join(TMP, "config"), exist_ok=True)
-with open(os.environ["FECHO_TOKENS"], "w") as f:
-    json.dump({"tk": {"author": "t", "display_name": "T", "persona": "default"}}, f)
-with open(os.environ["FECHO_PTO_FILE"], "w") as f:
-    json.dump({"t": ["2030-01-02"]}, f)
 
-sys.path.insert(0, ROOT)
 from fecho import config, db, digest, llm, match, store  # noqa: E402
 
 D = "2030-01-01"
@@ -70,6 +54,7 @@ def seed_issues(author="t"):
 
 
 def reset():
+    db.require_disposable()   # 清表前确认连的是临时库
     db.init()
     with db.cursor() as c:
         c.execute("DELETE FROM task_events")

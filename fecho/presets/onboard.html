@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>完成接入 · Fecho</title>
+  <style>
+    :root{--nav:#1b1938;--violet:#c9b4fa;--canvas:#f7f6f2;--ink:#292827;--muted:#73706d;
+      --line:#e5e2db;--soft:#f1f0eb;--success:#23634d;--success-bg:#e8f3ed;--danger:#9a3f3a}
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;background:var(--canvas);color:var(--ink);
+      font:15px/1.6 "Avenir Next","SF Pro Text","PingFang SC","Microsoft YaHei",sans-serif}
+    main{width:min(620px,92vw);margin:48px auto}
+    h1{font-size:24px;margin:0 0 4px;font-weight:650;letter-spacing:-.4px}
+    .sub{color:var(--muted);margin:0 0 26px}
+    .step{background:#fff;border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin-bottom:14px}
+    .step h2{font-size:16px;margin:0 0 4px;font-weight:650}
+    .step p{margin:0 0 14px;color:var(--muted);font-size:14px}
+    .num{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;
+      background:var(--violet);color:var(--nav);font-size:12px;font-weight:700;margin-right:8px}
+    button{font:inherit;border:0;border-radius:9px;padding:10px 16px;font-weight:600;cursor:pointer;
+      background:var(--nav);color:#fff}
+    button.ghost{background:#fff;color:var(--ink);border:1px solid var(--line)}
+    button:disabled{opacity:.55;cursor:wait}
+    .token{display:none;margin-top:14px}
+    .token code{display:block;background:var(--soft);border:1px solid var(--line);border-radius:9px;
+      padding:12px 14px;font:13px ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}
+    .row{display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap}
+    .ok{color:var(--success);font-size:13.5px}
+    .err{color:var(--danger);font-size:13.5px}
+    select{font:inherit;border:1px solid var(--line);border-radius:9px;padding:9px 12px;background:#fff}
+    a{color:#5b4fb0}
+    .foot{display:flex;justify-content:space-between;margin-top:22px;font-size:14px}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>完成接入</h1>
+    <p class="sub" id="who">加载中…</p>
+
+    <section class="step">
+      <h2><span class="num">1</span>把 token 交给 agent</h2>
+      <p>生成后复制，粘回给正在帮你安装的 agent。连续 7 天不用才会失效，天天在用就一直有效。</p>
+      <button id="issue">生成 token</button>
+      <div class="token" id="token-box">
+        <code id="token"></code>
+        <div class="row">
+          <button class="ghost" id="copy">复制</button>
+          <span class="ok" id="copied"></span>
+        </div>
+        <p style="margin:12px 0 0">这串只显示这一次。弄丢了就回这里再生成一个，旧的会继续有效直到过期。</p>
+      </div>
+    </section>
+
+    <section class="step">
+      <h2><span class="num">2</span>每天几点出日报</h2>
+      <p>北京时间。到点服务器整理出日报和口播稿；你电脑上的扫描会自动提前 15 分钟跑。</p>
+      <div class="row">
+        <select id="time"></select>
+        <button class="ghost" id="save-time">保存</button>
+        <span id="time-msg"></span>
+      </div>
+    </section>
+
+    <div class="foot">
+      <a href="/">打开 Dashboard →</a>
+      <a href="#" id="logout">退出登录</a>
+    </div>
+  </main>
+  <script>
+    const $ = s => document.querySelector(s);
+    const api = (path, body) => fetch(path, body === undefined ? {} : {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+    }).then(async r => { const d = await r.json().catch(() => ({})); if (!r.ok) throw new Error(d.detail || d.error || r.status); return d; });
+
+    // 时间选项：00:15 到 21:45，每 15 分钟一档。
+    // 最早 00:15 是因为扫描要提前 15 分钟；最晚 21:45 是产品规定出日报必须早于 22:00。
+    for (let m = 15; m < 22 * 60; m += 15) {
+      const v = String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+      $('#time').add(new Option(v, v));
+    }
+
+    api('/api/me').then(me => {
+      $('#who').textContent = `${me.display_name}（${me.author}）` + (me.mobius_connected ? ' · Mobius 已连接' : '');
+      $('#time').value = me.daily_time;
+    }).catch(() => location.href = '/login');
+
+    $('#issue').onclick = async () => {
+      $('#issue').disabled = true;
+      try {
+        const d = await api('/api/tokens', {});
+        $('#token').textContent = d.token;
+        $('#token-box').style.display = 'block';
+        $('#issue').textContent = '再生成一个';
+      } catch (e) { alert('生成失败：' + e.message); }
+      $('#issue').disabled = false;
+    };
+    $('#copy').onclick = async () => {
+      await navigator.clipboard.writeText($('#token').textContent);
+      $('#copied').textContent = '已复制，粘回给 agent 吧';
+    };
+    $('#save-time').onclick = async () => {
+      try {
+        const d = await api('/api/settings', {daily_time: $('#time').value});
+        $('#time-msg').className = 'ok'; $('#time-msg').textContent = `已保存：每天 ${d.daily_time}`;
+      } catch (e) { $('#time-msg').className = 'err'; $('#time-msg').textContent = e.message; }
+    };
+    $('#logout').onclick = async e => { e.preventDefault(); await api('/auth/logout', {}); location.href = '/login'; };
+  </script>
+</body>
+</html>

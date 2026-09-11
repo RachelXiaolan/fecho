@@ -25,6 +25,9 @@ class MCPContext:
 
     session_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     client_name: str = "unknown-agent"
+    # 这条连接是谁的。本机版留空，业务函数会退回配置里那个名字；
+    # 云端版由 HTTP 层按 token 填上——**每个请求都按 token 重填**，不信任缓存的上下文。
+    author: Optional[str] = None
 
 
 DEFAULT_CONTEXT = MCPContext(session_id=os.getenv("FECHO_SESSION_ID") or str(uuid.uuid4()))
@@ -196,9 +199,10 @@ def _fmt_report(r: Dict[str, Any]) -> str:
 
 def call_tool(name: str, args: Dict[str, Any], context: Optional[MCPContext] = None) -> Any:
     context = context or DEFAULT_CONTEXT
+    me = context.author or service.whoami()
     if name == "log_progress":
         res = service.record(
-            args["content"], date=args.get("date"),
+            args["content"], author=me, date=args.get("date"),
             source_agent=context.client_name, session_id=context.session_id,
             issue=args.get("issue"), task_id=args.get("task_id"),
             freeform=bool(args.get("freeform")),
@@ -240,7 +244,7 @@ def call_tool(name: str, args: Dict[str, Any], context: Optional[MCPContext] = N
             kw["content_md"] = args["content"]
         if args.get("freeform"):
             kw["freeform"] = True
-        result = store.correct_progress(args["update_id"], service.whoami(), **kw)
+        result = store.correct_progress(args["update_id"], me, **kw)
         task = result["task"]
         text = ("已原地修订" if result["changed"] else "无需修订") + " → **%s**" % _task_line(task)
         return ToolReply(text, {
@@ -252,7 +256,7 @@ def call_tool(name: str, args: Dict[str, Any], context: Optional[MCPContext] = N
         })
 
     if name == "catch_up":
-        c = service.catch_up(args.get("date"))
+        c = service.catch_up(args.get("date"), author=me)
         out = []
         rep = c["report"]
         if rep.get("daily"):
@@ -269,7 +273,7 @@ def call_tool(name: str, args: Dict[str, Any], context: Optional[MCPContext] = N
         return "\n".join(out)
 
     if name == "my_tasks":
-        tasks = service.open_tasks()
+        tasks = service.open_tasks(author=me)
         if not tasks:
             return "当前没有在推进的任务。"
         out = ["在推进的任务（%d 个）：" % len(tasks)]
@@ -280,8 +284,8 @@ def call_tool(name: str, args: Dict[str, Any], context: Optional[MCPContext] = N
         return "\n".join(out)
 
     if name in ("complete_task", "reopen_task"):
-        result = (service.complete_task(args["task_id"])
-                  if name == "complete_task" else service.reopen_task(args["task_id"]))
+        result = (service.complete_task(args["task_id"], author=me)
+                  if name == "complete_task" else service.reopen_task(args["task_id"], author=me))
         task = result["task"]
         label = "已完成" if name == "complete_task" else "已重新打开"
         return ToolReply("%s → **%s**" % (label, _task_line(task)), {
@@ -289,7 +293,8 @@ def call_tool(name: str, args: Dict[str, Any], context: Optional[MCPContext] = N
             "status": task["status"], "issue_key": task.get("issue_key")})
 
     if name == "merge_tasks":
-        result = service.merge_tasks(args["source_task_id"], args["target_task_id"])
+        result = service.merge_tasks(args["source_task_id"], args["target_task_id"],
+                                    author=me)
         task = result["task"]
         return ToolReply("已合并 %d 条进展 → **%s**" % (
             result["moved_updates"], _task_line(task)), {
@@ -298,9 +303,9 @@ def call_tool(name: str, args: Dict[str, Any], context: Optional[MCPContext] = N
                 "moved_updates": result["moved_updates"]})
 
     if name == "get_my_log":
-        data = service.day(service.whoami(), args.get("date"))
+        data = service.day(me, args.get("date"))
         out = [_fmt_day(data, "我")]
-        rep = service.report(data["date"])
+        rep = service.report(data["date"], author=me)
         if rep.get("daily"):
             out += ["", "--- 已生成日报 ---", rep["daily"]["content_md"]]
             if rep.get("voice"):
@@ -310,7 +315,7 @@ def call_tool(name: str, args: Dict[str, Any], context: Optional[MCPContext] = N
         return "\n".join(out)
 
     if name == "end_of_day":
-        r = service.end_of_day(args.get("date"), force=bool(args.get("force")))
+        r = service.end_of_day(args.get("date"), author=me, force=bool(args.get("force")))
         if r["status"] != "generated":
             return "状态：%s（%s）" % (r["status"], r.get("reason", ""))
         return _fmt_report(r)

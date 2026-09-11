@@ -1,3 +1,4 @@
+import _env  # noqa: F401  必须在 import fecho 之前
 import re
 import unittest
 from pathlib import Path
