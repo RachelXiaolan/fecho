@@ -61,6 +61,9 @@ $S tee /etc/systemd/system/$SERVICE.service >/dev/null <<UNIT
 Description=Fecho worker（到点出日报、处理排队的任务）
 After=network-online.target
 Wants=network-online.target
+# 崩了就重启，但别无限快速重启刷日志（这两项必须在 [Unit] 里，写到 [Service] 会被忽略）
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -69,9 +72,6 @@ ExecStart=$DIR/venv/bin/fecho worker
 Restart=always
 RestartSec=10
 User=root
-# 崩了就重启，但别无限快速重启刷日志
-StartLimitIntervalSec=300
-StartLimitBurst=5
 
 [Install]
 WantedBy=multi-user.target
