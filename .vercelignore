@@ -1,0 +1,14 @@
+# 不用传上去的：本地环境、测试、文档、构建残留
+.venv
+.worktrees
+build
+*.egg-info
+tests
+docs
+examples
+logs
+scripts
+*.db
+*.db-shm
+*.db-wal
+.env

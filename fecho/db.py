@@ -7,6 +7,7 @@
 再传），不做方言翻译。唯一的适配是占位符——上层一律写 ?，Postgres 那边换成 %s。
 """
 import json
+import os
 import sqlite3
 from contextlib import contextmanager
 from typing import Any, Dict, Iterator, List, Optional
@@ -336,8 +337,15 @@ def _pg_pool() -> Any:
         from psycopg.rows import dict_row
         from psycopg_pool import ConnectionPool
 
+        # Vercel 上每个请求可能落在一个刚起来的小进程里，而且随时会被回收。
+        # 那里预留常连没有意义（连了就被扔），并发起来还会把 Supabase 的连接数占满，
+        # 所以不预留、上限也压低；lu2 上的常驻进程才按常驻的方式留连接。
+        serverless = bool(os.getenv("VERCEL"))
         _pool = ConnectionPool(
-            config.DATABASE_URL, min_size=1, max_size=5, open=True,
+            config.DATABASE_URL,
+            min_size=0 if serverless else 1,
+            max_size=2 if serverless else 5,
+            open=True,
             kwargs={"row_factory": dict_row, "prepare_threshold": None, "autocommit": False},
         )
     return _pool

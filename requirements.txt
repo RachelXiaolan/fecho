@@ -1,0 +1,8 @@
+# Vercel 按这个文件装依赖。和 pyproject 里的 cloud 那组保持一致，
+# 少了 uvicorn —— Vercel 自己负责把请求喂给 app，不需要我们起服务器。
+fastapi>=0.110
+pydantic>=2
+httpx>=0.26
+psycopg[binary]>=3.1
+psycopg-pool>=3.2
+cryptography>=41
