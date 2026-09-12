@@ -421,6 +421,17 @@ def cmd_export_shared_config(args) -> int:
     return 0
 
 
+def cmd_worker(args) -> int:
+    """云端版的后台程序：出日报的慢活都在这里跑（装在 lu2 上）。"""
+    from . import worker
+
+    if args.once:
+        _p(worker.run_once())
+        return 0
+    worker.serve()
+    return 0
+
+
 def cmd_schedule(args) -> int:
     from . import automation
 
@@ -565,6 +576,10 @@ def main() -> int:
     p.add_argument("--out", default="~/.fecho/shared-llm-config.json",
                    help="输出路径，默认 ~/.fecho/shared-llm-config.json")
     p.set_defaults(fn=cmd_export_shared_config)
+
+    p = sub.add_parser("worker", help="云端版后台程序：到点出日报、处理排队的任务")
+    p.add_argument("--once", action="store_true", help="跑一轮就退出（装完做实测用）")
+    p.set_defaults(fn=cmd_worker)
 
     p = sub.add_parser("schedule", help="管理北京时间日终任务和本地 Dashboard 后台服务")
     schedule_sub = p.add_subparsers(dest="action", required=True)

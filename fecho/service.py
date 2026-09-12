@@ -69,9 +69,10 @@ def end_of_day(date: Optional[str] = None, author: Optional[str] = None,
     who = author or whoami()
     when = date or store.today()
     r = digest.generate(who, when, force=force)
-    if r["status"] in ("generated", "skipped", "pto-exempt"):
+    if r["status"] in ("generated", "skipped", "pto-exempt") and not config.CLOUD:
         # 无论这次是不是重新生成，都把本地当前的成品同步给团队 collector；
         # 没配 collector 或推送失败都不影响本地产物，只是团队视图暂时看不到这份。
+        # 云端版不用推：所有人的数据本来就在同一个库里，团队视图直接读库。
         from . import push
 
         r["team_push"] = push.push(who, when)

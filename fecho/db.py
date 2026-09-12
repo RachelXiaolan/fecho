@@ -352,6 +352,11 @@ def connect() -> sqlite3.Connection:
     return conn
 
 
+def table_names() -> List[str]:
+    import re
+    return re.findall(r"CREATE TABLE IF NOT EXISTS (\w+)", SCHEMA + SCHEMA_CLOUD)
+
+
 def location() -> str:
     if backend() == "postgres":
         # 地址后面可能跟着 ?host=/一串/路径，按最后一个 / 切会切到路径尾巴上
@@ -397,6 +402,11 @@ def init() -> None:
             conn.executescript(SCHEMA_CLOUD)
             conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_updates_source_event"
                          " ON updates(source_event_key) WHERE source_event_key IS NOT NULL")
+            # Supabase 默认开着一个叫 Data API 的网页接口，能直接读这个库里的表。
+            # 我们不用它——程序是直连数据库的。打开行级安全又不配任何放行规则，
+            # 那个接口就一行都读不到；我们自己连的是建表的那个账号，不受影响。
+            for table in table_names():
+                conn.execute("ALTER TABLE %s ENABLE ROW LEVEL SECURITY" % table)
         return
 
     with connect() as conn:

@@ -468,12 +468,20 @@ def verify_assignments(author: str, date: str) -> Dict[str, Any]:
 
 def generate(author: str, date: str, force: bool = False,
              persona_name: Optional[str] = None) -> Dict[str, Any]:
-    from . import auth
+    if config.CLOUD:
+        # 云端版：身份来自数据库，不是本机的 token 文件；所有人共用同一套文风
+        from . import accounts
 
-    ident = auth.all_authors().get(author, {})
-    persona = personas.load(persona_name or ident.get("persona") or author)
-    if not persona.get("display_name"):
-        persona["display_name"] = ident.get("display_name") or author
+        user = accounts.get_user(author) or {}
+        persona = personas.load(persona_name or "default")
+        persona["display_name"] = user.get("display_name") or author.split("@")[0]
+    else:
+        from . import auth
+
+        ident = auth.all_authors().get(author, {})
+        persona = personas.load(persona_name or ident.get("persona") or author)
+        if not persona.get("display_name"):
+            persona["display_name"] = ident.get("display_name") or author
 
     # 出稿前先把归属重判一次。记的时候手上只有当前那一条的上下文，这里能看到
     # 一整天——连 agent 明确填的 issue 号也重判，那同样是模型的判断，一样会错。
@@ -639,6 +647,10 @@ def _persist(author, date, kind, content, fp, generator, model, n,
 
 
 def _write_files(author, date, daily, voice, persona) -> Dict[str, str]:
+    if config.CLOUD:
+        # 云端版不往服务器磁盘写：数据库才是唯一的存放处，网页也从数据库读。
+        # 写了等于把所有人的日报散落在服务器上，多一份要管的副本。
+        return {}
     out_dir = config.LOGS_DIR / date
     out_dir.mkdir(parents=True, exist_ok=True)
     files = {

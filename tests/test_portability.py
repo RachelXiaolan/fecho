@@ -55,5 +55,23 @@ class TestPlaceholderTranslation(unittest.TestCase):
         self.assertEqual(pg.count("CREATE TABLE"), db.SCHEMA.count("CREATE TABLE"))
 
 
+class TestPostgresLockdown(unittest.TestCase):
+    """Supabase 默认开着 Data API（一个能直接读库的网页接口）。我们不用它，
+    所以每张表都打开行级安全又不配放行规则——那个接口一行都读不到。"""
+
+    def test_every_table_has_row_level_security(self):
+        from fecho import db
+        if db.backend() != "postgres":
+            self.skipTest("只在 Postgres 上有意义")
+        db.init()
+        with db.cursor() as conn:
+            rows = conn.execute(
+                "SELECT relname, relrowsecurity FROM pg_class c"
+                " JOIN pg_namespace n ON n.oid=c.relnamespace"
+                " WHERE n.nspname='public' AND c.relkind='r'").fetchall()
+        off = [r["relname"] for r in rows if not r["relrowsecurity"]]
+        self.assertEqual(off, [], "这些表没关上 Data API 那扇门：%s" % off)
+
+
 if __name__ == "__main__":
     unittest.main()

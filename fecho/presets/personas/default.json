@@ -1,9 +1,9 @@
 {
   "display_name": "",
   "language": "zh",
-  "daily_template": "# {date} 工作日志 · {display_name}\n\n## Done\n- ...\n\n## Todo\n- ...\n",
-  "daily_style": "分 Done / To do 两段。每个任务一条编号项：短名 + 冒号 + 一句话总结，底下子弹点列具体进展。",
-  "voice_style": "第一人称、口语化、平铺直叙地讲今天做了什么，结尾带一句明天计划。不出现 markdown 符号。",
+  "daily_template": "# {date} 工作日志 · {display_name}\n\n## Done\n1. ...\n2. ...\n3. ...\n\n## Todo\n1. ...\n2. ...\n\n## 记录\n- ...\n",
+  "daily_style": "分 Done / To do 两段。每个任务一条编号项：一句话说清今天推到哪了，底下用子弹点列具体进展和踩的坑。每条都要判状态：做完了=done，还在做或只做了一部分=wip，卡住了=blocked。不写套话，不写「今天是充实的一天」这类总结句。",
+  "voice_style": "第一人称、口语、像跟同事口头汇报。开头一句「今天主要做了几件事」之类的自然引入，然后按顺序讲 2-4 件事，结尾一句明天打算。不要念标题、不要念序号符号、不要出现 markdown。数字和英文缩写按中文口语读法写。",
   "voice_target_chars": [
     200,
     1000
