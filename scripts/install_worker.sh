@@ -25,20 +25,33 @@ $S install -d -m 700 "$(dirname "$ENV_FILE")"
 $S chmod 600 "$ENV_FILE"
 
 echo "==> 代码"
+# 仓库是 root 拉的，root 自己读也要先备案一下，否则 git 会报「可疑的所有权」
+$S git config --global --add safe.directory "$DIR" 2>/dev/null || true
 if [ -d "$DIR/.git" ]; then
   $S git -C "$DIR" fetch --quiet origin "$BRANCH"
   $S git -C "$DIR" reset --hard --quiet "origin/$BRANCH"
 else
+  $S rm -rf "$DIR"                      # 上次装到一半留下的残骸
   $S install -d -m 755 "$(dirname "$DIR")"
   $S git clone --quiet --branch "$BRANCH" "$REPO" "$DIR"
 fi
-echo "    $(cd "$DIR" && git log --oneline -1)"
+echo "    $($S git -C "$DIR" log --oneline -1)"
 
 echo "==> 依赖"
-[ -d "$DIR/venv" ] || $S python3 -m venv "$DIR/venv"
+# Ubuntu 的 python3 默认不带 venv 模块，缺了就装
+if ! python3 -c "import ensurepip" 2>/dev/null; then
+  echo "    安装 python3-venv"
+  $S apt-get update -qq
+  $S apt-get install -y -qq "python3-venv" || $S apt-get install -y -qq "python$(python3 -c 'import sys;print("%d.%d"%sys.version_info[:2])')-venv"
+fi
+# 上次没建成的 venv 是个空壳，判断标准是有没有 pip
+if [ ! -x "$DIR/venv/bin/pip" ]; then
+  $S rm -rf "$DIR/venv"
+  $S python3 -m venv "$DIR/venv"
+fi
 $S "$DIR/venv/bin/pip" install -q --upgrade pip
 $S "$DIR/venv/bin/pip" install -q "$DIR[cloud]"
-echo "    fecho $($DIR/venv/bin/fecho --version)"
+echo "    fecho $($S "$DIR/venv/bin/fecho" --version)"
 
 echo "==> 开机自启"
 $S tee /etc/systemd/system/$SERVICE.service >/dev/null <<UNIT
