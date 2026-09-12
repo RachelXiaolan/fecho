@@ -6,3 +6,6 @@ httpx>=0.26
 psycopg[binary]>=3.1
 psycopg-pool>=3.2
 cryptography>=41
+# 精简过的 Linux 镜像常常不带时区数据库，而 fecho 的日期一律按北京时间算
+# （clock.py 一加载就要 Asia/Shanghai）。装上它，找不到系统时区库时 Python 会用它。
+tzdata
