@@ -16,7 +16,9 @@ SERVICE=fecho-worker
 need_sudo() { [ "$(id -u)" = 0 ] && echo "" || echo "sudo"; }
 S=$(need_sudo)
 
-if [ ! -f "$ENV_FILE" ]; then
+# 用 root 去看：这个文件和它所在的目录都只有 root 能读，
+# 脚本自己是普通用户跑的，直接 test -f 会「看不见」明明存在的文件。
+if ! $S test -f "$ENV_FILE"; then
   echo "缺少 $ENV_FILE。先照 DEPLOY.md 建好它（里面有数据库地址、加密密钥、LLM key）。" >&2
   exit 1
 fi
