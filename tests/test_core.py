@@ -648,6 +648,23 @@ class TestWebEndpoints(unittest.TestCase):
         self.assertTrue(check["ok"])
         self.assertIn("21:00", check["detail"])
 
+    def test_doctor_survives_a_machine_without_launchctl(self):
+        """launchctl 是 macOS 才有的。doctor 跑在 Linux 上（服务器、Vercel）
+        不能因为查不到它就整个抛异常——那会把整个 dashboard 接口拖成 500。"""
+        from fecho import automation, service
+
+        def no_launchctl(*_a, **_kw):
+            raise FileNotFoundError(2, "No such file or directory", "launchctl")
+
+        runtime = automation._launch_runtime("com.feedmob.fecho.daily", uid=501,
+                                             runner=no_launchctl)
+        state = automation.status(runner=no_launchctl, health=lambda _u: {})
+        with mock.patch("fecho.automation.status", return_value=state):
+            result = service.doctor()
+        self.assertTrue(runtime["unavailable"])
+        self.assertFalse(runtime["loaded"])
+        self.assertTrue(result["checks"], "还是要给出检查结果，不能空着")
+
     def test_doctor_rejects_configured_but_dead_dashboard(self):
         from fecho import service
         state = {"enabled": True, "daily_time": "21:00", "timezone": "Asia/Shanghai",

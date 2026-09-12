@@ -409,9 +409,16 @@ def run_now(
 def _launch_runtime(
     label: str, *, uid: int, runner: Callable[..., Any] = subprocess.run,
 ) -> Dict[str, Any]:
-    result = runner(
-        ["launchctl", "print", "gui/%d/%s" % (uid, label)],
-        check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    # launchctl 是 macOS 才有的命令。这套自检本来只在本机版用，但 doctor 是
+    # 到处都调的，跑在 Linux 上（服务器、Vercel）时找不到它会直接抛异常，
+    # 把调用方整个拖垮。查不到就如实说查不到，别炸。
+    try:
+        result = runner(
+            ["launchctl", "print", "gui/%d/%s" % (uid, label)],
+            check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    except (FileNotFoundError, NotImplementedError, OSError):
+        return {"loaded": False, "state": None, "last_exit_code": None, "pid": None,
+                "unavailable": True}
     code = int(getattr(result, "returncode", result if isinstance(result, int) else 1))
     output = _result_text(result)
     state_match = re.search(r"^\s*state\s*=\s*([^\n]+)", output, re.MULTILINE)

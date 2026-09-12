@@ -432,11 +432,18 @@
   function renderSystem(){
     const doctor=state.data.system.doctor;
     $('#doctor').innerHTML=`<div class="item-title">运行检查</div><div class="meta" style="margin-bottom:8px">Fecho ${esc(doctor.version||'')} · 本地优先</div>`+doctor.checks.map(check=>`<div class="check ${check.ok?'':'bad'}"><span class="check-mark">${check.ok?'✓':'!'}</span><div><div class="item-title">${esc(check.name)}</div><div class="meta">${esc(check.detail)}</div>${check.fix?`<div class="meta">建议：${esc(check.fix)}</div>`:''}</div></div>`).join('');
+    // 云端版没有「你电脑上的定时任务」，后端会把 automation 给成 null。
+    // 这时候别照本机的说法报「尚未安装自动任务」——那是句永远修不好的假警报。
+    if(state.data.system.automation===null){
+      const dt=(doctor.checks.find(c=>c.name==='每日自动整理')||{}).detail||'';
+      $('#automation-status').innerHTML=`<div class="item-title">每日自动整理</div><div class="item"><div class="item-body">${esc(dt)}</div><div class="meta">时区 Asia/Shanghai</div></div>`;
+    } else {
     const automation=state.data.system.automation||{}, last=automation.last_result||{};
     const configured=automation.configured_launch_agents||{}, runtime=automation.runtime||{};
     const dashboardRuntime=runtime['com.feedmob.fecho.dashboard']||{};
     const dashboardState=dashboardRuntime.ok?'运行正常':configured['com.feedmob.fecho.dashboard']?'服务异常':'未配置';
     $('#automation-status').innerHTML=`<div class="item-title">每日自动整理</div><div class="item"><div class="item-body">${automation.enabled?`每天北京时间 ${esc(automation.daily_time)} 自动整理`:'尚未安装自动任务'}</div><div class="meta">时区 ${esc(automation.timezone||'Asia/Shanghai')} · Dashboard ${dashboardState}</div></div><div class="item"><div class="meta">上次运行</div><div class="item-body">${last.status?`${last.status==='succeeded'?'成功':'失败'} · ${esc(last.date||'')} ${last.error?'· '+esc(last.error):''}`:'还没有自动运行记录'}</div></div>`;
+    }
     const filters=state.data.filters;
     $('#sources').innerHTML=`<div class="item-title">已识别来源</div><div class="item"><div class="meta">Agent</div><div style="margin-top:7px">${filters.agents.map(a=>`<span class="tag">${esc(a)}</span>`).join(' ')||'暂无'}</div></div><div class="item"><div class="meta">进入方式</div><div style="margin-top:7px">${filters.ingestion_methods.map(a=>`<span class="tag">${esc(a)}</span>`).join(' ')||'暂无'}</div></div>`;
     const runs=state.data.system.scan_runs;

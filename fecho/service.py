@@ -116,8 +116,11 @@ def catch_up(date: Optional[str] = None, author: Optional[str] = None) -> Dict[s
     return {"date": day_, "report": report(day_, who), "open_tasks": open_tasks(who)}
 
 
-def doctor() -> Dict[str, Any]:
-    """装完之后 agent 该看的第一眼：什么配好了，什么还缺，缺的怎么补。"""
+def doctor(author: Optional[str] = None) -> Dict[str, Any]:
+    """装完之后 agent 该看的第一眼：什么配好了，什么还缺，缺的怎么补。
+
+    云端版要知道是谁在问——出日报的时间是每人自己设的。
+    """
     from . import automation, llm, oauth
 
     cfg = config.redacted()
@@ -192,16 +195,32 @@ def doctor() -> Dict[str, Any]:
         "团队部署了共享 collector 后：fecho setup --collector-url <url> --collector-token <token>",
     })
 
-    auto = automation.status()
-    auto_ok = bool(auto.get("ready"))
-    checks.append({
-        "name": "每日自动整理",
-        "ok": auto_ok,
-        "detail": ("每天北京时间 %s；Dashboard %s" % (
-            auto.get("daily_time", "21:00"), auto.get("dashboard_url")))
-        if auto_ok else "尚未完整安装自动任务和 Dashboard 后台服务",
-        "fix": None if auto_ok else "运行 fecho schedule install --time 21:00",
-    })
+    # 「谁到点去出日报」本机版和云端版是两套东西：本机版靠你电脑上的 launchd，
+    # 云端版靠服务器上那个常驻程序。查错了对象，同事会看到一条永远修不好的红灯。
+    if config.CLOUD:
+        from . import accounts, clock
+
+        user = accounts.get_user(author) if author else None
+        daily_time = (user or {}).get("daily_time")
+        checks.append({
+            "name": "每日自动整理",
+            "ok": True,
+            "detail": "每天北京时间 %s 由服务器出日报，你电脑上不用装任何定时任务"
+                      % (daily_time or clock.DEFAULT_DAILY_TIME),
+            "fix": None,
+        })
+        auto_ok = True
+    else:
+        auto = automation.status()
+        auto_ok = bool(auto.get("ready"))
+        checks.append({
+            "name": "每日自动整理",
+            "ok": auto_ok,
+            "detail": ("每天北京时间 %s；Dashboard %s" % (
+                auto.get("daily_time", "21:00"), auto.get("dashboard_url")))
+            if auto_ok else "尚未完整安装自动任务和 Dashboard 后台服务",
+            "fix": None if auto_ok else "运行 fecho schedule install --time 21:00",
+        })
 
     return {
         "version": __version__,

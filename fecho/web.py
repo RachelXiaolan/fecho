@@ -202,8 +202,10 @@ def dashboard_payload(author: str, date: str) -> Dict[str, Any]:
         "hidden": {"items": hidden_entries(author, date)},
         "timeline": {"groups": timeline(author, 14, date)},
         "issues": {"items": mobius.cached_issues(author)},
-        "system": {"doctor": service.doctor(), "scan_runs": scan_rows,
-                   "automation": automation.status()},
+        # 云端版没有「你电脑上的定时任务」这回事——出日报的是服务器上那个常驻程序。
+        # 这里还会去连本机 8900 端口，放在云上是白等。
+        "system": {"doctor": service.doctor(author), "scan_runs": scan_rows,
+                   "automation": None if config.CLOUD else automation.status()},
         "filters": {"agents": agents, "ingestion_methods": ingestions,
                     "completion_statuses": ["done", "wip", "blocked", "unknown"]},
     }
