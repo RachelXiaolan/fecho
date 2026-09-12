@@ -19,6 +19,27 @@ server = ["fastapi>=0.110", "uvicorn>=0.27", "pydantic>=2"]
 cloud = ["fastapi>=0.110", "uvicorn>=0.27", "pydantic>=2",
          "psycopg[binary]>=3.1", "psycopg-pool>=3.2", "cryptography>=41"]
 
+# Vercel 用 uv，并且只认 pyproject（放 requirements.txt 它不看）。
+# 但 fecho 装到同事电脑上时不该拖上 Postgres 驱动这些，所以不能写进上面的
+# dependencies。依赖组是 uv 的东西、不进包的元数据，正好用来装这类「只有部署
+# 才需要」的依赖。
+[dependency-groups]
+vercel = [
+    "fastapi>=0.110",
+    "pydantic>=2",
+    "psycopg[binary]>=3.1",
+    "psycopg-pool>=3.2",
+    "cryptography>=41",
+    # 精简过的 Linux 镜像常常不带时区数据库，而 fecho 的日期一律按北京时间算
+    "tzdata",
+]
+
+[tool.uv]
+default-groups = ["vercel"]
+
+[tool.vercel]
+entrypoint = "api.index:app"
+
 [project.scripts]
 fecho = "fecho.cli:main"
 fecho-mcp = "fecho.mcp_server:main"
