@@ -94,9 +94,66 @@ sudo systemctl start fecho-worker
 
 ---
 
-## 三、Vercel
+## 三、Vercel（网页、登录、接收 agent 上传）
 
-（第 5 步做完界面后补，含自定义域名 `fecho.techmob.net` 的配置。）
+仓库里和 Vercel 有关的文件，不用改，知道它们是干什么的就行：
+
+| 文件 | 作用 |
+|---|---|
+| `api/index.py` | Vercel 的入口，把 fecho 的网站建出来 |
+| `vercel.json` | 所有路径都交给上面那个入口 |
+| `pyproject.toml` 里的 `[dependency-groups] vercel` | Vercel 装依赖**只读 pyproject**，requirements.txt 它不看 |
+| `.vercelignore` | 测试、文档这些不传上去 |
+
+### 1. 导入仓库
+
+vercel.com → **Add New → Project** → 选 `RachelXiaolan/fecho` → Application Preset 选 **Other** → Deploy。
+
+第一次部署报 500 是正常的，环境变量还没填。
+
+### 2. 生产分支改成 cloud
+
+**Settings → Environments → Production → Branch Tracking** → 填 `cloud` → Save。
+
+如果提示 "No deployments found for cloud"，说明这个分支上还没部署过：往 `cloud` 推一个提交，等它部署出来再点 Retry。
+
+### 3. 填环境变量
+
+在本机跑，打印出要填的 5 行：
+
+```bash
+python3 scripts/vercel_env.py https://fecho.techmob.net
+```
+
+**Settings → Environment Variables → Add** → 把 5 行整块粘进 **Key** 输入框（会自动拆开），Environments 三个都选 → Save。
+
+| 变量 | 说明 |
+|---|---|
+| `FECHO_CLOUD` | `1` |
+| `FECHO_DATABASE_URL` | 和 lu2 **必须一样** |
+| `FECHO_SECRET_KEY` | 和 lu2 **必须一样** |
+| `FECHO_PUBLIC_URL` | 对外网址，Mobius 登录完跳回这里 |
+| `FECHO_BOOTSTRAP_ADMINS` | 第一批 admin 的邮箱，逗号分隔 |
+
+改完任何环境变量都要 **Deployments → 最新一条 `···` → Redeploy** 才生效。
+
+### 4. 挂域名 `fecho.techmob.net`
+
+1. Vercel：**Settings → Domains → Add Domain** → `fecho.techmob.net` → 连到 Production。记下它给的 CNAME 值。
+2. Cloudflare（techmob.net 的 DNS 在这里）：加一条记录
+   - Type `CNAME`，Name `fecho`，Target 填上一步的值
+   - **Proxy status 必须是 DNS only（灰色云朵）**。橙色代理会让 Vercel 签不下证书
+3. 等一两分钟证书签下来，把 `FECHO_PUBLIC_URL` 改成 `https://fecho.techmob.net` → Redeploy。
+4. 所有人重新登录一次。换了网址，Mobius 回调地址跟着变，代码会自动在 Mobius 重新注册，不用手动处理。
+
+### 5. 验证
+
+```bash
+curl -s https://fecho.techmob.net/healthz
+curl -s -o /dev/null -w "%{redirect_url}\n" https://fecho.techmob.net/auth/login
+```
+
+第一条应返回 `{"ok":true,...}`；第二条里的 `redirect_uri` 应该是 `https://fecho.techmob.net/auth/callback`。
 
 ---
 
@@ -109,3 +166,7 @@ sudo systemctl start fecho-worker
 | 后台程序起不来 | `/etc/fecho/worker.env` 权限是不是 600、九项是不是齐 |
 | 连不上数据库 | 在 lu2 上：`timeout 8 bash -c 'cat < /dev/null > /dev/tcp/<pooler主机>/6543'` |
 | 调不通模型 | 在 lu2 上：`curl -s -o /dev/null -w "%{http_code}\n" http://api.feedmob.it.com/v1/models`，401 算通 |
+| 网站所有路径都是 `FUNCTION_INVOCATION_FAILED` | 代码加载时就炸了。先看构建日志里依赖是不是从 pyproject 装的、有没有漏装 |
+| 网站能打开，但面板报「请求失败（500）」 | Vercel 项目 → **Logs**，找那条 500 的 Python Traceback |
+| 登录完跳回了旧网址 | `FECHO_PUBLIC_URL` 改了但没 Redeploy |
+| 新域名证书一直签不下来 | Cloudflare 那条记录是不是开成了橙色代理 |
