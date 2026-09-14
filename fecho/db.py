@@ -313,6 +313,30 @@ CREATE TABLE IF NOT EXISTS mcp_sessions (
     client_name   TEXT NOT NULL,
     created_at    TEXT NOT NULL
 );
+
+-- 大家在网页上提的建议和问题。图片直接存库里（base64）：量很小，
+-- Vercel 上没有能长期存文件的磁盘，也省得再配一套对象存储。
+CREATE TABLE IF NOT EXISTS feedback (
+    feedback_id   TEXT PRIMARY KEY,
+    author        TEXT NOT NULL,
+    body          TEXT NOT NULL,
+    page          TEXT,                 -- 在哪一页点进来提的
+    status        TEXT NOT NULL DEFAULT 'new',   -- new / seen / done
+    created_at    TEXT NOT NULL,
+    updated_at    TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_feedback_author ON feedback(author, created_at);
+
+CREATE TABLE IF NOT EXISTS feedback_images (
+    image_id      TEXT PRIMARY KEY,
+    feedback_id   TEXT NOT NULL,
+    position      INTEGER NOT NULL,
+    mime          TEXT NOT NULL,        -- 按文件头认出来的，不是浏览器报的
+    data          TEXT NOT NULL,        -- base64
+    size          INTEGER NOT NULL,
+    created_at    TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_feedback_images ON feedback_images(feedback_id, position);
 """
 
 

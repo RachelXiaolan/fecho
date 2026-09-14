@@ -806,6 +806,59 @@ def build_app():
             raise HTTPException(404, "没有这个人: %s" % author)
         return dashboard_payload(author, date or store.today())
 
+    # ---- 云端版：反馈 ----
+    @app.post("/api/feedback")
+    def api_feedback_submit(request: Request, body: Dict[str, Any] = Body(...),
+                            authorization: Optional[str] = Header(None)):
+        from . import feedback
+        _cloud_only()
+        me = guard(request, authorization)
+        images = body.get("images") or []
+        if not isinstance(images, list):
+            raise ValueError("images 必须是列表")
+        return {"ok": True, "item": feedback.submit(me, body.get("body") or "", images,
+                                                    body.get("page"))}
+
+    @app.get("/api/feedback")
+    def api_feedback_mine(request: Request, authorization: Optional[str] = Header(None)):
+        from . import feedback
+        _cloud_only()
+        me = guard(request, authorization)
+        return {"items": feedback.list_mine(me)}
+
+    @app.get("/api/feedback/images/{image_id}")
+    def api_feedback_image(image_id: str, request: Request,
+                           authorization: Optional[str] = Header(None)):
+        from fastapi.responses import Response
+        from . import feedback
+        _cloud_only()
+        me = guard(request, authorization)
+        found = feedback.image_for(image_id, me)
+        if not found:
+            raise HTTPException(404, "没有这张图")
+        mime, raw = found
+        # nosniff + 不允许图片里跑任何东西：就算混进了奇怪的文件，浏览器也只当图片看
+        return Response(raw, media_type=mime, headers={
+            "X-Content-Type-Options": "nosniff",
+            "Content-Security-Policy": "default-src 'none'; sandbox",
+            "Cache-Control": "private, max-age=86400"})
+
+    @app.get("/api/admin/feedback")
+    def api_admin_feedback(request: Request, authorization: Optional[str] = Header(None)):
+        from . import feedback
+        me = guard(request, authorization)
+        admin_only(me)
+        return {"items": feedback.list_all()}
+
+    @app.post("/api/admin/feedback/{feedback_id}")
+    def api_admin_feedback_status(feedback_id: str, request: Request,
+                                  body: Dict[str, Any] = Body(...),
+                                  authorization: Optional[str] = Header(None)):
+        from . import feedback
+        me = guard(request, authorization)
+        admin_only(me)
+        return {"ok": True, "item": feedback.set_status(feedback_id, body.get("status") or "", me)}
+
     @app.exception_handler(accounts.AccessDenied)
     async def access_denied_handler(_request: Request, exc: accounts.AccessDenied):
         return JSONResponse(status_code=403, content={"ok": False, "error": str(exc)})

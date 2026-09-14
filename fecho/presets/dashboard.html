@@ -161,6 +161,17 @@
     .toast button{border:1px solid rgba(255,255,255,.3);background:transparent;color:#fff;border-radius:7px;padding:5px 9px}
     .toast.error{background:#6e2725}
     [hidden]{display:none!important}
+    .fb-editor{display:block;width:100%;min-height:150px;border:0;border-radius:0;padding:14px 18px;resize:vertical;line-height:1.6}
+    .fb-draft{display:flex;flex-wrap:wrap;gap:10px;padding:0 18px 14px}
+    .fb-draft:empty{display:none}
+    .fb-thumb{position:relative;width:96px;height:96px;border-radius:8px;overflow:hidden;border:1px solid var(--line);background:var(--surface-soft)}
+    .fb-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+    .fb-thumb button{position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;border:0;padding:0;
+      background:rgba(16,14,36,.72);color:#fff;font-size:14px;line-height:1;display:grid;place-items:center}
+    .fb-form.dragging{box-shadow:0 0 0 2px var(--violet)}
+    .fb-body{white-space:pre-wrap;margin-top:0}
+    .fb-images{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+    .fb-images img{width:120px;height:90px;object-fit:cover;border-radius:6px;border:1px solid var(--line);display:block}
     .guide-link{display:block;margin-top:14px;padding:10px 12px;border-radius:8px;color:#bcbac9;text-decoration:none;font-size:13px}
     .guide-link:hover{background:rgba(255,255,255,.06);color:#fff}
     .topbar-actions{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;justify-content:flex-end}
@@ -229,6 +240,7 @@
       <button data-view="reports"><span data-i18n="nav_reports"></span><span class="count" id="nav-reports">—</span></button>
       <button data-view="system"><span data-i18n="nav_system"></span><span class="count" id="nav-system">—</span></button>
       <button data-view="settings" data-cloud-only hidden><span data-i18n="nav_settings"></span><span class="count" id="nav-settings">—</span></button>
+      <button data-view="feedback" data-cloud-only hidden><span data-i18n="nav_feedback"></span><span class="count" id="nav-feedback">—</span></button>
       <button data-view="admin" data-admin-only hidden><span data-i18n="nav_admin"></span><span class="count" id="nav-admin">—</span></button>
     </nav>
     <a class="guide-link" href="/guide" target="_blank" rel="noopener" data-i18n="nav_guide"></a>
@@ -306,11 +318,24 @@
         <div class="panel panel-pad" id="admin-status"></div>
       </section>
 
+      <section class="view" data-page="feedback" aria-labelledby="feedback-heading">
+        <div class="section-head"><div><h2 id="feedback-heading" data-i18n="fb_heading"></h2><p data-i18n="fb_sub"></p></div></div>
+        <div class="panel fb-form" id="fb-drop">
+          <textarea id="fb-body" class="fb-editor" data-i18n-placeholder="fb_placeholder" data-i18n-aria="fb_body_label"></textarea>
+          <div class="fb-draft" id="fb-draft"></div>
+          <div class="panel-foot"><input type="file" id="fb-file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden><button class="btn small" id="fb-add" type="button"></button><span class="meta" style="margin:0;flex:1" data-i18n="fb_hint"></span><button class="btn primary" id="fb-submit" type="button" data-i18n="fb_submit"></button></div>
+        </div>
+        <div class="section-head"><div><h2 data-i18n="fb_mine"></h2><p data-i18n="fb_mine_sub"></p></div></div>
+        <div class="panel" id="fb-mine"></div>
+      </section>
+
       <section class="view" data-page="admin" aria-labelledby="admin-heading">
         <div class="section-head"><div><h2 id="admin-heading" data-i18n="pending_heading"></h2><p data-i18n="pending_sub"></p></div><span class="tag" id="request-count">0</span></div>
         <div class="panel" id="request-list"></div>
         <div class="section-head"><div><h2 data-i18n="members_heading"></h2><p data-i18n="members_sub"></p></div></div>
         <div class="panel" style="overflow:auto"><table><thead><tr><th data-i18n="th_member"></th><th data-i18n="th_role"></th><th data-i18n="th_report_time"></th><th data-i18n="th_last_active"></th><th data-i18n="th_updates"></th><th></th></tr></thead><tbody id="user-list"></tbody></table></div>
+        <div class="section-head"><div><h2 data-i18n="fb_admin_heading"></h2><p data-i18n="fb_admin_sub"></p></div><span class="tag" id="fb-new-count">—</span></div>
+        <div class="panel" id="fb-all"></div>
       </section>
     </main>
   </div>
@@ -324,7 +349,23 @@
   "zh": {
     "doc_title": "Fecho · 工作日志",
     "nav_aria": "主导航", "nav_today": "今天", "nav_review": "复核", "nav_tasks": "任务", "nav_reports": "日报",
-    "nav_system": "系统", "nav_settings": "设置", "nav_admin": "管理", "nav_guide": "接入指南 ↗",
+    "nav_system": "系统", "nav_settings": "设置", "nav_admin": "管理", "nav_feedback": "反馈",
+    "page_feedback": "反馈", "page_feedback_sub": "哪里不好用、想要什么，都可以告诉我们。",
+    "fb_heading": "提建议", "fb_sub": "写下哪里不好用、想要什么功能、遇到的 bug。可以直接粘贴截图，或把图片拖进来。",
+    "fb_body_label": "反馈内容", "fb_placeholder": "比如：日报里任务名太长了；想要按周看汇总；点了保存没反应……",
+    "fb_add": "添加图片（{n}/{max}）", "fb_hint": "最多 4 张，大图会自动压缩", "fb_submit": "提交",
+    "fb_remove": "移除这张图", "fb_image_alt": "反馈截图",
+    "fb_mine": "我提过的", "fb_mine_sub": "管理员看过、处理完，状态会在这里更新。",
+    "fb_none_mine": "还没提过反馈", "fb_none_mine_sub": "有任何想法都可以写在上面。",
+    "fb_status_new": "待查看", "fb_status_seen": "已看", "fb_status_done": "已处理",
+    "fb_mark_new": "标为待查看", "fb_mark_seen": "标为已看", "fb_mark_done": "标为已处理",
+    "fb_from": "在「{page}」页提的",
+    "fb_admin_heading": "收到的反馈", "fb_admin_sub": "全员提的建议和问题。处理完标一下，提的人能看到状态。",
+    "fb_none_all": "还没有人提反馈", "fb_new_count": "待查看 {n}",
+    "fb_empty": "先写点内容或加一张图", "fb_too_many": "最多 {n} 张图", "fb_bad_type": "只支持 PNG、JPEG、WebP、GIF 图片",
+    "fb_too_big": "图片加起来太大了，删掉一两张再提交",
+    "fb_sent": "已提交，谢谢！", "fb_status_saved": "状态已更新",
+    "nav_guide": "接入指南 ↗",
     "connection_local": "本地服务已连接", "lang_aria": "界面语言", "filters_aria": "全局筛选",
     "filter_date": "工作日期", "filter_agent": "Agent", "filter_source": "记录方式", "filter_status": "完成状态", "all": "全部",
     "retry": "重试", "viewas_exit": "回到我自己的", "viewas_copy": "正在查看 {name}（{author}）的日志 · 只读",
@@ -430,7 +471,23 @@
   "en": {
     "doc_title": "Fecho · Work log",
     "nav_aria": "Main navigation", "nav_today": "Today", "nav_review": "Review", "nav_tasks": "Tasks", "nav_reports": "Reports",
-    "nav_system": "System", "nav_settings": "Settings", "nav_admin": "Admin", "nav_guide": "Setup guide ↗",
+    "nav_system": "System", "nav_settings": "Settings", "nav_admin": "Admin", "nav_feedback": "Feedback",
+    "page_feedback": "Feedback", "page_feedback_sub": "Tell us what's not working or what you'd like.",
+    "fb_heading": "Share feedback", "fb_sub": "Tell us what's awkward, what you'd like, or a bug you hit. Paste a screenshot or drag images in.",
+    "fb_body_label": "Feedback", "fb_placeholder": "e.g. Task names in the report are too long; I'd like a weekly summary; Save didn't respond…",
+    "fb_add": "Add images ({n}/{max})", "fb_hint": "Up to 4 images; large ones are compressed automatically", "fb_submit": "Submit",
+    "fb_remove": "Remove image", "fb_image_alt": "Feedback screenshot",
+    "fb_mine": "Your feedback", "fb_mine_sub": "The status updates here once an admin has looked at it.",
+    "fb_none_mine": "No feedback yet", "fb_none_mine_sub": "Anything you think of, write it above.",
+    "fb_status_new": "New", "fb_status_seen": "Seen", "fb_status_done": "Done",
+    "fb_mark_new": "Mark as new", "fb_mark_seen": "Mark as seen", "fb_mark_done": "Mark as done",
+    "fb_from": "Sent from {page}",
+    "fb_admin_heading": "Feedback received", "fb_admin_sub": "Suggestions and problems from everyone. Mark them when handled so the sender sees the status.",
+    "fb_none_all": "No feedback yet", "fb_new_count": "New: {n}",
+    "fb_empty": "Write something or add an image first", "fb_too_many": "Up to {n} images", "fb_bad_type": "Only PNG, JPEG, WebP or GIF images",
+    "fb_too_big": "The images are too large together; remove one or two and try again",
+    "fb_sent": "Sent — thank you!", "fb_status_saved": "Status updated",
+    "nav_guide": "Setup guide ↗",
     "connection_local": "Local service connected", "lang_aria": "Interface language", "filters_aria": "Filters",
     "filter_date": "Work date", "filter_agent": "Agent", "filter_source": "Captured via", "filter_status": "Status", "all": "All",
     "retry": "Retry", "viewas_exit": "Back to mine", "viewas_copy": "Viewing {name} ({author}) · read-only",
@@ -541,7 +598,8 @@
   const $$ = (selector, root=document) => [...root.querySelectorAll(selector)];
   const esc = value => String(value == null ? '' : value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
   const state = {data:null, view:'today', taskStatus:'all', reportTab:'daily', undo:null, toastTimer:null,
-    me:null, viewAs:null, editing:false, settings:{agents:[], folders:[]}, admin:null, style:null};
+    me:null, viewAs:null, editing:false, settings:{agents:[], folders:[]}, admin:null, style:null,
+    prevView:null, feedback:{images:[], mine:[], all:null}};
 
   // ---- 界面语言 ----
   // 记在浏览器里，登录页、onboard 页、面板共用同一个 key。默认中文。
@@ -566,7 +624,7 @@
     if(state.me&&state.me.cloud) $('#connection-copy').textContent=state.me.display_name||state.me.author;
     showViewAs();
     if(state.data){ hydrateFilters(); renderAll(); }
-    if(state.me&&state.me.cloud){ renderSettings(); if(state.admin) renderAdmin(); if(state.style) showStyle(state.style); }
+    if(state.me&&state.me.cloud){ renderSettings(); if(state.admin) renderAdmin(); if(state.style) showStyle(state.style); renderFeedbackDraft(); renderFeedbackMine(); if(state.feedback.all) renderFeedbackAll(); }
   }
 
   async function request(path, options={}){
@@ -777,7 +835,7 @@
     $('#scan-runs').innerHTML=runs.length?runs.map(run=>`<tr><td>${esc((run.started_at||'').slice(0,16).replace('T',' '))}</td><td>${esc(run.producer_agent)}</td><td>${esc(run.project.split('/').pop())}</td><td>${run.status==='succeeded'?`<span class="tag done">${esc(t('succeeded'))}</span>`:`<span class="tag blocked">${esc(t('failed'))}</span>`}</td><td>${run.error?esc(run.error):esc(t('scan_result',{entries:run.entries, chunks:run.chunks}))}</td></tr>`).join(''):`<tr><td colspan="5">${esc(t('no_scans'))}</td></tr>`;
   }
 
-  function switchView(view,{scroll=true}={}){ state.view=view; $$('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===view)); $$('.view').forEach(p=>p.classList.toggle('active',p.dataset.page===view)); $('.toolbar').hidden=['settings','admin'].includes(view); $('#page-title').textContent=t('page_'+view); $('#page-subtitle').textContent=t('page_'+view+'_sub'); if(scroll) window.scrollTo({top:0,behavior:'smooth'}); }
+  function switchView(view,{scroll=true}={}){ if(view!==state.view) state.prevView=state.view; state.view=view; $$('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===view)); $$('.view').forEach(p=>p.classList.toggle('active',p.dataset.page===view)); $('.toolbar').hidden=['settings','admin','feedback'].includes(view); $('#page-title').textContent=t('page_'+view); $('#page-subtitle').textContent=t('page_'+view+'_sub'); if(scroll) window.scrollTo({top:0,behavior:'smooth'}); }
   function showError(message){ $('#error-copy').textContent=message; $('#error-state').classList.add('show'); }
   function toast(message, undo=null, isError=false){ clearTimeout(state.toastTimer); state.undo=undo; $('#toast-copy').textContent=message; $('#undo-action').style.display=undo?'block':'none'; $('#toast').classList.toggle('error',isError); $('#toast').classList.add('show'); state.toastTimer=setTimeout(()=>$('#toast').classList.remove('show'),6000); }
   async function mutate(path, body, success, undo=null){
@@ -802,6 +860,9 @@
         toast(t(r.saved.status==='unchanged'?'toast_unchanged':'toast_edit_saved')); if(state.me&&state.me.cloud) loadStyle().catch(()=>{}); }
       catch(error){ saveEdit.disabled=false; toast(error.message,null,true); }
       return; }
+    const fbRemove=event.target.closest('[data-fb-remove]'); if(fbRemove){ state.feedback.images.splice(+fbRemove.dataset.fbRemove,1); renderFeedbackDraft(); return; }
+    const fbStatus=event.target.closest('[data-fb-status]');
+    if(fbStatus){ fbStatus.disabled=true; try{ await post(`/api/admin/feedback/${encodeURIComponent(fbStatus.dataset.id)}`,{status:fbStatus.dataset.fbStatus}); await loadAdminFeedback(); toast(t('fb_status_saved')); }catch(error){ fbStatus.disabled=false; toast(error.message,null,true); } return; }
     const reportTab=event.target.closest('[data-report-tab]'); if(reportTab){state.reportTab=reportTab.dataset.reportTab;renderReports();return;}
     const taskTab=event.target.closest('[data-task-status]'); if(taskTab){state.taskStatus=taskTab.dataset.taskStatus;renderTasks();return;}
     const action=event.target.closest('[data-action]'); if(!action)return;
@@ -857,7 +918,7 @@
     $$('[data-admin-only]').forEach(el=>el.hidden=!(cloud&&state.me.is_admin));
     if(!cloud) return;
     $('#connection-copy').textContent=state.me.display_name||state.me.author;
-    try{ await loadSettings(); if(state.me.is_admin) await loadAdmin(); }catch(error){ toast(error.message,null,true); }
+    try{ await loadSettings(); renderFeedbackDraft(); await loadFeedback(); if(state.me.is_admin){ await loadAdmin(); await loadAdminFeedback(); } }catch(error){ toast(error.message,null,true); }
   }
   async function loadSettings(){
     const [agents,folders]=await Promise.all([request('/api/agents'),request('/api/folders')]);
@@ -947,6 +1008,88 @@
   }
   $('#save-style').addEventListener('click',()=>saveStyle($('#style-editor').value));
   $('#clear-style').addEventListener('click',()=>{ if(confirm(t('confirm_clear_style'))) saveStyle(''); });
+
+  // ---------- 反馈 ----------
+  // 线上一次请求最多 4.5 MB，base64 还要胖三分之一：每张压到 700 KB 以内，服务器那边再卡一道
+  const FB_MAX_IMAGES=4, FB_MAX_EDGE=1600, FB_TARGET_BYTES=700000, FB_TOTAL_BYTES=3000000;
+  const FB_TYPES=/^image\/(png|jpeg|webp|gif)$/;
+  const readAsDataURL=blob=>new Promise((ok,fail)=>{ const r=new FileReader(); r.onload=()=>ok(r.result); r.onerror=()=>fail(r.error); r.readAsDataURL(blob); });
+  async function shrinkImage(file){
+    const url=URL.createObjectURL(file);
+    try{
+      const img=await new Promise((ok,fail)=>{ const i=new Image(); i.onload=()=>ok(i); i.onerror=()=>fail(new Error(t('fb_bad_type'))); i.src=url; });
+      const scale=Math.min(1, FB_MAX_EDGE/Math.max(img.naturalWidth,img.naturalHeight));
+      const canvas=document.createElement('canvas'); canvas.width=Math.max(1,Math.round(img.naturalWidth*scale)); canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));
+      const ctx=canvas.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.drawImage(img,0,0,canvas.width,canvas.height);
+      let quality=0.88, blob=await new Promise(ok=>canvas.toBlob(ok,'image/jpeg',quality));
+      while(blob&&blob.size>FB_TARGET_BYTES&&quality>0.5){ quality-=0.12; blob=await new Promise(ok=>canvas.toBlob(ok,'image/jpeg',quality)); }
+      if(!blob) throw new Error(t('fb_bad_type'));
+      return blob;
+    } finally { URL.revokeObjectURL(url); }
+  }
+  async function addFeedbackFiles(files){
+    for(const file of files){
+      if(state.feedback.images.length>=FB_MAX_IMAGES){ toast(t('fb_too_many',{n:FB_MAX_IMAGES}),null,true); break; }
+      try{
+        if(!FB_TYPES.test(file.type)) throw new Error(t('fb_bad_type'));
+        const blob=file.size<=FB_TARGET_BYTES?file:await shrinkImage(file);
+        const used=state.feedback.images.reduce((sum,img)=>sum+img.size,0);
+        if(used+blob.size>FB_TOTAL_BYTES) throw new Error(t('fb_too_big'));
+        const dataUrl=await readAsDataURL(blob);
+        state.feedback.images.push({mime:blob.type, data:dataUrl.split(',')[1], preview:dataUrl, size:blob.size});
+      }catch(error){ toast(error.message,null,true); }
+    }
+    renderFeedbackDraft();
+  }
+  function renderFeedbackDraft(){
+    const images=state.feedback.images;
+    $('#fb-draft').innerHTML=images.map((img,i)=>`<div class="fb-thumb"><img src="${esc(img.preview)}" alt="${esc(t('fb_image_alt'))}"><button type="button" data-fb-remove="${i}" aria-label="${esc(t('fb_remove'))}">×</button></div>`).join('');
+    $('#fb-add').textContent=t('fb_add',{n:images.length, max:FB_MAX_IMAGES});
+    $('#fb-add').disabled=images.length>=FB_MAX_IMAGES;
+  }
+  function feedbackItem(item, forAdmin){
+    const images=(item.images||[]).map(id=>{ const src=`/api/feedback/images/${encodeURIComponent(id)}`; return `<a href="${src}" target="_blank" rel="noopener"><img src="${src}" alt="${esc(t('fb_image_alt'))}" loading="lazy"></a>`; }).join('');
+    const tagClass=item.status==='done'?'done':item.status==='new'?'unknown':'';
+    const actions=forAdmin?`<div class="button-row" style="justify-content:flex-start;margin-top:10px">${['new','seen','done'].filter(s=>s!==item.status).map(s=>`<button class="btn small" type="button" data-fb-status="${s}" data-id="${esc(item.feedback_id)}">${esc(t('fb_mark_'+s))}</button>`).join('')}</div>`:'';
+    return `<div class="item"><div class="item-head"><div class="item-body fb-body">${esc(item.body)}</div><span class="tag ${tagClass}">${esc(t('fb_status_'+item.status))}</span></div>${images?`<div class="fb-images">${images}</div>`:''}<div class="meta">${forAdmin?`<span>${esc(item.display_name||item.author)}</span>`:''}<span>${esc(stamp(item.created_at))}</span>${item.page?`<span>${esc(t('fb_from',{page:t('page_'+item.page)}))}</span>`:''}</div>${actions}</div>`;
+  }
+  async function loadFeedback(){ state.feedback.mine=(await request('/api/feedback')).items; renderFeedbackMine(); }
+  function renderFeedbackMine(){
+    const items=state.feedback.mine;
+    $('#nav-feedback').textContent=items.length||'—';
+    $('#fb-mine').innerHTML=items.length?items.map(item=>feedbackItem(item,false)).join(''):empty(t('fb_none_mine'),t('fb_none_mine_sub'));
+  }
+  async function loadAdminFeedback(){ state.feedback.all=(await request('/api/admin/feedback')).items; renderFeedbackAll(); }
+  function renderFeedbackAll(){
+    const items=state.feedback.all||[];
+    $('#fb-new-count').textContent=t('fb_new_count',{n:items.filter(item=>item.status==='new').length});
+    $('#fb-all').innerHTML=items.length?items.map(item=>feedbackItem(item,true)).join(''):`<div class="empty"><strong>${esc(t('fb_none_all'))}</strong></div>`;
+  }
+  $('#fb-add').addEventListener('click',()=>$('#fb-file').click());
+  $('#fb-file').addEventListener('change',event=>{ addFeedbackFiles([...event.target.files]); event.target.value=''; });
+  // 截图直接粘进输入框
+  $('#fb-body').addEventListener('paste',event=>{
+    const files=[...((event.clipboardData||{}).files||[])].filter(file=>file.type.startsWith('image/'));
+    if(files.length){ event.preventDefault(); addFeedbackFiles(files); }
+  });
+  // 图片拖进来
+  const dropZone=$('#fb-drop');
+  const hasFiles=event=>!!event.dataTransfer&&[...event.dataTransfer.types].includes('Files');
+  dropZone.addEventListener('dragover',event=>{ if(!hasFiles(event)) return; event.preventDefault(); dropZone.classList.add('dragging'); });
+  dropZone.addEventListener('dragleave',()=>dropZone.classList.remove('dragging'));
+  dropZone.addEventListener('drop',event=>{ if(!hasFiles(event)) return; event.preventDefault(); dropZone.classList.remove('dragging'); addFeedbackFiles([...event.dataTransfer.files].filter(file=>file.type.startsWith('image/'))); });
+  $('#fb-submit').addEventListener('click',async()=>{
+    const body=$('#fb-body').value.trim();
+    if(!body&&!state.feedback.images.length){ toast(t('fb_empty'),null,true); return; }
+    const button=$('#fb-submit'); button.disabled=true;
+    try{
+      await post('/api/feedback',{body, page:state.prevView||'today', images:state.feedback.images.map(({mime,data})=>({mime,data}))});
+      $('#fb-body').value=''; state.feedback.images=[]; renderFeedbackDraft();
+      await loadFeedback(); if(state.me&&state.me.is_admin) loadAdminFeedback().catch(()=>{});
+      toast(t('fb_sent'));
+    }catch(error){ toast(error.message,null,true); }
+    finally{ button.disabled=false; }
+  });
 
   applyStatic();
   switchView('today',{scroll:false});
