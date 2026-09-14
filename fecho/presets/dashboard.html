@@ -598,7 +598,7 @@
     select.value=me.daily_time;
     $('#daily-time-copy').textContent=`现在：每天 ${me.daily_time} 出日报，${scanAt(me.daily_time)} 扫描`;
     $('#nav-settings').textContent=state.settings.folders.some(f=>f.selected)?'✓':'!';
-    $('#agent-list').innerHTML=state.settings.agents.map(a=>`<div class="agent-card ${a.scan_enabled?'on':''}"><div class="agent-badge">${esc(AGENT_BADGE[a.agent]||a.agent.slice(0,2).toUpperCase())}</div><div><div class="item-title">${esc(a.label)}</div><div class="meta"><span><i class="dot ${a.connected?'live':''}"></i>${a.connected?'已接入 · 最近 '+esc(stamp(a.last_seen)):'还没接入'}</span><span>${a.scan_enabled?'每晚扫它的对话':'不扫它的对话'}</span></div></div><label class="switch"><input type="checkbox" data-agent-toggle="${esc(a.agent)}" ${a.scan_enabled?'checked':''} aria-label="扫描 ${esc(a.label)} 的对话"><span></span></label></div>`).join('');
+    $('#agent-list').innerHTML=state.settings.agents.map(a=>`<div class="agent-card ${a.scan_enabled?'on':''}"><div class="agent-badge">${esc(AGENT_BADGE[a.agent]||a.agent.slice(0,2).toUpperCase())}</div><div><div class="item-title">${esc(a.label)}</div><div class="meta"><span><i class="dot ${a.connected?'live':''}"></i>${a.connected?'已接入 · 最近 '+esc(stamp(a.last_seen)):'还没接入'}</span><span>${!a.scannable?'还不支持后台扫描':a.scan_enabled?'每晚扫它的对话':'不扫它的对话'}</span></div></div><label class="switch" ${a.scannable?'':'style="opacity:.45" title="还不支持后台扫描（没实测过）"'}><input type="checkbox" data-agent-toggle="${esc(a.agent)}" ${a.scan_enabled?'checked':''} ${a.scannable?'':'disabled'} aria-label="扫描 ${esc(a.label)} 的对话"><span></span></label></div>`).join('');
     renderFolders();
     const req=me.admin_request;
     $('#admin-status').innerHTML=me.is_admin

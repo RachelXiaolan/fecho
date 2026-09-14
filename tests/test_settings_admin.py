@@ -138,6 +138,30 @@ class TestAdminFlowOverHttp(WebCase):
         self.assertEqual(self.get("/api/folders", B).json()["items"], [], "别人的白名单看不到")
 
 
+class TestHermesCannotBeSwitchedOn(WebCase):
+    def test_hermes_scan_is_refused_until_it_is_tested(self):
+        """本机叫不醒 Hermes：开了它每晚都会失败、每半小时重试一次，一直失败下去。"""
+        r = self.post("/api/agents/hermes", A, {"scan_enabled": True})
+        self.assertEqual(r.status_code, 400, r.text)
+        self.assertIn("还不支持", r.json()["error"])
+        agents = {a["agent"]: a for a in self.get("/api/agents", A).json()["items"]}
+        self.assertFalse(agents["hermes"]["scannable"])
+        self.assertFalse(agents["hermes"]["scan_enabled"])
+        self.assertTrue(agents["codex"]["scannable"])
+        # 关掉总是可以的
+        self.assertEqual(self.post("/api/agents/hermes", A, {"scan_enabled": False}).status_code, 200)
+
+    def test_hermes_switched_on_earlier_is_not_scanned(self):
+        """之前已经在库里开着的，也不交给本机去扫。"""
+        from fecho import cloudscan
+        with db.cursor() as c:
+            c.execute("DELETE FROM agent_connections")
+            c.execute("INSERT INTO agent_connections (author, agent, scan_enabled) VALUES (?,?,1)",
+                      (A, "hermes"))
+        cloudscan.set_selected(A, ["/Users/alice/work"])
+        self.assertEqual(cloudscan.due(A)["agents"], [])
+
+
 class TestPagesContract(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

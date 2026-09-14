@@ -60,6 +60,11 @@ def touch_agent(author: str, client_name: Optional[str]) -> Optional[str]:
     return agent
 
 
+# 本机能在后台叫醒来扫描的 agent。Hermes 在后台能不能被叫醒还没实测，先不让开：
+# 开了本机也叫不醒它，每晚都会报失败、每半小时重试一次，一直失败下去。
+SCANNABLE = {"claude-code", "codex"}
+
+
 def agents(author: str) -> List[Dict[str, Any]]:
     """所有支持的 agent，带上这个人的连接状态和扫不扫。"""
     with db.cursor() as conn:
@@ -71,14 +76,18 @@ def agents(author: str) -> List[Dict[str, Any]]:
         out.append({"agent": key, "label": spec["label"],
                     "connected": bool(row.get("last_seen")),
                     "last_seen": row.get("last_seen"),
+                    "scannable": key in SCANNABLE,
                     # 从没配置过的 agent 默认不扫：没用过的 agent 没有聊天记录可扫
-                    "scan_enabled": bool(row.get("scan_enabled")) if row else False})
+                    "scan_enabled": bool(row.get("scan_enabled")) and key in SCANNABLE
+                    if row else False})
     return out
 
 
 def set_scan_enabled(author: str, agent: str, enabled: bool) -> Dict[str, Any]:
     if agent not in AGENTS:
         raise ValueError("不支持的 agent: %s（目前支持 %s）" % (agent, "、".join(AGENTS)))
+    if enabled and agent not in SCANNABLE:
+        raise ValueError("%s 还不支持后台扫描（没实测过），暂时不能打开" % AGENTS[agent]["label"])
     with db.cursor() as conn:
         conn.execute(
             "INSERT INTO agent_connections (author, agent, scan_enabled) VALUES (?,?,?)"
