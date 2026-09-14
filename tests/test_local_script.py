@@ -281,7 +281,7 @@ class TestInstall(ScriptCase):
              mock.patch.object(self.mod, "probe",
                                side_effect=lambda cfg, a: (a in awake, "Not logged in")), \
              mock.patch.object(self.mod, "work_folders", return_value=[]), \
-             mock.patch.object(self.mod, "install_launchd") as launchd:
+             mock.patch.object(self.mod, "install_schedule", return_value="launchd") as launchd:
             self.mod.cmd_install(self.args)
         return launchd
 
@@ -342,6 +342,9 @@ class TestServerEndpoints(WebCase):
         self.assertIn("claude 超时", row["error"])
 
     def test_report_folders(self):
+        from fecho import db
+        with db.cursor() as c:     # 公共的 reset 不清这张表，别的测试报过的文件夹会串进来
+            c.execute("DELETE FROM work_folders")
         r = self.post("/api/folders/report", A, {"folders": [{"path": WORK, "last_used": "2030-01-10"}]})
         self.assertEqual(r.status_code, 200, r.text)
         self.assertEqual([f["path"] for f in r.json()["folders"]], [WORK])
