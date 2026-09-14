@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>完成接入 · Fecho</title>
+  <title>Fecho</title>
   <style>
     :root{--nav:#1b1938;--violet:#c9b4fa;--canvas:#f7f6f2;--ink:#292827;--muted:#73706d;
       --line:#e5e2db;--soft:#f1f0eb;--success:#23634d;--success-bg:#e8f3ed;--danger:#9a3f3a}
@@ -11,6 +11,7 @@
     body{margin:0;min-height:100vh;background:var(--canvas);color:var(--ink);
       font:15px/1.6 "Avenir Next","SF Pro Text","PingFang SC","Microsoft YaHei",sans-serif}
     main{width:min(620px,92vw);margin:48px auto}
+    .head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
     h1{font-size:24px;margin:0 0 4px;font-weight:650;letter-spacing:-.4px}
     .sub{color:var(--muted);margin:0 0 26px}
     .step{background:#fff;border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin-bottom:14px}
@@ -38,57 +39,126 @@
     .folders input{margin-top:3px;accent-color:var(--nav)}
     .folders .when{margin-left:auto;padding-left:10px;color:var(--muted);white-space:nowrap;font-family:inherit}
     .folders .hint{margin:0;padding:14px;color:var(--muted);font-size:13.5px}
-    .foot{display:flex;justify-content:space-between;margin-top:22px;font-size:14px}
+    .foot{display:flex;justify-content:space-between;margin-top:22px;font-size:14px;gap:16px}
+    .lang-switch{display:flex;gap:2px;background:var(--soft);padding:3px;border-radius:9px;flex:none}
+    .lang-switch button{padding:4px 9px;border-radius:7px;font-size:11px;font-weight:700;background:transparent;color:var(--muted)}
+    .lang-switch button.active{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(25,22,18,.08)}
   </style>
 </head>
 <body>
   <main>
-    <h1>完成接入</h1>
-    <p class="sub" id="who">加载中…</p>
+    <div class="head">
+      <div><h1 data-i18n="heading"></h1><p class="sub" id="who" data-i18n="loading"></p></div>
+      <div class="lang-switch" role="group" data-i18n-aria="lang_aria"><button data-lang="zh">中文</button><button data-lang="en">EN</button></div>
+    </div>
 
     <section class="step">
-      <h2><span class="num">1</span>把 token 交给 agent</h2>
-      <p>生成后复制，粘回给正在帮你安装的 agent。连续 7 天不用才会失效，天天在用就一直有效。</p>
-      <button id="issue">生成 token</button>
+      <h2><span class="num">1</span><span data-i18n="step1"></span></h2>
+      <p data-i18n="step1_desc"></p>
+      <button id="issue" data-i18n="issue"></button>
       <div class="token" id="token-box">
         <code id="token"></code>
         <div class="row">
-          <button class="ghost" id="copy">复制</button>
+          <button class="ghost" id="copy" data-i18n="copy"></button>
           <span class="ok" id="copied"></span>
         </div>
-        <p style="margin:12px 0 0">这串只显示这一次。弄丢了就回这里再生成一个，旧的会继续有效直到过期。</p>
+        <p style="margin:12px 0 0" data-i18n="token_once"></p>
       </div>
     </section>
 
     <section class="step">
-      <h2><span class="num">2</span>每天几点出日报</h2>
-      <p>北京时间。到点服务器整理出日报和口播稿；你电脑上的扫描会自动提前 15 分钟跑。</p>
+      <h2><span class="num">2</span><span data-i18n="step2"></span></h2>
+      <p data-i18n="step2_desc"></p>
       <div class="row">
         <select id="time"></select>
-        <button class="ghost" id="save-time">保存</button>
+        <button class="ghost" id="save-time" data-i18n="save"></button>
         <span id="time-msg"></span>
       </div>
     </section>
 
     <section class="step">
-      <h2><span class="num">3</span>勾选哪些文件夹算工作</h2>
-      <p>agent 装好本机采集后，会把你用 agent 干过活的文件夹报上来。只有勾选的文件夹里的对话会被扫描，没勾的连打开都不会打开。</p>
-      <div class="folders" id="folders"><p class="hint">加载中…</p></div>
+      <h2><span class="num">3</span><span data-i18n="step3"></span></h2>
+      <p data-i18n="step3_desc"></p>
+      <div class="folders" id="folders"><p class="hint" data-i18n="loading"></p></div>
       <div class="row">
-        <button class="ghost" id="reload-folders">刷新</button>
-        <button id="save-folders">保存勾选</button>
+        <button class="ghost" id="reload-folders" data-i18n="refresh"></button>
+        <button id="save-folders" data-i18n="save_selection"></button>
         <span id="folder-msg"></span>
       </div>
     </section>
 
     <div class="foot">
-      <a href="/">打开 Dashboard →（以后在 Settings 里改这些）</a>
-      <a href="#" id="logout">退出登录</a>
+      <a href="/" data-i18n="open_dashboard"></a>
+      <a href="#" id="logout" data-i18n="logout"></a>
     </div>
   </main>
+  <!-- 界面文字。服务器传回的错误信息不翻。 -->
+  <script type="application/json" id="i18n">
+  {
+    "zh": {
+      "doc_title": "完成接入 · Fecho", "lang_aria": "界面语言", "heading": "完成接入", "loading": "加载中…",
+      "who": "{name}（{email}）", "mobius_connected": " · Mobius 已连接",
+      "step1": "把 token 交给 agent",
+      "step1_desc": "生成后复制，粘回给正在帮你安装的 agent。连续 7 天不用才会失效，天天在用就一直有效。",
+      "issue": "生成 token", "issue_again": "再生成一个", "issue_failed": "生成失败：{msg}",
+      "copy": "复制", "copied": "已复制，粘回给 agent 吧",
+      "token_once": "这串只显示这一次。弄丢了就回这里再生成一个，旧的会继续有效直到过期。",
+      "step2": "每天几点出日报",
+      "step2_desc": "北京时间。到点服务器整理出日报和口播稿；你电脑上的扫描会自动提前 15 分钟跑。",
+      "save": "保存", "time_saved": "已保存：每天 {time}",
+      "step3": "勾选哪些文件夹算工作",
+      "step3_desc": "agent 装好本机采集后，会把你用 agent 干过活的文件夹报上来。只有勾选的文件夹里的对话会被扫描，没勾的连打开都不会打开。",
+      "folders_empty": "还没有上报的文件夹。等 agent 装好本机采集，再点「刷新」。",
+      "last_used": "最近 {date}", "refresh": "刷新", "save_selection": "保存勾选", "folders_saved": "已保存：{n} 个工作文件夹",
+      "open_dashboard": "打开 Dashboard →（以后在「设置」里改这些）", "logout": "退出登录"
+    },
+    "en": {
+      "doc_title": "Finish setup · Fecho", "lang_aria": "Interface language", "heading": "Finish setup", "loading": "Loading…",
+      "who": "{name} ({email})", "mobius_connected": " · Mobius connected",
+      "step1": "Give your agent a token",
+      "step1_desc": "Generate one, copy it, and paste it back to the agent that's installing Fecho for you. It only expires after 7 days of not being used.",
+      "issue": "Generate token", "issue_again": "Generate another", "issue_failed": "Couldn't generate a token: {msg}",
+      "copy": "Copy", "copied": "Copied — paste it back to your agent",
+      "token_once": "This is shown only once. If you lose it, come back and generate another; the old one keeps working until it expires.",
+      "step2": "Daily report time",
+      "step2_desc": "Beijing time. The server writes your report and voice script at this time; your computer scans 15 minutes earlier.",
+      "save": "Save", "time_saved": "Saved: every day at {time}",
+      "step3": "Choose your work folders",
+      "step3_desc": "Once your agent installs local capture, it reports the folders you've worked in with agents. Only conversations in checked folders are scanned; unchecked folders are never even opened.",
+      "folders_empty": "No folders reported yet. Once your agent installs local capture, click Refresh.",
+      "last_used": "Last used {date}", "refresh": "Refresh", "save_selection": "Save selection", "folders_saved": "Work folders saved: {n}",
+      "open_dashboard": "Open dashboard → (change these later in Settings)", "logout": "Sign out"
+    }
+  }
+  </script>
   <script>
     const $ = s => document.querySelector(s);
     const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const I18N = JSON.parse(document.getElementById('i18n').textContent);
+    const LANG_KEY = 'fecho-lang';
+    let lang = (() => { try { return localStorage.getItem(LANG_KEY) === 'en' ? 'en' : 'zh'; } catch (_) { return 'zh'; } })();
+    const t = (key, vars = {}) => ((I18N[lang] || {})[key] ?? I18N.zh[key] ?? key).replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
+    const state = {me: null, folders: null, token: null};
+
+    function applyStatic() {
+      document.documentElement.lang = lang === 'en' ? 'en' : 'zh-CN';
+      document.title = t('doc_title');
+      document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+      document.querySelectorAll('[data-i18n-aria]').forEach(el => { el.setAttribute('aria-label', t(el.dataset.i18nAria)); });
+      document.querySelectorAll('[data-lang]').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+    }
+    function render() {
+      applyStatic();
+      if (state.me) $('#who').textContent = t('who', {name: state.me.display_name, email: state.me.author}) + (state.me.mobius_connected ? t('mobius_connected') : '');
+      if (state.token) $('#issue').textContent = t('issue_again');
+      if (state.folders) renderFolders();
+      $('#copied').textContent = ''; $('#time-msg').textContent = ''; $('#folder-msg').textContent = '';
+    }
+    document.querySelectorAll('[data-lang]').forEach(b => b.addEventListener('click', () => {
+      lang = b.dataset.lang; try { localStorage.setItem(LANG_KEY, lang); } catch (_) {}
+      render();
+    }));
+
     const api = (path, body) => fetch(path, body === undefined ? {} : {
       method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
     }).then(async r => { const d = await r.json().catch(() => ({})); if (!r.ok) throw new Error(d.detail || d.error || r.status); return d; });
@@ -100,47 +170,60 @@
       $('#time').add(new Option(v, v));
     }
 
+    applyStatic();
     api('/api/me').then(me => {
-      $('#who').textContent = `${me.display_name}（${me.author}）` + (me.mobius_connected ? ' · Mobius 已连接' : '');
+      state.me = me;
       $('#time').value = me.daily_time;
+      render();
     }).catch(() => location.href = '/login');
 
     $('#issue').onclick = async () => {
       $('#issue').disabled = true;
       try {
         const d = await api('/api/tokens', {});
+        state.token = d.token;
         $('#token').textContent = d.token;
         $('#token-box').style.display = 'block';
-        $('#issue').textContent = '再生成一个';
-      } catch (e) { alert('生成失败：' + e.message); }
+        $('#issue').textContent = t('issue_again');
+      } catch (e) { alert(t('issue_failed', {msg: e.message})); }
       $('#issue').disabled = false;
     };
     $('#copy').onclick = async () => {
       await navigator.clipboard.writeText($('#token').textContent);
-      $('#copied').textContent = '已复制，粘回给 agent 吧';
+      $('#copied').textContent = t('copied');
     };
     $('#save-time').onclick = async () => {
       try {
         const d = await api('/api/settings', {daily_time: $('#time').value});
-        $('#time-msg').className = 'ok'; $('#time-msg').textContent = `已保存：每天 ${d.daily_time}`;
+        $('#time-msg').className = 'ok'; $('#time-msg').textContent = t('time_saved', {time: d.daily_time});
       } catch (e) { $('#time-msg').className = 'err'; $('#time-msg').textContent = e.message; }
     };
 
+    function renderFolders() {
+      const items = state.folders;
+      $('#folders').innerHTML = items.length
+        ? items.map(f => `<label><input type="checkbox" value="${esc(f.path)}" ${f.selected ? 'checked' : ''}><span>${esc(f.path)}</span><span class="when">${f.last_used ? esc(t('last_used', {date: f.last_used})) : ''}</span></label>`).join('')
+        : `<p class="hint">${esc(t('folders_empty'))}</p>`;
+    }
     async function loadFolders() {
       try {
-        const d = await api('/api/folders');
-        $('#folders').innerHTML = d.items.length
-          ? d.items.map(f => `<label><input type="checkbox" value="${esc(f.path)}" ${f.selected ? 'checked' : ''}><span>${esc(f.path)}</span><span class="when">${f.last_used ? '最近 ' + esc(f.last_used) : ''}</span></label>`).join('')
-          : '<p class="hint">还没有上报的文件夹。等 agent 装好本机采集，再点「刷新」。</p>';
+        state.folders = (await api('/api/folders')).items;
+        renderFolders();
       } catch (e) { $('#folders').innerHTML = `<p class="hint">${esc(e.message)}</p>`; }
     }
     loadFolders();
     $('#reload-folders').onclick = loadFolders;
+    // 勾选变化记到 state 里：切换语言会重画列表，不能把刚勾的弄丢
+    $('#folders').addEventListener('change', e => {
+      const box = e.target.closest('input[type=checkbox]');
+      const item = box && (state.folders || []).find(f => f.path === box.value);
+      if (item) item.selected = box.checked;
+    });
     $('#save-folders').onclick = async () => {
       const selected = [...document.querySelectorAll('#folders input:checked')].map(i => i.value);
       try {
         const d = await api('/api/folders', {selected});
-        $('#folder-msg').className = 'ok'; $('#folder-msg').textContent = `已保存：${d.selected.length} 个工作文件夹`;
+        $('#folder-msg').className = 'ok'; $('#folder-msg').textContent = t('folders_saved', {n: d.selected.length});
       } catch (e) { $('#folder-msg').className = 'err'; $('#folder-msg').textContent = e.message; }
     };
     $('#logout').onclick = async e => { e.preventDefault(); await api('/auth/logout', {}); location.href = '/login'; };

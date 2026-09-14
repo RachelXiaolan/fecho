@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Fecho · 工作日志</title>
+  <title>Fecho</title>
   <style>
     :root{
       --nav:#1b1938;--nav-deep:#100e24;--nav-text:#f7f5ff;--violet:#c9b4fa;
@@ -161,6 +161,10 @@
     .toast button{border:1px solid rgba(255,255,255,.3);background:transparent;color:#fff;border-radius:7px;padding:5px 9px}
     .toast.error{background:#6e2725}
     [hidden]{display:none!important}
+    .topbar-actions{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;justify-content:flex-end}
+    .lang-switch{display:flex;gap:2px;background:var(--surface-soft);padding:3px;border-radius:9px;align-self:center}
+    .lang-switch button{border:0;background:transparent;padding:6px 10px;border-radius:7px;font-size:11px;font-weight:700;color:var(--muted)}
+    .lang-switch button.active{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
     .report-edit{display:grid;gap:10px}
     .report-editor,.style-editor{display:block;width:100%;resize:vertical;
       font:13px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace}
@@ -213,119 +217,359 @@
 </head>
 <body>
 <div class="shell">
-  <aside class="sidebar" aria-label="主导航">
+  <aside class="sidebar" data-i18n-aria="nav_aria">
     <div class="brand"><div class="brand-mark">f°</div><div><div class="brand-name">fecho</div><div class="brand-copy">work, remembered</div></div></div>
     <div class="nav-label">Workspace</div>
     <nav class="nav">
-      <button class="active" data-view="today"><span>Today</span><span class="count" id="nav-today">—</span></button>
-      <button data-view="review"><span>Review</span><span class="count" id="nav-review">—</span></button>
-      <button data-view="tasks"><span>Tasks</span><span class="count" id="nav-tasks">—</span></button>
-      <button data-view="reports"><span>Reports</span><span class="count" id="nav-reports">—</span></button>
-      <button data-view="system"><span>System</span><span class="count" id="nav-system">—</span></button>
-      <button data-view="settings" data-cloud-only hidden><span>Settings</span><span class="count" id="nav-settings">—</span></button>
-      <button data-view="admin" data-admin-only hidden><span>Admin</span><span class="count" id="nav-admin">—</span></button>
+      <button class="active" data-view="today"><span data-i18n="nav_today"></span><span class="count" id="nav-today">—</span></button>
+      <button data-view="review"><span data-i18n="nav_review"></span><span class="count" id="nav-review">—</span></button>
+      <button data-view="tasks"><span data-i18n="nav_tasks"></span><span class="count" id="nav-tasks">—</span></button>
+      <button data-view="reports"><span data-i18n="nav_reports"></span><span class="count" id="nav-reports">—</span></button>
+      <button data-view="system"><span data-i18n="nav_system"></span><span class="count" id="nav-system">—</span></button>
+      <button data-view="settings" data-cloud-only hidden><span data-i18n="nav_settings"></span><span class="count" id="nav-settings">—</span></button>
+      <button data-view="admin" data-admin-only hidden><span data-i18n="nav_admin"></span><span class="count" id="nav-admin">—</span></button>
     </nav>
-    <div class="sidebar-foot"><div class="connection"><i class="pulse"></i><span id="connection-copy">本地服务已连接</span></div></div>
+    <div class="sidebar-foot"><div class="connection"><i class="pulse"></i><span id="connection-copy" data-i18n="connection_local"></span></div></div>
   </aside>
 
   <div class="workspace">
     <header class="topbar">
-      <div class="page-title"><h1 id="page-title">Today</h1><p id="page-subtitle">今天发生了什么，一眼看清。</p></div>
-      <div class="toolbar" aria-label="全局筛选">
-        <div class="field"><label for="work-date">工作日期</label><input id="work-date" type="date"></div>
-        <div class="field"><label for="agent-filter">Agent</label><select id="agent-filter"><option value="">全部</option></select></div>
-        <div class="field"><label for="source-filter">记录方式</label><select id="source-filter"><option value="">全部</option></select></div>
-        <div class="field"><label for="status-filter">完成状态</label><select id="status-filter"><option value="">全部</option></select></div>
+      <div class="page-title"><h1 id="page-title"></h1><p id="page-subtitle"></p></div>
+      <div class="topbar-actions">
+        <div class="toolbar" data-i18n-aria="filters_aria">
+          <div class="field"><label for="work-date" data-i18n="filter_date"></label><input id="work-date" type="date"></div>
+          <div class="field"><label for="agent-filter" data-i18n="filter_agent"></label><select id="agent-filter"><option value=""></option></select></div>
+          <div class="field"><label for="source-filter" data-i18n="filter_source"></label><select id="source-filter"><option value=""></option></select></div>
+          <div class="field"><label for="status-filter" data-i18n="filter_status"></label><select id="status-filter"><option value=""></option></select></div>
+        </div>
+        <div class="lang-switch" role="group" data-i18n-aria="lang_aria"><button data-lang="zh">中文</button><button data-lang="en">EN</button></div>
       </div>
     </header>
 
     <main>
-      <div id="error-state" class="error-state"><span id="error-copy"></span><button class="btn small" id="retry">重试</button></div>
-      <div id="viewas" class="viewas" role="status"><span id="viewas-copy"></span><button class="btn small" id="viewas-exit">回到我自己的</button></div>
-      <div id="loading" class="loading show"><div class="spinner"></div>正在整理工作现场…</div>
+      <div id="error-state" class="error-state"><span id="error-copy"></span><button class="btn small" id="retry" data-i18n="retry"></button></div>
+      <div id="viewas" class="viewas" role="status"><span id="viewas-copy"></span><button class="btn small" id="viewas-exit" data-i18n="viewas_exit"></button></div>
+      <div id="loading" class="loading show"><div class="spinner"></div><span data-i18n="loading"></span></div>
 
       <section class="view active" data-page="today" aria-labelledby="today-heading">
-        <div class="hero"><div class="eyebrow" id="today-date">WORK LOG</div><h2 id="today-heading">你的工作，会被好好记住。</h2><p id="today-summary">加载当天进展、归属和报告状态。</p><button class="btn primary hero-action" data-go="review">开始复核</button></div>
+        <div class="hero"><div class="eyebrow" id="today-date">WORK LOG</div><h2 id="today-heading" data-i18n="hero_default"></h2><p id="today-summary" data-i18n="hero_loading"></p><button class="btn primary hero-action" data-go="review" data-i18n="hero_review"></button></div>
         <div class="metrics" id="metrics"></div>
         <div class="two-col">
-          <div><div class="section-head"><div><h2>当天任务</h2><p>按任务聚合，不按对话切碎。</p></div></div><div class="panel" id="today-tasks"></div></div>
-          <div><div class="section-head"><div><h2>需要留意</h2><p>归属、重复和报告状态。</p></div></div><div class="panel" id="attention"></div></div>
+          <div><div class="section-head"><div><h2 data-i18n="today_tasks"></h2><p data-i18n="today_tasks_sub"></p></div></div><div class="panel" id="today-tasks"></div></div>
+          <div><div class="section-head"><div><h2 data-i18n="attention"></h2><p data-i18n="attention_sub"></p></div></div><div class="panel" id="attention"></div></div>
         </div>
-        <div class="section-head"><div><h2>14 天轨迹</h2><p>展开任务查看每日推进。</p></div></div><div class="panel" id="timeline"></div>
+        <div class="section-head"><div><h2 data-i18n="timeline"></h2><p data-i18n="timeline_sub"></p></div></div><div class="panel" id="timeline"></div>
       </section>
 
       <section class="view" data-page="review" aria-labelledby="review-heading">
-        <div class="section-head"><div><h2 id="review-heading">Review inbox</h2><p>Agent 点名的 issue 也可能错；人工确认后才锁定。</p></div><span class="tag" id="review-total">0 条</span></div>
+        <div class="section-head"><div><h2 id="review-heading" data-i18n="review_heading"></h2><p data-i18n="review_sub"></p></div><span class="tag" id="review-total">0</span></div>
         <div class="panel" id="review-list"></div>
-        <div class="section-head"><div><h2>被挡掉的进展</h2><p>扫描近似重复不会删除，只是暂时不进入日报。</p></div></div>
+        <div class="section-head"><div><h2 data-i18n="hidden_heading"></h2><p data-i18n="hidden_sub"></p></div></div>
         <div class="panel" id="hidden-list"></div>
       </section>
 
       <section class="view" data-page="tasks" aria-labelledby="tasks-heading">
-        <div class="section-head"><div><h2 id="tasks-heading">Tasks</h2><p>完成、重开，或把误拆的任务合并回来。</p></div>
-          <div class="segmented" id="task-tabs"><button class="active" data-task-status="all">全部</button><button data-task-status="open">进行中</button><button data-task-status="done">已完成</button><button data-task-status="merged">已合并</button></div></div>
+        <div class="section-head"><div><h2 id="tasks-heading" data-i18n="tasks_heading"></h2><p data-i18n="tasks_sub"></p></div>
+          <div class="segmented" id="task-tabs"><button class="active" data-task-status="all" data-i18n="tab_all"></button><button data-task-status="open" data-i18n="tab_open"></button><button data-task-status="done" data-i18n="tab_done"></button><button data-task-status="merged" data-i18n="tab_merged"></button></div></div>
         <div class="panel" id="task-list"></div>
       </section>
 
       <section class="view" data-page="reports" aria-labelledby="reports-heading">
-        <div class="section-head"><div><h2 id="reports-heading">Reports</h2><p>日报、口播和每一次生成历史都在这里。</p></div><div class="button-row"><button class="btn" id="edit-report" hidden>修改</button><button class="btn primary" id="regenerate">重新生成</button></div></div>
-        <div id="report-dirty" class="dirty"><span id="report-dirty-copy">进展或归属已经变化，这份报告需要重新生成。</span><button class="btn small" id="dirty-regenerate">现在生成</button></div>
-        <div class="panel report-layout"><div class="report-nav" id="report-tabs"><button class="active" data-report-tab="daily">日报</button><button data-report-tab="voice">口播稿</button><button data-report-tab="history">历史版本</button><button data-report-tab="warnings">生成提示</button></div><div class="report-paper" id="report-content">尚未生成。</div></div>
+        <div class="section-head"><div><h2 id="reports-heading" data-i18n="reports_heading"></h2><p data-i18n="reports_sub"></p></div><div class="button-row"><button class="btn" id="edit-report" hidden data-i18n="edit"></button><button class="btn primary" id="regenerate" data-i18n="regenerate"></button></div></div>
+        <div id="report-dirty" class="dirty"><span id="report-dirty-copy"></span><button class="btn small" id="dirty-regenerate" data-i18n="regenerate_now"></button></div>
+        <div class="panel report-layout"><div class="report-nav" id="report-tabs"><button class="active" data-report-tab="daily" data-i18n="tab_daily"></button><button data-report-tab="voice" data-i18n="tab_voice"></button><button data-report-tab="history" data-i18n="tab_history"></button><button data-report-tab="warnings" data-i18n="tab_warnings"></button></div><div class="report-paper" id="report-content" data-i18n="not_generated"></div></div>
       </section>
 
       <section class="view" data-page="system" aria-labelledby="system-heading">
-        <div class="section-head"><div><h2 id="system-heading">System</h2><p>连接、模型、Mobius 和扫描是否真的在工作。</p></div></div>
+        <div class="section-head"><div><h2 id="system-heading" data-i18n="system_heading"></h2><p data-i18n="system_sub"></p></div></div>
         <div class="two-col"><div><div class="panel panel-pad" id="doctor"></div></div><div><div class="panel panel-pad" id="automation-status"></div><div class="panel panel-pad" id="sources" style="margin-top:18px"></div></div></div>
-        <div class="section-head"><div><h2>最近扫描</h2><p>失败会保留重试边界，不会静默跳过。</p></div></div><div class="panel" style="overflow:auto"><table><thead><tr><th>时间</th><th>Agent</th><th>项目</th><th>状态</th><th>结果</th></tr></thead><tbody id="scan-runs"></tbody></table></div>
+        <div class="section-head"><div><h2 data-i18n="recent_scans"></h2><p data-i18n="recent_scans_sub"></p></div></div><div class="panel" style="overflow:auto"><table><thead><tr><th data-i18n="th_time"></th><th data-i18n="th_agent"></th><th data-i18n="th_project"></th><th data-i18n="th_status"></th><th data-i18n="th_result"></th></tr></thead><tbody id="scan-runs"></tbody></table></div>
       </section>
-      <section class="view" data-page="settings" aria-labelledby="settings-heading">
-        <div class="section-head"><div><h2 id="settings-heading">出日报时间</h2><p>北京时间。到点服务器整理日报和口播稿；你电脑上的扫描自动提前 15 分钟。改了之后本机下次来问就按新时间，不用重装。</p></div></div>
-        <div class="panel"><div class="setting-row"><div><div class="item-title">每天几点出日报</div><div class="meta" id="daily-time-copy">—</div></div><div class="button-row"><select id="daily-time" aria-label="出日报时间"></select><button class="btn primary" id="save-daily-time">保存</button></div></div></div>
 
-        <div class="section-head"><div><h2>Agent</h2><p>每个 agent 扫它自己的对话。「已接入」表示它连过 Fecho；开关决定每晚扫不扫它的聊天记录。</p></div></div>
+      <section class="view" data-page="settings" aria-labelledby="settings-heading">
+        <div class="section-head"><div><h2 id="settings-heading" data-i18n="settings_time"></h2><p data-i18n="settings_time_sub"></p></div></div>
+        <div class="panel"><div class="setting-row"><div><div class="item-title" data-i18n="daily_time_label"></div><div class="meta" id="daily-time-copy">—</div></div><div class="button-row"><select id="daily-time" data-i18n-aria="daily_time_aria"></select><button class="btn primary" id="save-daily-time" data-i18n="save"></button></div></div></div>
+
+        <div class="section-head"><div><h2 data-i18n="agents_heading"></h2><p data-i18n="agents_sub"></p></div></div>
         <div class="panel" id="agent-list"></div>
 
-        <div class="section-head"><div><h2>工作文件夹</h2><p>只有勾选的文件夹里的对话会被扫描；没勾的，对话连打开都不会打开。</p></div><span class="tag" id="folder-count">—</span></div>
-        <div class="panel"><div id="folder-list"></div><div class="panel-foot"><input id="folder-add" placeholder="手动加一个文件夹的完整路径，比如 /Users/you/Documents/work" aria-label="手动添加文件夹"><button class="btn small" id="folder-add-btn">添加</button><button class="btn primary" id="save-folders">保存勾选</button></div></div>
+        <div class="section-head"><div><h2 data-i18n="folders_heading"></h2><p data-i18n="folders_sub"></p></div><span class="tag" id="folder-count">—</span></div>
+        <div class="panel"><div id="folder-list"></div><div class="panel-foot"><input id="folder-add" data-i18n-placeholder="folder_add_placeholder" data-i18n-aria="folder_add_aria"><button class="btn small" id="folder-add-btn" data-i18n="add"></button><button class="btn primary" id="save-folders" data-i18n="save_selection"></button></div></div>
 
-        <div class="section-head"><div><h2>写作偏好</h2><p>从你亲手改日报的地方总结出来，以后出日报照着写。只有你自己看得到；学偏了直接改掉或删掉那一条。</p></div><span class="tag" id="style-updated">—</span></div>
-        <div class="panel"><textarea id="style-editor" class="style-editor" aria-label="写作偏好" placeholder="还没有。你在 Reports 里改过日报之后，这里会出现总结出来的偏好。"></textarea><div class="panel-foot"><span class="meta" style="margin:0;flex:1">每条一行，以「- 」开头。清空就是不要任何偏好。</span><button class="btn small" id="clear-style">清空</button><button class="btn primary" id="save-style">保存</button></div></div>
+        <div class="section-head"><div><h2 data-i18n="style_heading"></h2><p data-i18n="style_sub"></p></div><span class="tag" id="style-updated">—</span></div>
+        <div class="panel"><textarea id="style-editor" class="style-editor" data-i18n-aria="style_aria" data-i18n-placeholder="style_placeholder"></textarea><div class="panel-foot"><span class="meta" style="margin:0;flex:1" data-i18n="style_hint"></span><button class="btn small" id="clear-style" data-i18n="clear"></button><button class="btn primary" id="save-style" data-i18n="save"></button></div></div>
 
-        <div class="section-head"><div><h2>管理员</h2><p>admin 可以查看全员的日志、审批新的 admin。</p></div></div>
+        <div class="section-head"><div><h2 data-i18n="admin_section"></h2><p data-i18n="admin_section_sub"></p></div></div>
         <div class="panel panel-pad" id="admin-status"></div>
       </section>
 
       <section class="view" data-page="admin" aria-labelledby="admin-heading">
-        <div class="section-head"><div><h2 id="admin-heading">待审批</h2><p>有人申请成为 admin。批准后对方可以查看全员的日志。</p></div><span class="tag" id="request-count">0</span></div>
+        <div class="section-head"><div><h2 id="admin-heading" data-i18n="pending_heading"></h2><p data-i18n="pending_sub"></p></div><span class="tag" id="request-count">0</span></div>
         <div class="panel" id="request-list"></div>
-        <div class="section-head"><div><h2>全员</h2><p>点「查看日志」进入对方的面板。只读，不会改动别人的数据。</p></div></div>
-        <div class="panel" style="overflow:auto"><table><thead><tr><th>成员</th><th>角色</th><th>出日报</th><th>最近有记录</th><th>进展条数</th><th></th></tr></thead><tbody id="user-list"></tbody></table></div>
+        <div class="section-head"><div><h2 data-i18n="members_heading"></h2><p data-i18n="members_sub"></p></div></div>
+        <div class="panel" style="overflow:auto"><table><thead><tr><th data-i18n="th_member"></th><th data-i18n="th_role"></th><th data-i18n="th_report_time"></th><th data-i18n="th_last_active"></th><th data-i18n="th_updates"></th><th></th></tr></thead><tbody id="user-list"></tbody></table></div>
       </section>
     </main>
   </div>
 </div>
 
-<div class="toast" id="toast" role="status" aria-live="polite"><span id="toast-copy"></span><button id="undo-action">撤销</button></div>
+<div class="toast" id="toast" role="status" aria-live="polite"><span id="toast-copy"></span><button id="undo-action" data-i18n="undo"></button></div>
+
+<!-- 界面文字。中文和英文用同一套 key；只切界面，服务器返回的内容（错误信息、检查说明、日报正文）不翻。 -->
+<script type="application/json" id="i18n">
+{
+  "zh": {
+    "doc_title": "Fecho · 工作日志",
+    "nav_aria": "主导航", "nav_today": "今天", "nav_review": "复核", "nav_tasks": "任务", "nav_reports": "日报",
+    "nav_system": "系统", "nav_settings": "设置", "nav_admin": "管理",
+    "connection_local": "本地服务已连接", "lang_aria": "界面语言", "filters_aria": "全局筛选",
+    "filter_date": "工作日期", "filter_agent": "Agent", "filter_source": "记录方式", "filter_status": "完成状态", "all": "全部",
+    "retry": "重试", "viewas_exit": "回到我自己的", "viewas_copy": "正在查看 {name}（{author}）的日志 · 只读",
+    "loading": "正在整理工作现场…",
+    "page_today": "今天", "page_today_sub": "今天发生了什么，一眼看清。",
+    "page_review": "复核", "page_review_sub": "把自动判断变成人工确认。",
+    "page_tasks": "任务", "page_tasks_sub": "一件事是一条持续生长的任务。",
+    "page_reports": "日报", "page_reports_sub": "让成品和事实始终同步。",
+    "page_system": "系统", "page_system_sub": "知道系统哪里正常，哪里需要处理。",
+    "page_settings": "设置", "page_settings_sub": "出日报时间、agent、工作文件夹、写作偏好。",
+    "page_admin": "管理", "page_admin_sub": "审批 admin，查看全员的日志。",
+    "hero_default": "你的工作，会被好好记住。", "hero_loading": "加载当天进展、归属和报告状态。", "hero_review": "开始复核",
+    "today_tasks": "当天任务", "today_tasks_sub": "按任务聚合，不按对话切碎。",
+    "attention": "需要留意", "attention_sub": "归属、重复和报告状态。",
+    "timeline": "14 天轨迹", "timeline_sub": "展开任务查看每日推进。",
+    "today_heading_n": "今天推进了 {n} 件事。", "today_heading_none": "这一天还没有工作进展。",
+    "today_summary_n": "{updates} 条进展来自 {agents} 个 Agent；{review} 条等待确认。",
+    "today_summary_none": "选择其他日期，或让 Agent 在完成一段工作后调用 log_progress。",
+    "metric_updates": "进展", "metric_tasks": "任务", "metric_review": "待复核", "metric_hidden": "隐藏",
+    "n_updates": "{n} 条进展", "n_items": "{n} 条",
+    "empty_filter": "没有匹配筛选的进展", "empty_filter_sub": "试试清空顶部筛选条件。",
+    "notice_review": "{n} 条归属待确认", "notice_review_sub": "人工确认后，模型不会再覆盖",
+    "notice_dirty": "日报需要更新", "notice_dirty_sub": "事实或归属在生成后发生了变化",
+    "notice_hidden": "{n} 条扫描结果被挡下", "notice_hidden_sub": "可以在复核里恢复",
+    "empty_attention": "状态清爽", "empty_attention_sub": "归属、重复和报告都没有待处理项。",
+    "empty_timeline": "还没有轨迹", "empty_timeline_sub": "有进展后会按任务聚合在这里。",
+    "freeform": "自由任务",
+    "review_heading": "复核收件箱", "review_sub": "Agent 点名的 issue 也可能错；人工确认后才锁定。",
+    "hidden_heading": "被挡掉的进展", "hidden_sub": "扫描近似重复不会删除，只是暂时不进入日报。",
+    "confidence_low": "低置信", "confidence_medium": "中置信", "confidence_high": "高置信",
+    "assign_to": "归属到", "fix_content_aria": "修正进展正文", "confirm_lock": "确认并锁定",
+    "empty_review": "收件箱已清空", "empty_review_sub": "这一天的归属都经过了人工确认。",
+    "restore": "恢复", "empty_hidden": "没有隐藏条目", "empty_hidden_sub": "扫描去重没有挡下任何内容。",
+    "tasks_heading": "任务", "tasks_sub": "完成、重开，或把误拆的任务合并回来。",
+    "tab_all": "全部", "tab_open": "进行中", "tab_done": "已完成", "tab_merged": "已合并",
+    "task_status_open": "进行中", "task_status_done": "已完成", "task_status_merged": "已合并",
+    "complete": "完成", "reopen": "重开", "no_progress": "暂无进展", "last_updated": "最后更新 {time}",
+    "merge_aria": "合并目标", "merge_into": "合并到…", "merge": "合并",
+    "empty_tasks": "这个分组没有任务", "empty_tasks_sub": "切换上方状态查看其他任务。",
+    "status_done": "已完成", "status_wip": "进行中", "status_blocked": "受阻", "status_unknown": "未标注",
+    "reports_heading": "日报", "reports_sub": "日报、口播稿和每一次生成历史都在这里。",
+    "edit": "修改", "regenerate": "重新生成", "regenerate_now": "现在生成",
+    "dirty_llm": "进展或归属已经变化，这份报告需要重新生成。",
+    "dirty_human": "有新的进展或归属变化。这份日报被你改过，重新生成会覆盖你的修改（修改版会留在历史版本里）。",
+    "tab_daily": "日报", "tab_voice": "口播稿", "tab_history": "历史版本", "tab_warnings": "生成提示",
+    "not_generated": "尚未生成。",
+    "no_daily_with_updates": "这天有 {n} 条记录，日报还没生成。到了每天出日报的时间会自动生成，也可以点「重新生成」。",
+    "no_daily_empty": "这天还没有收到任何工作记录。agent 随手记的内容和每晚扫描到的内容上传后，会出现在这里。",
+    "edit_aria": "修改日报",
+    "edit_hint": "保存后：旧版本进「历史版本」；口播稿按新日报重出；你的写作偏好在后台更新，以后出日报照着写。",
+    "cancel": "取消", "save": "保存", "no_voice": "尚未生成口播稿。",
+    "version_label": "版本 {n} · {kind} · {by} · {time}", "by_human": "人工修改", "by_model": "模型生成",
+    "no_history": "还没有历史版本。", "no_warnings": "本次生成没有警告。",
+    "system_heading": "系统", "system_sub": "连接、模型、Mobius 和扫描是否真的在工作。",
+    "recent_scans": "最近扫描", "recent_scans_sub": "失败会保留重试边界，不会静默跳过。",
+    "th_time": "时间", "th_agent": "Agent", "th_project": "项目", "th_status": "状态", "th_result": "结果",
+    "health_check": "运行检查", "local_first": "本地优先", "suggestion": "建议：{fix}",
+    "daily_automation": "每日自动整理", "timezone": "时区 {tz}",
+    "dash_ok": "运行正常", "dash_bad": "服务异常", "dash_none": "未配置",
+    "auto_daily": "每天北京时间 {time} 自动整理", "auto_not_installed": "尚未安装自动任务", "dashboard_state": "Dashboard {state}",
+    "last_run": "上次运行", "succeeded": "成功", "failed": "失败", "no_runs": "还没有自动运行记录",
+    "sources": "已识别来源", "via": "进入方式", "none": "暂无",
+    "scan_result": "{entries} 条 / {chunks} 块", "no_scans": "还没有扫描记录。",
+    "settings_time": "出日报时间",
+    "settings_time_sub": "北京时间。到点服务器整理日报和口播稿；你电脑上的扫描自动提前 15 分钟。改了之后本机下次来问就按新时间，不用重装。",
+    "daily_time_label": "每天几点出日报", "daily_time_aria": "出日报时间", "daily_time_now": "现在：每天 {time} 出日报，{scan} 扫描",
+    "agents_heading": "Agent", "agents_sub": "每个 agent 扫它自己的对话。「已接入」表示它连过 Fecho；开关决定每晚扫不扫它的聊天记录。",
+    "agent_connected": "已接入 · 最近 {time}", "agent_not_connected": "还没接入",
+    "agent_unsupported": "还不支持后台扫描", "agent_unsupported_title": "还不支持后台扫描（没实测过）",
+    "agent_scanning": "每晚扫它的对话", "agent_not_scanning": "不扫它的对话", "agent_toggle_aria": "扫描 {name} 的对话",
+    "folders_heading": "工作文件夹", "folders_sub": "只有勾选的文件夹里的对话会被扫描；没勾的，对话连打开都不会打开。",
+    "folders_count": "已勾选 {picked} / {total}", "folder_last_used": "最近 {date}",
+    "folders_empty": "还没有上报的文件夹", "folders_empty_sub": "本机采集装好后，用 agent 干过活的文件夹会自动出现在这里。也可以在下面手动添加。",
+    "folder_add_placeholder": "手动加一个文件夹的完整路径，比如 /Users/you/Documents/work", "folder_add_aria": "手动添加文件夹",
+    "add": "添加", "save_selection": "保存勾选",
+    "style_heading": "写作偏好", "style_sub": "从你亲手改日报的地方总结出来，以后出日报照着写。只有你自己看得到；学偏了直接改掉或删掉那一条。",
+    "style_aria": "写作偏好", "style_placeholder": "还没有。你在日报里改过之后，这里会出现总结出来的偏好。",
+    "style_hint": "每条一行，以「- 」开头。清空就是不要任何偏好。", "clear": "清空",
+    "style_updated": "更新于 {time}", "style_none": "还没有",
+    "admin_section": "管理员", "admin_section_sub": "admin 可以查看全员的日志、审批新的 admin。",
+    "you_are_admin": "你是 admin", "you_are_admin_sub": "可以在左侧「管理」里审批申请、查看全员的日志。",
+    "request_pending": "申请已提交，等待审批", "request_pending_sub": "提交于 {time}",
+    "not_admin": "你还不是 admin", "not_admin_sub": "需要查看全员日志的话可以申请，由现有 admin 审批。", "request_admin": "申请 admin",
+    "pending_heading": "待审批", "pending_sub": "有人申请成为 admin。批准后对方可以查看全员的日志。",
+    "members_heading": "全员", "members_sub": "点「查看日志」进入对方的面板。只读，不会改动别人的数据。",
+    "th_member": "成员", "th_role": "角色", "th_report_time": "出日报", "th_last_active": "最近有记录", "th_updates": "进展条数",
+    "requested_at": "申请于 {time}", "deny": "拒绝", "approve": "批准", "no_requests": "没有待审批的申请",
+    "role_member": "成员", "view_log": "查看日志", "undo": "撤销",
+    "err_request": "请求失败（{status}）", "err_operation": "操作失败",
+    "toast_readonly": "正在查看别人的日志，只读", "toast_approved": "已批准，对方现在是 admin", "toast_denied": "已拒绝",
+    "toast_requested": "申请已提交，等 admin 审批", "toast_unchanged": "没有改动",
+    "toast_edit_saved": "已保存。旧版本在历史版本里；口播稿和写作偏好在后台更新",
+    "toast_confirmed": "进展已确认并锁定", "toast_undo_assign": "已撤销归属修改", "toast_restored": "进展已恢复",
+    "toast_completed": "任务已完成", "toast_reopened": "任务已重新打开", "toast_pick_merge": "请先选择合并目标", "toast_merged": "任务已合并",
+    "toast_generating": "正在调用模型整理日报…", "toast_queued": "已排队，几分钟后刷新就能看到新的日报", "toast_generated": "日报和口播稿已更新",
+    "toast_time_saved": "已保存：每天 {time} 出日报", "toast_scan_on": "以后每晚扫它的对话", "toast_scan_off": "不再扫它的对话",
+    "toast_need_path": "要填完整路径，以 / 开头", "toast_folder_added": "已加到列表，记得点「保存勾选」",
+    "toast_folders_saved": "已保存：{n} 个工作文件夹",
+    "toast_style_saved": "写作偏好已保存，下次出日报生效", "toast_style_cleared": "已清空写作偏好",
+    "confirm_clear_style": "清空所有写作偏好？以后出日报不再按这些写。"
+  },
+  "en": {
+    "doc_title": "Fecho · Work log",
+    "nav_aria": "Main navigation", "nav_today": "Today", "nav_review": "Review", "nav_tasks": "Tasks", "nav_reports": "Reports",
+    "nav_system": "System", "nav_settings": "Settings", "nav_admin": "Admin",
+    "connection_local": "Local service connected", "lang_aria": "Interface language", "filters_aria": "Filters",
+    "filter_date": "Work date", "filter_agent": "Agent", "filter_source": "Captured via", "filter_status": "Status", "all": "All",
+    "retry": "Retry", "viewas_exit": "Back to mine", "viewas_copy": "Viewing {name} ({author}) · read-only",
+    "loading": "Loading your workspace…",
+    "page_today": "Today", "page_today_sub": "What happened today, at a glance.",
+    "page_review": "Review", "page_review_sub": "Turn automatic guesses into confirmed facts.",
+    "page_tasks": "Tasks", "page_tasks_sub": "One piece of work is one task that keeps growing.",
+    "page_reports": "Reports", "page_reports_sub": "Keep your reports in sync with the facts.",
+    "page_system": "System", "page_system_sub": "What's working and what needs attention.",
+    "page_settings": "Settings", "page_settings_sub": "Report time, agents, work folders and writing style.",
+    "page_admin": "Admin", "page_admin_sub": "Approve admins and view everyone's logs.",
+    "hero_default": "Your work, remembered.", "hero_loading": "Loading today's progress, assignments and report status.", "hero_review": "Start review",
+    "today_tasks": "Today's tasks", "today_tasks_sub": "Grouped by task, not split by conversation.",
+    "attention": "Needs attention", "attention_sub": "Assignments, duplicates and report status.",
+    "timeline": "Last 14 days", "timeline_sub": "Expand a task to see its daily progress.",
+    "today_heading_n": "Tasks moved forward today: {n}", "today_heading_none": "No progress recorded for this day yet.",
+    "today_summary_n": "Updates: {updates} · Agents: {agents} · Awaiting review: {review}",
+    "today_summary_none": "Pick another date, or have your agent call log_progress after finishing a piece of work.",
+    "metric_updates": "Updates", "metric_tasks": "Tasks", "metric_review": "To review", "metric_hidden": "Hidden",
+    "n_updates": "Updates: {n}", "n_items": "{n}",
+    "empty_filter": "No updates match the filters", "empty_filter_sub": "Try clearing the filters at the top.",
+    "notice_review": "Assignments to confirm: {n}", "notice_review_sub": "Once confirmed, the model won't override them",
+    "notice_dirty": "Report needs updating", "notice_dirty_sub": "Facts or assignments changed after it was generated",
+    "notice_hidden": "Scan results held back: {n}", "notice_hidden_sub": "You can restore them in Review",
+    "empty_attention": "All clear", "empty_attention_sub": "Nothing pending on assignments, duplicates or reports.",
+    "empty_timeline": "No history yet", "empty_timeline_sub": "Progress will be grouped by task here.",
+    "freeform": "Free task",
+    "review_heading": "Review inbox", "review_sub": "Even issues the agent names can be wrong; they lock once you confirm.",
+    "hidden_heading": "Held-back updates", "hidden_sub": "Near-duplicates from scans aren't deleted, just kept out of the report.",
+    "confidence_low": "low confidence", "confidence_medium": "medium confidence", "confidence_high": "high confidence",
+    "assign_to": "Assign to", "fix_content_aria": "Edit update text", "confirm_lock": "Confirm & lock",
+    "empty_review": "Inbox zero", "empty_review_sub": "Every assignment for this day has been confirmed.",
+    "restore": "Restore", "empty_hidden": "Nothing hidden", "empty_hidden_sub": "Scan de-duplication didn't hold anything back.",
+    "tasks_heading": "Tasks", "tasks_sub": "Complete, reopen, or merge tasks that were split by mistake.",
+    "tab_all": "All", "tab_open": "Open", "tab_done": "Done", "tab_merged": "Merged",
+    "task_status_open": "Open", "task_status_done": "Done", "task_status_merged": "Merged",
+    "complete": "Complete", "reopen": "Reopen", "no_progress": "No updates yet", "last_updated": "Last updated {time}",
+    "merge_aria": "Merge into", "merge_into": "Merge into…", "merge": "Merge",
+    "empty_tasks": "No tasks here", "empty_tasks_sub": "Switch the status above to see others.",
+    "status_done": "Done", "status_wip": "In progress", "status_blocked": "Blocked", "status_unknown": "Unknown",
+    "reports_heading": "Reports", "reports_sub": "Your daily report, voice script and every earlier version.",
+    "edit": "Edit", "regenerate": "Regenerate", "regenerate_now": "Regenerate now",
+    "dirty_llm": "Progress or assignments changed; this report should be regenerated.",
+    "dirty_human": "There are new updates or assignment changes. You edited this report — regenerating will replace your edit (your version stays in History).",
+    "tab_daily": "Daily report", "tab_voice": "Voice script", "tab_history": "History", "tab_warnings": "Notes",
+    "not_generated": "Not generated yet.",
+    "no_daily_with_updates": "There are {n} updates for this day but no report yet. It's generated automatically at your report time, or click Regenerate.",
+    "no_daily_empty": "Nothing has been recorded for this day. Updates your agent logs and nightly scans will show up here once uploaded.",
+    "edit_aria": "Edit report",
+    "edit_hint": "After saving: the old version goes to History, the voice script is rewritten from your version, and your writing style is updated in the background for future reports.",
+    "cancel": "Cancel", "save": "Save", "no_voice": "No voice script yet.",
+    "version_label": "Version {n} · {kind} · {by} · {time}", "by_human": "Edited by you", "by_model": "Generated",
+    "no_history": "No earlier versions.", "no_warnings": "No notes for this run.",
+    "system_heading": "System", "system_sub": "Whether connections, the model, Mobius and scanning actually work.",
+    "recent_scans": "Recent scans", "recent_scans_sub": "Failures are kept for retry, never silently skipped.",
+    "th_time": "Time", "th_agent": "Agent", "th_project": "Project", "th_status": "Status", "th_result": "Result",
+    "health_check": "Health check", "local_first": "Local-first", "suggestion": "Suggestion: {fix}",
+    "daily_automation": "Daily report", "timezone": "Time zone {tz}",
+    "dash_ok": "running", "dash_bad": "not responding", "dash_none": "not set up",
+    "auto_daily": "Every day at {time} Beijing time", "auto_not_installed": "Scheduled job not installed", "dashboard_state": "Dashboard {state}",
+    "last_run": "Last run", "succeeded": "Succeeded", "failed": "Failed", "no_runs": "No scheduled runs yet",
+    "sources": "Detected sources", "via": "Captured via", "none": "None",
+    "scan_result": "Entries: {entries} · Chunks: {chunks}", "no_scans": "No scans yet.",
+    "settings_time": "Report time",
+    "settings_time_sub": "Beijing time. The server writes your report and voice script at this time; your computer scans 15 minutes earlier. Changes apply on its next check — no reinstall needed.",
+    "daily_time_label": "Daily report time", "daily_time_aria": "Report time", "daily_time_now": "Now: report at {time}, scan at {scan}",
+    "agents_heading": "Agents", "agents_sub": "Each agent scans its own conversations. \"Connected\" means it has talked to Fecho; the switch decides whether its chats are scanned nightly.",
+    "agent_connected": "Connected · last seen {time}", "agent_not_connected": "Not connected",
+    "agent_unsupported": "Background scanning not supported yet", "agent_unsupported_title": "Background scanning not supported yet (untested)",
+    "agent_scanning": "Scanned nightly", "agent_not_scanning": "Not scanned", "agent_toggle_aria": "Scan {name} conversations",
+    "folders_heading": "Work folders", "folders_sub": "Only conversations in checked folders are scanned; unchecked folders are never even opened.",
+    "folders_count": "{picked} of {total} selected", "folder_last_used": "Last used {date}",
+    "folders_empty": "No folders reported yet", "folders_empty_sub": "Once local capture is installed, folders you've worked in with agents show up here. You can also add one below.",
+    "folder_add_placeholder": "Add a folder by its full path, e.g. /Users/you/Documents/work", "folder_add_aria": "Add a folder",
+    "add": "Add", "save_selection": "Save selection",
+    "style_heading": "Writing style", "style_sub": "Learned from your edits to reports and used for future ones. Only you can see it; if something's off, edit or delete that line.",
+    "style_aria": "Writing style", "style_placeholder": "Nothing yet. After you edit a report, the preferences learned from it show up here.",
+    "style_hint": "One per line, starting with \"- \". Clear it to remove all preferences.", "clear": "Clear",
+    "style_updated": "Updated {time}", "style_none": "None yet",
+    "admin_section": "Administrators", "admin_section_sub": "Admins can view everyone's logs and approve new admins.",
+    "you_are_admin": "You're an admin", "you_are_admin_sub": "Use Admin on the left to approve requests and view everyone's logs.",
+    "request_pending": "Request sent, awaiting approval", "request_pending_sub": "Sent {time}",
+    "not_admin": "You're not an admin", "not_admin_sub": "If you need to see everyone's logs, request access and an admin will approve it.", "request_admin": "Request admin",
+    "pending_heading": "Pending requests", "pending_sub": "People asking to become admins. Once approved they can view everyone's logs.",
+    "members_heading": "Everyone", "members_sub": "Click View log to open someone's dashboard. Read-only — nothing of theirs can be changed.",
+    "th_member": "Member", "th_role": "Role", "th_report_time": "Report time", "th_last_active": "Last active", "th_updates": "Updates",
+    "requested_at": "Requested {time}", "deny": "Deny", "approve": "Approve", "no_requests": "No pending requests",
+    "role_member": "Member", "view_log": "View log", "undo": "Undo",
+    "err_request": "Request failed ({status})", "err_operation": "Operation failed",
+    "toast_readonly": "Viewing someone else's log — read-only", "toast_approved": "Approved — they're now an admin", "toast_denied": "Denied",
+    "toast_requested": "Request sent — waiting for an admin", "toast_unchanged": "No changes",
+    "toast_edit_saved": "Saved. The old version is in History; the voice script and writing style update in the background",
+    "toast_confirmed": "Update confirmed and locked", "toast_undo_assign": "Assignment change undone", "toast_restored": "Update restored",
+    "toast_completed": "Task completed", "toast_reopened": "Task reopened", "toast_pick_merge": "Pick a task to merge into first", "toast_merged": "Tasks merged",
+    "toast_generating": "Asking the model to write the report…", "toast_queued": "Queued — refresh in a few minutes to see the new report", "toast_generated": "Report and voice script updated",
+    "toast_time_saved": "Saved: report at {time} every day", "toast_scan_on": "Its conversations will be scanned nightly", "toast_scan_off": "Its conversations won't be scanned",
+    "toast_need_path": "Enter a full path starting with /", "toast_folder_added": "Added — remember to click Save selection",
+    "toast_folders_saved": "Work folders saved: {n}",
+    "toast_style_saved": "Writing style saved — used from the next report", "toast_style_cleared": "Writing style cleared",
+    "confirm_clear_style": "Clear your whole writing style? Future reports won't follow it."
+  }
+}
+</script>
 
 <script>
   const $ = (selector, root=document) => root.querySelector(selector);
   const $$ = (selector, root=document) => [...root.querySelectorAll(selector)];
   const esc = value => String(value == null ? '' : value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
   const state = {data:null, view:'today', taskStatus:'all', reportTab:'daily', undo:null, toastTimer:null,
-    me:null, viewAs:null, editing:false, settings:{agents:[], folders:[]}};
-  const pageCopy = {
-    today:['Today','今天发生了什么，一眼看清。'], review:['Review inbox','把自动判断变成人工确认。'],
-    tasks:['Tasks','一件事是一条持续生长的任务。'], reports:['Reports','让成品和事实始终同步。'],
-    system:['System','知道系统哪里正常，哪里需要处理。'],
-    settings:['Settings','出日报时间、agent、工作文件夹。'], admin:['Admin','审批 admin，查看全员的日志。']
-  };
+    me:null, viewAs:null, editing:false, settings:{agents:[], folders:[]}, admin:null, style:null};
+
+  // ---- 界面语言 ----
+  // 记在浏览器里，登录页、onboard 页、面板共用同一个 key。默认中文。
+  const I18N = JSON.parse(document.getElementById('i18n').textContent);
+  const LANG_KEY = 'fecho-lang';
+  let lang = (()=>{ try{ return localStorage.getItem(LANG_KEY)==='en'?'en':'zh'; }catch(_){ return 'zh'; } })();
+  function t(key, vars={}){
+    const text=(I18N[lang]||{})[key] ?? I18N.zh[key] ?? key;
+    return text.replace(/\{(\w+)\}/g,(_,name)=>vars[name] ?? '');
+  }
+  function applyStatic(){
+    document.documentElement.lang = lang==='en' ? 'en' : 'zh-CN';
+    document.title = t('doc_title');
+    $$('[data-i18n]').forEach(el=>{ el.textContent=t(el.dataset.i18n); });
+    $$('[data-i18n-placeholder]').forEach(el=>{ el.placeholder=t(el.dataset.i18nPlaceholder); });
+    $$('[data-i18n-aria]').forEach(el=>{ el.setAttribute('aria-label',t(el.dataset.i18nAria)); });
+    $$('[data-lang]').forEach(b=>b.classList.toggle('active',b.dataset.lang===lang));
+  }
+  function setLang(next){
+    lang=next; try{ localStorage.setItem(LANG_KEY,next); }catch(_){}
+    applyStatic(); switchView(state.view,{scroll:false});
+    if(state.me&&state.me.cloud) $('#connection-copy').textContent=state.me.display_name||state.me.author;
+    showViewAs();
+    if(state.data){ hydrateFilters(); renderAll(); }
+    if(state.me&&state.me.cloud){ renderSettings(); if(state.admin) renderAdmin(); if(state.style) showStyle(state.style); }
+  }
 
   async function request(path, options={}){
     const response = await fetch(path, options);
     let payload = {};
     try { payload = await response.json(); } catch (_) { payload = {}; }
-    if (!response.ok) throw new Error(payload.error || payload.detail || `请求失败（${response.status}）`);
-    if (payload.ok === false) throw new Error(payload.error || '操作失败');
+    if (!response.ok) throw new Error(payload.error || payload.detail || t('err_request',{status:response.status}));
+    if (payload.ok === false) throw new Error(payload.error || t('err_operation'));
     return payload;
   }
   const post = (path, body) => request(path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body || {})});
@@ -350,13 +594,13 @@
 
   function hydrateFilters(){
     const data=state.data;
-    fillSelect($('#agent-filter'), data.filters.agents, '全部');
-    fillSelect($('#source-filter'), data.filters.ingestion_methods, '全部');
-    const statusLabels={done:'已完成',wip:'进行中',blocked:'受阻',unknown:'未标注'};
-    fillSelect($('#status-filter'), data.filters.completion_statuses, '全部', statusLabels);
+    fillSelect($('#agent-filter'), data.filters.agents, t('all'));
+    fillSelect($('#source-filter'), data.filters.ingestion_methods, t('all'));
+    const statusLabels=Object.fromEntries(['done','wip','blocked','unknown'].map(s=>[s,t('status_'+s)]));
+    fillSelect($('#status-filter'), data.filters.completion_statuses, t('all'), statusLabels);
   }
   function fillSelect(select, values, first, labels={}){
-    const current=select.value; select.innerHTML=`<option value="">${first}</option>`+
+    const current=select.value; select.innerHTML=`<option value="">${esc(first)}</option>`+
       values.map(v=>`<option value="${esc(v)}">${esc(labels[v]||v)}</option>`).join('');
     if(values.includes(current)) select.value=current;
   }
@@ -365,8 +609,8 @@
     return (!agent || update.source_agent===agent) && (!source || update.ingestion_method===source) &&
       (!status || update.completion_status===status);
   }
-  function statusTag(status){ const labels={done:'Done',wip:'In progress',blocked:'Blocked',unknown:'Unknown'}; return `<span class="tag ${esc(status)}">${labels[status]||esc(status)}</span>`; }
-  function issueLabel(task){ return task.issue_key ? `${esc(task.issue_key)} · ${esc(task.title)}` : `${esc(task.title)} · 自由任务`; }
+  function statusTag(status){ const known=['done','wip','blocked','unknown'].includes(status); return `<span class="tag ${esc(status)}">${known?esc(t('status_'+status)):esc(status)}</span>`; }
+  function issueLabel(task){ return task.issue_key ? `${esc(task.issue_key)} · ${esc(task.title)}` : `${esc(task.title)} · ${esc(t('freeform'))}`; }
   function empty(title, copy){ return `<div class="empty"><strong>${esc(title)}</strong>${esc(copy)}</div>`; }
 
   function renderAll(){
@@ -382,42 +626,43 @@
     const d=state.data,o=d.overview;
     $('#today-date').textContent=d.date.replaceAll('-',' / ');
     const visibleTasks=d.today.tasks.map(t=>({...t,updates:t.updates.filter(matches)})).filter(t=>t.updates.length);
-    $('#today-heading').textContent=o.updates ? `今天推进了 ${o.tasks} 件事。` : '这一天还没有工作进展。';
-    $('#today-summary').textContent=o.updates ? `${o.updates} 条进展来自 ${new Set(d.today.tasks.flatMap(t=>t.updates.map(u=>u.source_agent))).size} 个 Agent；${d.review.items.length} 条等待确认。` : '选择其他日期，或让 Agent 在完成一段工作后调用 log_progress。';
-    $('#metrics').innerHTML=[['进展',o.updates,''],['任务',o.tasks,''],['待复核',d.review.items.length,'attention'],['隐藏',o.hidden,'']]
-      .map(([label,value,kind])=>`<div class="metric ${kind}"><strong>${value}</strong><span>${label}</span></div>`).join('');
+    $('#today-heading').textContent=o.updates ? t('today_heading_n',{n:o.tasks}) : t('today_heading_none');
+    $('#today-summary').textContent=o.updates ? t('today_summary_n',{updates:o.updates, agents:new Set(d.today.tasks.flatMap(x=>x.updates.map(u=>u.source_agent))).size, review:d.review.items.length}) : t('today_summary_none');
+    $('#metrics').innerHTML=[['metric_updates',o.updates,''],['metric_tasks',o.tasks,''],['metric_review',d.review.items.length,'attention'],['metric_hidden',o.hidden,'']]
+      .map(([label,value,kind])=>`<div class="metric ${kind}"><strong>${value}</strong><span>${esc(t(label))}</span></div>`).join('');
     $('#today-tasks').innerHTML=visibleTasks.length?visibleTasks.map(task=>{
       const statuses=task.updates.map(u=>u.completion_status); const taskStatus=statuses.includes('blocked')?'blocked':statuses.includes('wip')?'wip':statuses.every(s=>s==='done')?'done':'unknown';
-      return `<details class="timeline" open><summary><span><span class="item-title">${issueLabel(task)}</span><span class="meta">${task.updates.length} 条进展</span></span>${statusTag(taskStatus)}</summary><div class="timeline-body">${task.updates.map(u=>`<div class="progress-line"><div>${esc(u.content_md)}</div><div class="meta">${esc(u.source_agent)} · ${esc(u.ingestion_method)} · ${esc((u.created_at||'').slice(11,16))} ${statusTag(u.completion_status)}</div></div>`).join('')}</div></details>`;
-    }).join(''):empty('没有匹配筛选的进展','试试清空顶部筛选条件。');
+      return `<details class="timeline" open><summary><span><span class="item-title">${issueLabel(task)}</span><span class="meta">${esc(t('n_updates',{n:task.updates.length}))}</span></span>${statusTag(taskStatus)}</summary><div class="timeline-body">${task.updates.map(u=>`<div class="progress-line"><div>${esc(u.content_md)}</div><div class="meta">${esc(u.source_agent)} · ${esc(u.ingestion_method)} · ${esc((u.created_at||'').slice(11,16))} ${statusTag(u.completion_status)}</div></div>`).join('')}</div></details>`;
+    }).join(''):empty(t('empty_filter'),t('empty_filter_sub'));
     const notices=[];
-    if(d.review.items.length) notices.push(`<div class="item"><div class="item-title">${d.review.items.length} 条归属待确认</div><div class="meta">人工确认后，模型不会再覆盖</div></div>`);
-    if(d.reports.dirty) notices.push(`<div class="item"><div class="item-title">日报需要更新</div><div class="meta">事实或归属在生成后发生了变化</div></div>`);
-    if(o.hidden) notices.push(`<div class="item"><div class="item-title">${o.hidden} 条扫描结果被挡下</div><div class="meta">可以在 Review 中恢复</div></div>`);
-    $('#attention').innerHTML=notices.join('')||empty('状态清爽','归属、重复和报告都没有待处理项。');
-    $('#timeline').innerHTML=d.timeline.groups.length?d.timeline.groups.map(group=>`<details class="timeline"><summary><span class="item-title">${group.issue_key?`<a href="https://mobius.feedmob.com/issue/${esc(group.issue_key)}" target="_blank" rel="noreferrer">${esc(group.issue_key)}</a> · `:''}${esc(group.title)}</span><span class="meta">${Object.values(group.days).flat().length} 条</span></summary><div class="timeline-body">${Object.entries(group.days).sort().reverse().map(([date,items])=>`<div class="progress-line"><b>${esc(date)}</b>${items.map(text=>`<div>${esc(text)}</div>`).join('')}</div>`).join('')}</div></details>`).join(''):empty('还没有轨迹','有进展后会按任务聚合在这里。');
+    if(d.review.items.length) notices.push(`<div class="item"><div class="item-title">${esc(t('notice_review',{n:d.review.items.length}))}</div><div class="meta">${esc(t('notice_review_sub'))}</div></div>`);
+    if(d.reports.dirty) notices.push(`<div class="item"><div class="item-title">${esc(t('notice_dirty'))}</div><div class="meta">${esc(t('notice_dirty_sub'))}</div></div>`);
+    if(o.hidden) notices.push(`<div class="item"><div class="item-title">${esc(t('notice_hidden',{n:o.hidden}))}</div><div class="meta">${esc(t('notice_hidden_sub'))}</div></div>`);
+    $('#attention').innerHTML=notices.join('')||empty(t('empty_attention'),t('empty_attention_sub'));
+    $('#timeline').innerHTML=d.timeline.groups.length?d.timeline.groups.map(group=>`<details class="timeline"><summary><span class="item-title">${group.issue_key?`<a href="https://mobius.feedmob.com/issue/${esc(group.issue_key)}" target="_blank" rel="noreferrer">${esc(group.issue_key)}</a> · `:''}${esc(group.title)}</span><span class="meta">${esc(t('n_items',{n:Object.values(group.days).flat().length}))}</span></summary><div class="timeline-body">${Object.entries(group.days).sort().reverse().map(([date,items])=>`<div class="progress-line"><b>${esc(date)}</b>${items.map(text=>`<div>${esc(text)}</div>`).join('')}</div>`).join('')}</div></details>`).join(''):empty(t('empty_timeline'),t('empty_timeline_sub'));
   }
 
   function issueOptions(selected){
-    return `<option value="" ${selected?'':'selected'}>自由任务</option>`+state.data.issues.items.map(issue=>`<option value="${esc(issue.issue_key)}" ${issue.issue_key===selected?'selected':''}>${esc(issue.issue_key)} · ${esc(issue.title)}</option>`).join('');
+    return `<option value="" ${selected?'':'selected'}>${esc(t('freeform'))}</option>`+state.data.issues.items.map(issue=>`<option value="${esc(issue.issue_key)}" ${issue.issue_key===selected?'selected':''}>${esc(issue.issue_key)} · ${esc(issue.title)}</option>`).join('');
   }
   function renderReview(){
-    const items=state.data.review.items.filter(matches); $('#review-total').textContent=`${items.length} 条`;
-    $('#review-list').innerHTML=items.length?items.map(item=>`<article class="review-card" data-update="${esc(item.update_id)}" data-old-issue="${esc(item.issue_key||'')}"><div class="review-grid"><div><div class="item-body">${esc(item.content)}</div><div class="meta"><span class="tag ${esc(item.confidence)}">${esc(item.confidence)} confidence</span><span>${esc(item.method)}</span><span>${esc(item.source_agent)} · ${esc(item.ingestion_method)}</span><span>${esc((item.created_at||'').slice(11,16))}</span>${statusTag(item.completion_status)}</div></div><div class="review-actions"><label class="field"><span style="font-size:10px;color:var(--muted);font-weight:700">归属到</span><select data-role="issue">${issueOptions(item.issue_key)}</select></label><textarea data-role="content" aria-label="修正进展正文">${esc(item.content)}</textarea><div class="button-row"><button class="btn primary small" data-action="confirm-update">确认并锁定</button></div></div></div></article>`).join(''):empty('Inbox 已清空','这一天的归属都经过了人工确认。');
+    const items=state.data.review.items.filter(matches); $('#review-total').textContent=t('n_items',{n:items.length});
+    $('#review-list').innerHTML=items.length?items.map(item=>`<article class="review-card" data-update="${esc(item.update_id)}" data-old-issue="${esc(item.issue_key||'')}"><div class="review-grid"><div><div class="item-body">${esc(item.content)}</div><div class="meta"><span class="tag ${esc(item.confidence)}">${esc(t('confidence_'+item.confidence))}</span><span>${esc(item.method)}</span><span>${esc(item.source_agent)} · ${esc(item.ingestion_method)}</span><span>${esc((item.created_at||'').slice(11,16))}</span>${statusTag(item.completion_status)}</div></div><div class="review-actions"><label class="field"><span style="font-size:10px;color:var(--muted);font-weight:700">${esc(t('assign_to'))}</span><select data-role="issue">${issueOptions(item.issue_key)}</select></label><textarea data-role="content" aria-label="${esc(t('fix_content_aria'))}">${esc(item.content)}</textarea><div class="button-row"><button class="btn primary small" data-action="confirm-update">${esc(t('confirm_lock'))}</button></div></div></div></article>`).join(''):empty(t('empty_review'),t('empty_review_sub'));
     const hidden=state.data.hidden.items;
-    $('#hidden-list').innerHTML=hidden.length?hidden.map(item=>`<div class="item item-head"><div><div class="item-body">${esc(item.content_md)}</div><div class="meta">${esc(item.status)} ${item.k?'· '+esc(item.k):''}</div></div><button class="btn small" data-action="restore" data-id="${esc(item.update_id)}">恢复</button></div>`).join(''):empty('没有隐藏条目','扫描去重没有挡下任何内容。');
+    $('#hidden-list').innerHTML=hidden.length?hidden.map(item=>`<div class="item item-head"><div><div class="item-body">${esc(item.content_md)}</div><div class="meta">${esc(item.status)} ${item.k?'· '+esc(item.k):''}</div></div><button class="btn small" data-action="restore" data-id="${esc(item.update_id)}">${esc(t('restore'))}</button></div>`).join(''):empty(t('empty_hidden'),t('empty_hidden_sub'));
   }
 
   function renderTasks(){
     $$('#task-tabs button').forEach(button=>button.classList.toggle('active',button.dataset.taskStatus===state.taskStatus));
     const hasGlobalFilter=$('#agent-filter').value||$('#source-filter').value||$('#status-filter').value;
-    const tasks=state.data.tasks.items.filter(t=>(state.taskStatus==='all'||t.status===state.taskStatus)&&
-      (!hasGlobalFilter||t.updates.some(matches)));
+    const tasks=state.data.tasks.items.filter(x=>(state.taskStatus==='all'||x.status===state.taskStatus)&&
+      (!hasGlobalFilter||x.updates.some(matches)));
     $('#task-list').innerHTML=tasks.length?tasks.map(task=>{
-      const targets=state.data.tasks.items.filter(t=>t.task_id!==task.task_id&&t.status!=='merged').map(t=>`<option value="${esc(t.task_id)}">${issueLabel(t)}</option>`).join('');
-      const action=task.status==='open'?`<button class="btn small" data-action="complete-task" data-id="${esc(task.task_id)}">完成</button>`:task.status==='done'?`<button class="btn small" data-action="reopen-task" data-id="${esc(task.task_id)}">重开</button>`:'';
-      return `<div class="task-row"><div><div class="item-title">${issueLabel(task)}</div><div class="item-body">${esc(task.last_progress||'暂无进展')}</div><div class="meta"><span class="tag ${task.status==='done'?'done':''}">${esc(task.status)}</span><span>${task.update_count} 条进展</span><span>最后更新 ${esc((task.last_update||'').slice(0,16).replace('T',' '))}</span></div></div><div class="task-actions">${action}${task.status!=='merged'&&targets?`<select aria-label="合并目标" data-merge-target="${esc(task.task_id)}"><option value="">合并到…</option>${targets}</select><button class="btn small" data-action="merge-task" data-id="${esc(task.task_id)}">合并</button>`:''}</div></div>`;
-    }).join(''):empty('这个分组没有任务','切换上方状态查看其他任务。');
+      const targets=state.data.tasks.items.filter(x=>x.task_id!==task.task_id&&x.status!=='merged').map(x=>`<option value="${esc(x.task_id)}">${issueLabel(x)}</option>`).join('');
+      const action=task.status==='open'?`<button class="btn small" data-action="complete-task" data-id="${esc(task.task_id)}">${esc(t('complete'))}</button>`:task.status==='done'?`<button class="btn small" data-action="reopen-task" data-id="${esc(task.task_id)}">${esc(t('reopen'))}</button>`:'';
+      const statusText=['open','done','merged'].includes(task.status)?t('task_status_'+task.status):task.status;
+      return `<div class="task-row"><div><div class="item-title">${issueLabel(task)}</div><div class="item-body">${esc(task.last_progress||t('no_progress'))}</div><div class="meta"><span class="tag ${task.status==='done'?'done':''}">${esc(statusText)}</span><span>${esc(t('n_updates',{n:task.update_count}))}</span><span>${esc(t('last_updated',{time:(task.last_update||'').slice(0,16).replace('T',' ')}))}</span></div></div><div class="task-actions">${action}${task.status!=='merged'&&targets?`<select aria-label="${esc(t('merge_aria'))}" data-merge-target="${esc(task.task_id)}"><option value="">${esc(t('merge_into'))}</option>${targets}</select><button class="btn small" data-action="merge-task" data-id="${esc(task.task_id)}">${esc(t('merge'))}</button>`:''}</div></div>`;
+    }).join(''):empty(t('empty_tasks'),t('empty_tasks_sub'));
   }
 
   // ---- Markdown → HTML ----
@@ -428,10 +673,10 @@
     // 行内代码先换成占位符，免得里面的 ** 被当成加粗。占位符用私有区字符的
     // 转义写法——文件里不能夹原始控制字符，浏览器解析 script 时会把它们换掉。
     const codes=[];
-    let s=esc(text).replace(/`([^`]+)`/g,(_,c)=>{codes.push(c);return '\uE000'+(codes.length-1)+'\uE001';});
+    let s=esc(text).replace(/`([^`]+)`/g,(_,c)=>{codes.push(c);return ''+(codes.length-1)+'';});
     s=s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,'<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
     s=s.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
-    return s.replace(/\uE000(\d+)\uE001/g,(_,i)=>'<code>'+codes[+i]+'</code>');
+    return s.replace(/(\d+)/g,(_,i)=>'<code>'+codes[+i]+'</code>');
   }
 
   function md(src){
@@ -481,9 +726,7 @@
 
   function renderReports(){
     const report=state.data.reports; $('#report-dirty').classList.toggle('show',report.dirty);
-    $('#report-dirty-copy').textContent=report.generator==='human'
-      ?'有新的进展或归属变化。这份日报被你改过，重新生成会覆盖你的修改（修改版会留在历史版本里）。'
-      :'进展或归属已经变化，这份报告需要重新生成。';
+    $('#report-dirty-copy').textContent=report.generator==='human' ? t('dirty_human') : t('dirty_llm');
     $('#edit-report').hidden=!report.daily||!!state.viewAs||state.editing;
     // 正在改的时候，每分钟的自动刷新不能把编辑框重画掉——写了一半的字会没
     if(state.editing&&state.reportTab==='daily'&&$('#report-editor')) return;
@@ -493,65 +736,65 @@
     // 没有日报时要说清楚是哪种「没有」：这天根本没收到记录，重新生成也生成不出东西；
     // 有记录只是还没生成，才值得去点生成。
     const updates=(state.data.overview||{}).updates||0;
-    const noDaily=updates
-      ?`这天有 ${updates} 条记录，日报还没生成。到了每天出日报的时间会自动生成，也可以点「重新生成」。`
-      :'这天还没有收到任何工作记录。agent 随手记的内容和每晚扫描到的内容上传后，会出现在这里。';
+    const noDaily=updates ? t('no_daily_with_updates',{n:updates}) : t('no_daily_empty');
     if(state.reportTab==='daily') html=state.editing
-      ?`<div class="report-edit"><textarea id="report-editor" class="report-editor" aria-label="修改日报">${esc(report.daily||'')}</textarea><p class="meta" style="margin:0">保存后：旧版本进「历史版本」；口播稿按新日报重出；你的写作偏好在后台更新，以后出日报照着写。</p><div class="button-row"><button class="btn" id="cancel-edit">取消</button><button class="btn primary" id="save-edit">保存</button></div></div>`
+      ?`<div class="report-edit"><textarea id="report-editor" class="report-editor" aria-label="${esc(t('edit_aria'))}">${esc(report.daily||'')}</textarea><p class="meta" style="margin:0">${esc(t('edit_hint'))}</p><div class="button-row"><button class="btn" id="cancel-edit">${esc(t('cancel'))}</button><button class="btn primary" id="save-edit">${esc(t('save'))}</button></div></div>`
       :(report.daily?md(report.daily):empty(noDaily));
-    if(state.reportTab==='voice') html=report.voice?md(report.voice):empty('尚未生成口播稿。');
+    if(state.reportTab==='voice') html=report.voice?md(report.voice):empty(t('no_voice'));
     if(state.reportTab==='history') html=report.history.length
-      ?report.history.map((item,index)=>`<div class="report-version">版本 ${index+1} · ${esc(item.kind)} · ${item.generator==='human'?'人工修改':'模型生成'} · ${esc(stamp(item.created_at))}</div>${md(item.content_md)}`).join('<hr>')
-      :empty('还没有历史版本。');
+      ?report.history.map((item,index)=>`<div class="report-version">${esc(t('version_label',{n:index+1, kind:item.kind, by:t(item.generator==='human'?'by_human':'by_model'), time:stamp(item.created_at)}))}</div>${md(item.content_md)}`).join('<hr>')
+      :empty(t('no_history'));
     if(state.reportTab==='warnings') html=report.warnings.length
       ?'<ul>'+report.warnings.map(text=>`<li>${esc(text)}</li>`).join('')+'</ul>'
-      :empty('本次生成没有警告。');
+      :empty(t('no_warnings'));
     $('#report-content').innerHTML=html;
   }
 
   function renderSystem(){
     const doctor=state.data.system.doctor;
-    $('#doctor').innerHTML=`<div class="item-title">运行检查</div><div class="meta" style="margin-bottom:8px">Fecho ${esc(doctor.version||'')} · 本地优先</div>`+doctor.checks.map(check=>`<div class="check ${check.ok?'':'bad'}"><span class="check-mark">${check.ok?'✓':'!'}</span><div><div class="item-title">${esc(check.name)}</div><div class="meta">${esc(check.detail)}</div>${check.fix?`<div class="meta">建议：${esc(check.fix)}</div>`:''}</div></div>`).join('');
+    $('#doctor').innerHTML=`<div class="item-title">${esc(t('health_check'))}</div><div class="meta" style="margin-bottom:8px">Fecho ${esc(doctor.version||'')} · ${esc(t('local_first'))}</div>`+doctor.checks.map(check=>`<div class="check ${check.ok?'':'bad'}"><span class="check-mark">${check.ok?'✓':'!'}</span><div><div class="item-title">${esc(check.name)}</div><div class="meta">${esc(check.detail)}</div>${check.fix?`<div class="meta">${esc(t('suggestion',{fix:check.fix}))}</div>`:''}</div></div>`).join('');
     // 云端版没有「你电脑上的定时任务」，后端会把 automation 给成 null。
     // 这时候别照本机的说法报「尚未安装自动任务」——那是句永远修不好的假警报。
     if(state.data.system.automation===null){
+      // 检查项的名字是服务器给的（中文），按它找那一项
       const dt=(doctor.checks.find(c=>c.name==='每日自动整理')||{}).detail||'';
-      $('#automation-status').innerHTML=`<div class="item-title">每日自动整理</div><div class="item"><div class="item-body">${esc(dt)}</div><div class="meta">时区 Asia/Shanghai</div></div>`;
+      $('#automation-status').innerHTML=`<div class="item-title">${esc(t('daily_automation'))}</div><div class="item"><div class="item-body">${esc(dt)}</div><div class="meta">${esc(t('timezone',{tz:'Asia/Shanghai'}))}</div></div>`;
     } else {
     const automation=state.data.system.automation||{}, last=automation.last_result||{};
     const configured=automation.configured_launch_agents||{}, runtime=automation.runtime||{};
     const dashboardRuntime=runtime['com.feedmob.fecho.dashboard']||{};
-    const dashboardState=dashboardRuntime.ok?'运行正常':configured['com.feedmob.fecho.dashboard']?'服务异常':'未配置';
-    $('#automation-status').innerHTML=`<div class="item-title">每日自动整理</div><div class="item"><div class="item-body">${automation.enabled?`每天北京时间 ${esc(automation.daily_time)} 自动整理`:'尚未安装自动任务'}</div><div class="meta">时区 ${esc(automation.timezone||'Asia/Shanghai')} · Dashboard ${dashboardState}</div></div><div class="item"><div class="meta">上次运行</div><div class="item-body">${last.status?`${last.status==='succeeded'?'成功':'失败'} · ${esc(last.date||'')} ${last.error?'· '+esc(last.error):''}`:'还没有自动运行记录'}</div></div>`;
+    const dashboardState=dashboardRuntime.ok?t('dash_ok'):configured['com.feedmob.fecho.dashboard']?t('dash_bad'):t('dash_none');
+    $('#automation-status').innerHTML=`<div class="item-title">${esc(t('daily_automation'))}</div><div class="item"><div class="item-body">${esc(automation.enabled?t('auto_daily',{time:automation.daily_time}):t('auto_not_installed'))}</div><div class="meta">${esc(t('timezone',{tz:automation.timezone||'Asia/Shanghai'}))} · ${esc(t('dashboard_state',{state:dashboardState}))}</div></div><div class="item"><div class="meta">${esc(t('last_run'))}</div><div class="item-body">${last.status?`${esc(t(last.status==='succeeded'?'succeeded':'failed'))} · ${esc(last.date||'')} ${last.error?'· '+esc(last.error):''}`:esc(t('no_runs'))}</div></div>`;
     }
     const filters=state.data.filters;
-    $('#sources').innerHTML=`<div class="item-title">已识别来源</div><div class="item"><div class="meta">Agent</div><div style="margin-top:7px">${filters.agents.map(a=>`<span class="tag">${esc(a)}</span>`).join(' ')||'暂无'}</div></div><div class="item"><div class="meta">进入方式</div><div style="margin-top:7px">${filters.ingestion_methods.map(a=>`<span class="tag">${esc(a)}</span>`).join(' ')||'暂无'}</div></div>`;
+    $('#sources').innerHTML=`<div class="item-title">${esc(t('sources'))}</div><div class="item"><div class="meta">Agent</div><div style="margin-top:7px">${filters.agents.map(a=>`<span class="tag">${esc(a)}</span>`).join(' ')||esc(t('none'))}</div></div><div class="item"><div class="meta">${esc(t('via'))}</div><div style="margin-top:7px">${filters.ingestion_methods.map(a=>`<span class="tag">${esc(a)}</span>`).join(' ')||esc(t('none'))}</div></div>`;
     const runs=state.data.system.scan_runs;
-    $('#scan-runs').innerHTML=runs.length?runs.map(run=>`<tr><td>${esc((run.started_at||'').slice(0,16).replace('T',' '))}</td><td>${esc(run.producer_agent)}</td><td>${esc(run.project.split('/').pop())}</td><td>${run.status==='succeeded'?'<span class="tag done">成功</span>':'<span class="tag blocked">失败</span>'}</td><td>${run.error?esc(run.error):`${run.entries} 条 / ${run.chunks} 块`}</td></tr>`).join(''):`<tr><td colspan="5">还没有扫描记录。</td></tr>`;
+    $('#scan-runs').innerHTML=runs.length?runs.map(run=>`<tr><td>${esc((run.started_at||'').slice(0,16).replace('T',' '))}</td><td>${esc(run.producer_agent)}</td><td>${esc(run.project.split('/').pop())}</td><td>${run.status==='succeeded'?`<span class="tag done">${esc(t('succeeded'))}</span>`:`<span class="tag blocked">${esc(t('failed'))}</span>`}</td><td>${run.error?esc(run.error):esc(t('scan_result',{entries:run.entries, chunks:run.chunks}))}</td></tr>`).join(''):`<tr><td colspan="5">${esc(t('no_scans'))}</td></tr>`;
   }
 
-  function switchView(view){ state.view=view; $$('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===view)); $$('.view').forEach(p=>p.classList.toggle('active',p.dataset.page===view)); $('.toolbar').hidden=['settings','admin'].includes(view); const copy=pageCopy[view]; $('#page-title').textContent=copy[0]; $('#page-subtitle').textContent=copy[1]; window.scrollTo({top:0,behavior:'smooth'}); }
+  function switchView(view,{scroll=true}={}){ state.view=view; $$('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===view)); $$('.view').forEach(p=>p.classList.toggle('active',p.dataset.page===view)); $('.toolbar').hidden=['settings','admin'].includes(view); $('#page-title').textContent=t('page_'+view); $('#page-subtitle').textContent=t('page_'+view+'_sub'); if(scroll) window.scrollTo({top:0,behavior:'smooth'}); }
   function showError(message){ $('#error-copy').textContent=message; $('#error-state').classList.add('show'); }
   function toast(message, undo=null, isError=false){ clearTimeout(state.toastTimer); state.undo=undo; $('#toast-copy').textContent=message; $('#undo-action').style.display=undo?'block':'none'; $('#toast').classList.toggle('error',isError); $('#toast').classList.add('show'); state.toastTimer=setTimeout(()=>$('#toast').classList.remove('show'),6000); }
   async function mutate(path, body, success, undo=null){
-    if(state.viewAs){ toast('正在查看别人的日志，只读',null,true); throw new Error('只读'); }
+    if(state.viewAs){ toast(t('toast_readonly'),null,true); throw new Error(t('toast_readonly')); }
     try{ const result=await post(path,body); if(result.dashboard){state.data=result.dashboard;renderAll();}else await loadDashboard({quiet:true}); toast(success,undo); return result; }
     catch(error){ toast(error.message,null,true); throw error; }
   }
 
   document.addEventListener('click', async event=>{
+    const langButton=event.target.closest('[data-lang]'); if(langButton){ if(langButton.dataset.lang!==lang) setLang(langButton.dataset.lang); return; }
     const nav=event.target.closest('[data-view]'); if(nav){switchView(nav.dataset.view);return;}
     const go=event.target.closest('[data-go]'); if(go){switchView(go.dataset.go);return;}
     const viewAs=event.target.closest('[data-view-as]'); if(viewAs){setViewAs(viewAs.dataset.viewAs,viewAs.dataset.name);return;}
     const decide=event.target.closest('[data-decide]');
-    if(decide){ decide.disabled=true; try{ await post(`/api/admin/requests/${encodeURIComponent(decide.dataset.decide)}`,{approve:decide.dataset.approve==='1'}); toast(decide.dataset.approve==='1'?'已批准，对方现在是 admin':'已拒绝'); await loadAdmin(); }catch(error){toast(error.message,null,true);} finally{decide.disabled=false;} return; }
-    if(event.target.closest('#request-admin')){ try{ await post('/api/admin/request',{}); state.me=await request('/api/me'); renderSettings(); toast('申请已提交，等 admin 审批'); }catch(error){toast(error.message,null,true);} return; }
-    if(event.target.closest('#edit-report')){ if(state.viewAs){toast('正在查看别人的日志，只读',null,true);return;} state.editing=true; state.reportTab='daily'; renderReports(); const editor=$('#report-editor'); if(editor) editor.focus(); return; }
+    if(decide){ decide.disabled=true; try{ await post(`/api/admin/requests/${encodeURIComponent(decide.dataset.decide)}`,{approve:decide.dataset.approve==='1'}); toast(t(decide.dataset.approve==='1'?'toast_approved':'toast_denied')); await loadAdmin(); }catch(error){toast(error.message,null,true);} finally{decide.disabled=false;} return; }
+    if(event.target.closest('#request-admin')){ try{ await post('/api/admin/request',{}); state.me=await request('/api/me'); renderSettings(); toast(t('toast_requested')); }catch(error){toast(error.message,null,true);} return; }
+    if(event.target.closest('#edit-report')){ if(state.viewAs){toast(t('toast_readonly'),null,true);return;} state.editing=true; state.reportTab='daily'; renderReports(); const editor=$('#report-editor'); if(editor) editor.focus(); return; }
     if(event.target.closest('#cancel-edit')){ state.editing=false; renderReports(); return; }
     const saveEdit=event.target.closest('#save-edit');
     if(saveEdit){ saveEdit.disabled=true;
       try{ const r=await post('/api/reports/daily',{date:state.data.date,content_md:$('#report-editor').value}); state.editing=false; state.data=r.dashboard; renderAll();
-        toast(r.saved.status==='unchanged'?'没有改动':'已保存。旧版本在历史版本里；口播稿和写作偏好在后台更新'); if(state.me&&state.me.cloud) loadStyle().catch(()=>{}); }
+        toast(t(r.saved.status==='unchanged'?'toast_unchanged':'toast_edit_saved')); if(state.me&&state.me.cloud) loadStyle().catch(()=>{}); }
       catch(error){ saveEdit.disabled=false; toast(error.message,null,true); }
       return; }
     const reportTab=event.target.closest('[data-report-tab]'); if(reportTab){state.reportTab=reportTab.dataset.reportTab;renderReports();return;}
@@ -562,25 +805,25 @@
       if(action.dataset.action==='confirm-update'){
         const card=action.closest('[data-update]'), updateId=card.dataset.update, oldIssue=card.dataset.oldIssue;
         const issue=$('[data-role="issue"]',card).value, content=$('[data-role="content"]',card).value;
-        await mutate('/api/correct',{update_id:updateId,issue_key:issue,content,date:state.data.date},'进展已确认并锁定',()=>mutate('/api/reassign',{update_id:updateId,issue_key:oldIssue,date:state.data.date},'已撤销归属修改'));
+        await mutate('/api/correct',{update_id:updateId,issue_key:issue,content,date:state.data.date},t('toast_confirmed'),()=>mutate('/api/reassign',{update_id:updateId,issue_key:oldIssue,date:state.data.date},t('toast_undo_assign')));
       }
-      if(action.dataset.action==='restore') await mutate('/api/restore',{update_id:action.dataset.id,date:state.data.date},'进展已恢复');
-      if(action.dataset.action==='complete-task') await mutate(`/api/tasks/${action.dataset.id}/complete`,{date:state.data.date},'任务已完成');
-      if(action.dataset.action==='reopen-task') await mutate(`/api/tasks/${action.dataset.id}/reopen`,{date:state.data.date},'任务已重新打开');
+      if(action.dataset.action==='restore') await mutate('/api/restore',{update_id:action.dataset.id,date:state.data.date},t('toast_restored'));
+      if(action.dataset.action==='complete-task') await mutate(`/api/tasks/${action.dataset.id}/complete`,{date:state.data.date},t('toast_completed'));
+      if(action.dataset.action==='reopen-task') await mutate(`/api/tasks/${action.dataset.id}/reopen`,{date:state.data.date},t('toast_reopened'));
       if(action.dataset.action==='merge-task'){
-        const select=$(`[data-merge-target="${action.dataset.id}"]`); if(!select.value)throw new Error('请先选择合并目标');
-        await mutate('/api/tasks/merge',{source_task_id:action.dataset.id,target_task_id:select.value,date:state.data.date},'任务已合并');
+        const select=$(`[data-merge-target="${action.dataset.id}"]`); if(!select.value)throw new Error(t('toast_pick_merge'));
+        await mutate('/api/tasks/merge',{source_task_id:action.dataset.id,target_task_id:select.value,date:state.data.date},t('toast_merged'));
       }
     }catch(error){ if(!$('#toast').classList.contains('show'))toast(error.message,null,true); }
     finally{action.disabled=false;}
   });
 
   async function regenerate(){
-    if(state.viewAs){ toast('正在查看别人的日志，只读',null,true); return; }
+    if(state.viewAs){ toast(t('toast_readonly'),null,true); return; }
     const buttons=[$('#regenerate'),$('#dirty-regenerate')]; buttons.forEach(b=>b.disabled=true);
-    toast('正在调用模型整理日报…');
+    toast(t('toast_generating'));
     // 云端版出日报要几分钟，接口只是排了个队——这时候说「已更新」是假话
-    try{ const result=await post('/api/regenerate',{date:state.data.date}); state.data=result.dashboard; renderAll(); toast(result.queued?(result.message||'已排队，几分钟后刷新就能看到新的日报'):'日报和口播稿已更新'); }
+    try{ const result=await post('/api/regenerate',{date:state.data.date}); state.data=result.dashboard; renderAll(); toast(t(result.queued?'toast_queued':'toast_generated')); }
     catch(error){toast(error.message,null,true)} finally{buttons.forEach(b=>b.disabled=false)}
   }
   $('#regenerate').addEventListener('click',regenerate); $('#dirty-regenerate').addEventListener('click',regenerate);
@@ -621,47 +864,55 @@
     const me=state.me, select=$('#daily-time');
     if(!select.options.length) for(let m=15;m<22*60;m+=15){ const v=String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); select.add(new Option(v,v)); }
     select.value=me.daily_time;
-    $('#daily-time-copy').textContent=`现在：每天 ${me.daily_time} 出日报，${scanAt(me.daily_time)} 扫描`;
+    $('#daily-time-copy').textContent=t('daily_time_now',{time:me.daily_time, scan:scanAt(me.daily_time)});
     $('#nav-settings').textContent=state.settings.folders.some(f=>f.selected)?'✓':'!';
-    $('#agent-list').innerHTML=state.settings.agents.map(a=>`<div class="agent-card ${a.scan_enabled?'on':''}"><div class="agent-badge">${esc(AGENT_BADGE[a.agent]||a.agent.slice(0,2).toUpperCase())}</div><div><div class="item-title">${esc(a.label)}</div><div class="meta"><span><i class="dot ${a.connected?'live':''}"></i>${a.connected?'已接入 · 最近 '+esc(stamp(a.last_seen)):'还没接入'}</span><span>${!a.scannable?'还不支持后台扫描':a.scan_enabled?'每晚扫它的对话':'不扫它的对话'}</span></div></div><label class="switch" ${a.scannable?'':'style="opacity:.45" title="还不支持后台扫描（没实测过）"'}><input type="checkbox" data-agent-toggle="${esc(a.agent)}" ${a.scan_enabled?'checked':''} ${a.scannable?'':'disabled'} aria-label="扫描 ${esc(a.label)} 的对话"><span></span></label></div>`).join('');
+    $('#agent-list').innerHTML=state.settings.agents.map(a=>`<div class="agent-card ${a.scan_enabled?'on':''}"><div class="agent-badge">${esc(AGENT_BADGE[a.agent]||a.agent.slice(0,2).toUpperCase())}</div><div><div class="item-title">${esc(a.label)}</div><div class="meta"><span><i class="dot ${a.connected?'live':''}"></i>${esc(a.connected?t('agent_connected',{time:stamp(a.last_seen)}):t('agent_not_connected'))}</span><span>${esc(t(!a.scannable?'agent_unsupported':a.scan_enabled?'agent_scanning':'agent_not_scanning'))}</span></div></div><label class="switch" ${a.scannable?'':`style="opacity:.45" title="${esc(t('agent_unsupported_title'))}"`}><input type="checkbox" data-agent-toggle="${esc(a.agent)}" ${a.scan_enabled?'checked':''} ${a.scannable?'':'disabled'} aria-label="${esc(t('agent_toggle_aria',{name:a.label}))}"><span></span></label></div>`).join('');
     renderFolders();
     const req=me.admin_request;
     $('#admin-status').innerHTML=me.is_admin
-      ?'<div class="item-title">你是 admin</div><div class="meta">可以在左侧 Admin 里审批申请、查看全员的日志。</div>'
-      :req?`<div class="item-title">申请已提交，等待审批</div><div class="meta">提交于 ${esc(stamp(req.created_at))}</div>`
-      :'<div class="item-head"><div><div class="item-title">你还不是 admin</div><div class="meta">需要查看全员日志的话可以申请，由现有 admin 审批。</div></div><button class="btn" id="request-admin">申请 admin</button></div>';
+      ?`<div class="item-title">${esc(t('you_are_admin'))}</div><div class="meta">${esc(t('you_are_admin_sub'))}</div>`
+      :req?`<div class="item-title">${esc(t('request_pending'))}</div><div class="meta">${esc(t('request_pending_sub',{time:stamp(req.created_at)}))}</div>`
+      :`<div class="item-head"><div><div class="item-title">${esc(t('not_admin'))}</div><div class="meta">${esc(t('not_admin_sub'))}</div></div><button class="btn" id="request-admin">${esc(t('request_admin'))}</button></div>`;
   }
   function renderFolders(){
     const items=state.settings.folders, picked=items.filter(f=>f.selected).length;
-    $('#folder-count').textContent=`已勾选 ${picked} / ${items.length}`;
+    $('#folder-count').textContent=t('folders_count',{picked, total:items.length});
     $('#folder-list').innerHTML=items.length
-      ?items.map(f=>`<label class="folder"><input type="checkbox" data-folder="${esc(f.path)}" ${f.selected?'checked':''}><span class="folder-path">${esc(f.path)}</span><span class="meta" style="margin:0">${f.last_used?'最近 '+esc(f.last_used):''}</span></label>`).join('')
-      :'<div class="empty"><strong>还没有上报的文件夹</strong>本机采集装好后，用 agent 干过活的文件夹会自动出现在这里。也可以在下面手动添加。</div>';
+      ?items.map(f=>`<label class="folder"><input type="checkbox" data-folder="${esc(f.path)}" ${f.selected?'checked':''}><span class="folder-path">${esc(f.path)}</span><span class="meta" style="margin:0">${f.last_used?esc(t('folder_last_used',{date:f.last_used})):''}</span></label>`).join('')
+      :empty(t('folders_empty'),t('folders_empty_sub'));
   }
   async function loadAdmin(){
     const [reqs,users]=await Promise.all([request('/api/admin/requests'),request('/api/admin/users')]);
-    $('#nav-admin').textContent=reqs.items.length||'—'; $('#request-count').textContent=reqs.items.length;
-    $('#request-list').innerHTML=reqs.items.length
-      ?reqs.items.map(r=>`<div class="item item-head"><div><div class="item-title">${esc(r.display_name||r.author)}</div><div class="meta">${esc(r.author)} · 申请于 ${esc(stamp(r.created_at))}</div></div><div class="button-row"><button class="btn small" data-decide="${esc(r.request_id)}" data-approve="0">拒绝</button><button class="btn small primary" data-decide="${esc(r.request_id)}" data-approve="1">批准</button></div></div>`).join('')
-      :'<div class="empty"><strong>没有待审批的申请</strong></div>';
-    $('#user-list').innerHTML=users.items.map(u=>`<tr><td><div class="item-title">${esc(u.display_name)}</div><div class="meta" style="margin-top:2px">${esc(u.author)}</div></td><td>${u.is_admin?'<span class="tag done">admin</span>':'<span class="tag">成员</span>'}</td><td>${esc(u.daily_time||'')}</td><td>${esc(u.last_active_date||'—')}</td><td>${u.update_count||0}</td><td><button class="btn small" data-view-as="${esc(u.author)}" data-name="${esc(u.display_name)}">查看日志</button></td></tr>`).join('');
+    state.admin={requests:reqs.items, users:users.items};
+    renderAdmin();
+  }
+  function renderAdmin(){
+    const {requests,users}=state.admin;
+    $('#nav-admin').textContent=requests.length||'—'; $('#request-count').textContent=requests.length;
+    $('#request-list').innerHTML=requests.length
+      ?requests.map(r=>`<div class="item item-head"><div><div class="item-title">${esc(r.display_name||r.author)}</div><div class="meta">${esc(r.author)} · ${esc(t('requested_at',{time:stamp(r.created_at)}))}</div></div><div class="button-row"><button class="btn small" data-decide="${esc(r.request_id)}" data-approve="0">${esc(t('deny'))}</button><button class="btn small primary" data-decide="${esc(r.request_id)}" data-approve="1">${esc(t('approve'))}</button></div></div>`).join('')
+      :`<div class="empty"><strong>${esc(t('no_requests'))}</strong></div>`;
+    $('#user-list').innerHTML=users.map(u=>`<tr><td><div class="item-title">${esc(u.display_name)}</div><div class="meta" style="margin-top:2px">${esc(u.author)}</div></td><td>${u.is_admin?'<span class="tag done">admin</span>':`<span class="tag">${esc(t('role_member'))}</span>`}</td><td>${esc(u.daily_time||'')}</td><td>${esc(u.last_active_date||'—')}</td><td>${u.update_count||0}</td><td><button class="btn small" data-view-as="${esc(u.author)}" data-name="${esc(u.display_name)}">${esc(t('view_log'))}</button></td></tr>`).join('');
+  }
+  function showViewAs(){
+    $('#viewas').classList.toggle('show',!!state.viewAs);
+    $('#viewas-copy').textContent=state.viewAs?t('viewas_copy',{name:state.viewAs.name, author:state.viewAs.author}):'';
   }
   function setViewAs(author,name){
     state.viewAs=author&&author!==(state.me||{}).author?{author,name}:null;
-    $('#viewas').classList.toggle('show',!!state.viewAs);
-    $('#viewas-copy').textContent=state.viewAs?`正在查看 ${state.viewAs.name}（${state.viewAs.author}）的日志 · 只读`:'';
+    showViewAs();
     switchView('today'); loadDashboard();
   }
 
   $('#viewas-exit').addEventListener('click',()=>setViewAs(null));
   $('#save-daily-time').addEventListener('click',async()=>{
-    try{ const r=await post('/api/settings',{daily_time:$('#daily-time').value}); state.me.daily_time=r.daily_time; renderSettings(); toast(`已保存：每天 ${r.daily_time} 出日报`); }
+    try{ const r=await post('/api/settings',{daily_time:$('#daily-time').value}); state.me.daily_time=r.daily_time; renderSettings(); toast(t('toast_time_saved',{time:r.daily_time})); }
     catch(error){toast(error.message,null,true);}
   });
   document.addEventListener('change',async event=>{
     const toggle=event.target.closest('[data-agent-toggle]');
     if(toggle){ const on=toggle.checked; toggle.disabled=true;
-      try{ await post(`/api/agents/${encodeURIComponent(toggle.dataset.agentToggle)}`,{scan_enabled:on}); await loadSettings(); toast(on?'以后每晚扫它的对话':'不再扫它的对话'); }
+      try{ await post(`/api/agents/${encodeURIComponent(toggle.dataset.agentToggle)}`,{scan_enabled:on}); await loadSettings(); toast(t(on?'toast_scan_on':'toast_scan_off')); }
       catch(error){ toggle.checked=!on; toggle.disabled=false; toast(error.message,null,true); }
       return; }
     const folder=event.target.closest('[data-folder]');
@@ -669,28 +920,31 @@
   });
   $('#folder-add-btn').addEventListener('click',()=>{
     const path=$('#folder-add').value.trim().replace(/\/+$/,'');
-    if(!path.startsWith('/')){ toast('要填完整路径，以 / 开头',null,true); return; }
+    if(!path.startsWith('/')){ toast(t('toast_need_path'),null,true); return; }
     const hit=state.settings.folders.find(f=>f.path===path);
     if(hit) hit.selected=true; else state.settings.folders.unshift({path,selected:true,last_used:null});
-    $('#folder-add').value=''; renderFolders(); toast('已加到列表，记得点「保存勾选」');
+    $('#folder-add').value=''; renderFolders(); toast(t('toast_folder_added'));
   });
   $('#save-folders').addEventListener('click',async()=>{
-    try{ const r=await post('/api/folders',{selected:state.settings.folders.filter(f=>f.selected).map(f=>f.path)}); await loadSettings(); toast(`已保存：${r.selected.length} 个工作文件夹`); }
+    try{ const r=await post('/api/folders',{selected:state.settings.folders.filter(f=>f.selected).map(f=>f.path)}); await loadSettings(); toast(t('toast_folders_saved',{n:r.selected.length})); }
     catch(error){toast(error.message,null,true);}
   });
 
   async function loadStyle(){ showStyle(await request('/api/style')); }
   function showStyle(profile){
+    state.style=profile;
     $('#style-editor').value=profile.content_md||'';
-    $('#style-updated').textContent=profile.updated_at?`更新于 ${stamp(profile.updated_at)}`:'还没有';
+    $('#style-updated').textContent=profile.updated_at?t('style_updated',{time:stamp(profile.updated_at)}):t('style_none');
   }
   async function saveStyle(content){
-    try{ showStyle(await post('/api/style',{content_md:content})); toast(content.trim()?'写作偏好已保存，下次出日报生效':'已清空写作偏好'); }
+    try{ showStyle(await post('/api/style',{content_md:content})); toast(t(content.trim()?'toast_style_saved':'toast_style_cleared')); }
     catch(error){ toast(error.message,null,true); }
   }
   $('#save-style').addEventListener('click',()=>saveStyle($('#style-editor').value));
-  $('#clear-style').addEventListener('click',()=>{ if(confirm('清空所有写作偏好？以后出日报不再按这些写。')) saveStyle(''); });
+  $('#clear-style').addEventListener('click',()=>{ if(confirm(t('confirm_clear_style'))) saveStyle(''); });
 
+  applyStatic();
+  switchView('today',{scroll:false});
   loadMe();
   loadDashboard();
 </script>

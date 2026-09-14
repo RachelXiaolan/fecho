@@ -63,7 +63,8 @@ class TestDashboardContract(unittest.TestCase):
         self.assertIn('bottom:0', self.html)
 
     def test_task_view_applies_the_same_global_filters(self):
-        self.assertIn('t.updates.some(matches)', self.html)
+        # 任务列表和 Today 用同一个 matches 过滤。变量名不重要（t 现在是翻译函数，这里改叫 x）
+        self.assertIn('.updates.some(matches)', self.html)
 
     def test_visible_dashboard_refreshes_after_nightly_automation(self):
         self.assertIn("visibilitychange", self.html)
