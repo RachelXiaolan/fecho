@@ -61,22 +61,32 @@ Authorization = "Bearer <TOKEN>"
 ## 第 3 步：装本机采集（每晚扫描用）
 
 用户不说「记一下」的时候，agent 常常会漏记。本机采集就是补漏的：每天出日报前 15 分钟，
-把用户勾选的工作文件夹里当天的对话整理出来，交给你（用户电脑上的 agent）提炼成进展，再传上去。
+**每个 agent 扫自己的对话**——Claude Code 的交给 claude 命令提炼，Codex 的交给 codex 命令提炼——
+只扫用户勾选的工作文件夹，提炼成进展后传上去，服务器再整理成日报。
 
-只用电脑自带的 Python，不装任何包。`--agent` 按你自己是谁填 `claude-code` 或 `codex`：
+只用电脑自带的 Python，不装任何包：
 
 ```bash
-mkdir -p ~/.fecho-cloud && curl -fsSL __URL__/local/fecho_local.py -o ~/.fecho-cloud/fecho_local.py && python3 ~/.fecho-cloud/fecho_local.py install --url __URL__ --token <TOKEN> --agent claude-code
+mkdir -p ~/.fecho-cloud && curl -fsSL __URL__/local/fecho_local.py -o ~/.fecho-cloud/fecho_local.py && python3 ~/.fecho-cloud/fecho_local.py install --url __URL__ --token <TOKEN>
 ```
 
-它会：确认 token 能用 → 找出用户用 agent 干过活的文件夹（**只读路径，不读对话内容**）并上报 →
+它会：确认 token 能用 → 找出这台电脑上用过的 agent，**逐个在后台试叫醒一次** →
+找出用户用 agent 干过活的文件夹（**只读路径，不读对话内容**）并上报 →
 装一个每 15 分钟问一次服务器「该扫了吗」的定时任务。
 
-Codex 的提炼路径**还没实测过**，如果你是 Codex，装完请告诉用户这一点。
+试叫醒这一步每个 agent 会花掉一次很小的调用。输出里每个 agent 一行：
+
+- `✓` 能叫醒，以后每晚扫它的对话
+- `✗` 叫不醒，暂时不扫它的对话，后面跟着原因和修法。**把原因和修法原样告诉用户。**
+  最常见的是命令行版没登录（桌面版登录了，命令行不一定能用）。用户修好后，重新运行上面这条命令就会加上。
+
+如果全部是 `✗`，命令会失败、不装定时任务，照样把原因告诉用户。
+
+Hermes 还不支持在后台叫醒（没实测过），它的对话暂时不扫。
 
 装完告诉用户：
 
-> 本机采集装好了，找到了你用 agent 干过活的 N 个文件夹。
+> 本机采集装好了：会扫 X 的对话（叫不醒的列出来并说怎么修）。找到了你用 agent 干过活的 N 个文件夹。
 > 请回到刚才的网页（__URL__/onboard），勾选哪些算工作。**没勾的文件夹，对话连打开都不会打开。**
 
 ---

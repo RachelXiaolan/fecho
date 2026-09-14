@@ -2,19 +2,22 @@
 """Fecho 本机采集（云端版）。
 
 同事电脑上只跑这一个文件：不用 pip，只用 Python 自带的库（macOS 自带的 3.9 就够）。
-它做三件事：
 
-    install   记下服务地址和 token，上报用 agent 干过活的文件夹，装一个每 15 分钟跑一次的定时任务
-    check     问服务器「该扫了吗」；该扫就把白名单文件夹里当天的对话整理好，交给本机 agent 提炼，
-              再把提炼出的进展传上去（定时任务跑的就是这个）
+    install   记下服务地址和 token，逐个试叫醒本机的 agent，上报用 agent 干过活的文件夹，
+              装一个每 15 分钟跑一次的定时任务
+    check     问服务器「该扫了吗」；该扫就让每个 agent 扫自己的对话、提炼成进展传上去
+              （定时任务跑的就是这个）
     status    看看现在的状态
+
+**每个 agent 只扫自己的对话**：Claude Code 的聊天记录交给 claude 命令提炼，Codex 的交给
+codex 命令提炼，互不交叉。提炼完各自上传，服务器再把一整天的进展整理成日报。
 
 隐私边界全在本机：
 - 只读服务器回给的白名单文件夹里的对话，别的文件夹连内容都不打开
 - 工具调用、工具输出、宿主注入的样板一律丢掉，只留人和 agent 说的话
 - 上传的只有提炼后的「做成了什么」，不传对话原文
 
-提炼用的是用户自己的 agent（Claude Code / Codex），不需要任何 LLM 密钥。
+提炼用的是用户自己的 agent，不需要任何 LLM 密钥。
 
 这份文件由服务器分发（__URL__/local/fecho_local.py）。提示词和解析规则与服务器上的
 scan.py 保持一致，仓库里有测试盯着两边不走样。
@@ -53,13 +56,27 @@ UPLOAD_BATCH = 50
 AGENT_TIMEOUT = 600
 LOCK_STALE_SECONDS = 2 * 60 * 60
 
-# 各 agent 的 CLI 叫什么
-CLI_NAMES = {"claude-code": "claude", "codex": "codex"}
-# 装的时候用来找「干过活的文件夹」；扫描时以服务器回给的为准
+# 每个 agent 的聊天记录在哪。装的时候用来判断「这台电脑上用过哪些 agent」；
+# 扫描时以服务器回给的为准。
 TRANSCRIPTS = {
     "claude-code": "~/.claude/projects/*/*.jsonl",
     "codex": "~/.codex/sessions/*/*/*/*.jsonl",
     "hermes": "~/.hermes/sessions/**/*.jsonl",
+}
+# 能在后台叫醒来提炼的 agent，以及去哪找它的命令行。
+# 不在系统 PATH 上的也要找：ChatGPT 桌面版把 codex 命令行藏在 app 包里。
+CLI = {
+    "claude-code": {"name": "claude", "also": [
+        "~/.claude/local/claude", "/opt/homebrew/bin/claude", "/usr/local/bin/claude"]},
+    "codex": {"name": "codex", "also": [
+        "/Applications/ChatGPT.app/Contents/Resources/codex",
+        "/Applications/Codex.app/Contents/Resources/codex",
+        "/opt/homebrew/bin/codex", "/usr/local/bin/codex"]},
+}
+FIX_HINT = {
+    "claude-code": "在终端里运行 claude，看它能不能正常对话。用 Claude 官方订阅的，进去后输入 /login 登录；"
+                   "用 CC Switch 接其他线路的，在 CC Switch 里给 Claude 选一个能用的线路。",
+    "codex": "打开 ChatGPT 桌面版确认已登录，或在终端运行 codex login。",
 }
 
 # 宿主注入的样板：slash command 展开、skill 说明文档、系统提醒。
@@ -106,6 +123,7 @@ decision | - | 闲鱼选品定了强推三个品类，盗版资料类全部淘�
 # 本机不拉 issue 列表：归属由服务器看完一整天再判（它手上有这个人的 Mobius issue），
 # 本机这边只管把「做成了什么」抽准。
 NO_ISSUES = "（当前没有在办的 issue，所有条目的 issue 号都写 `-`）"
+PROBE_TEXT = "（这是安装时的连通测试，没有对话内容。）"
 
 
 # ---------- 小工具 ----------
@@ -127,7 +145,8 @@ def load_config():
     if not CONFIG.exists():
         raise SystemExit("还没装：先运行 python3 %s install --url <服务地址> --token <token>"
                          % Path(__file__).resolve())
-    return json.loads(CONFIG.read_text(encoding="utf-8"))
+    cfg = json.loads(CONFIG.read_text(encoding="utf-8"))
+    return cfg
 
 
 def save_json(path, data, mode=0o600):
@@ -270,32 +289,33 @@ def normalized_records(agent, path):
     return "%s:%s" % (agent, sid), out
 
 
-def collect(date, folders, agents):
-    """白名单文件夹里、北京时间 date 这天的对话，按 (agent, 会话, 文件夹) 分组。"""
+def collect(date, folders, agent, transcripts):
+    """某一个 agent 的聊天记录里，白名单文件夹中、北京时间 date 这天的对话。
+
+    按 (会话, 文件夹) 分组。只读这一个 agent 自己的记录。
+    """
     day_start = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=BEIJING)
     groups = {}
-    for spec in agents:
-        agent = spec["agent"]
-        for value in glob.glob(os.path.expanduser(spec["transcripts"]), recursive=True):
-            try:
-                # 那天开始之前就没再动过的文件，不可能有那天的对话，连打开都不用
-                if datetime.fromtimestamp(os.path.getmtime(value), BEIJING) < day_start:
-                    continue
-            except OSError:
+    for value in glob.glob(os.path.expanduser(transcripts), recursive=True):
+        try:
+            # 那天开始之前就没再动过的文件，不可能有那天的对话，连打开都不用
+            if datetime.fromtimestamp(os.path.getmtime(value), BEIJING) < day_start:
                 continue
-            session_id, records = normalized_records(agent, value)
-            for rec in records:
-                when = beijing(rec.get("timestamp"))
-                if not when or when.strftime("%Y-%m-%d") != date:
-                    continue
-                cwd = rec.get("cwd") or ""
-                if not in_scope(cwd, folders):
-                    continue          # 不在白名单：内容不取，更不会交给 agent
-                body = (rec.get("text") or "").strip()
-                if not body:
-                    continue
-                groups.setdefault((agent, session_id, cwd), []).append(
-                    {"at": when, "ts": rec["timestamp"], "role": rec["role"], "text": body})
+        except OSError:
+            continue
+        session_id, records = normalized_records(agent, value)
+        for rec in records:
+            when = beijing(rec.get("timestamp"))
+            if not when or when.strftime("%Y-%m-%d") != date:
+                continue
+            cwd = rec.get("cwd") or ""
+            if not in_scope(cwd, folders):
+                continue          # 不在白名单：内容不取，更不会交给 agent
+            body = (rec.get("text") or "").strip()
+            if not body:
+                continue
+            groups.setdefault((session_id, cwd), []).append(
+                {"at": when, "ts": rec["timestamp"], "role": rec["role"], "text": body})
     for rows in groups.values():
         rows.sort(key=lambda r: r["at"])
     return groups
@@ -354,34 +374,67 @@ def event_key(agent, session_id, part, index):
     return "scan:" + hashlib.sha256(seed.encode("utf-8")).hexdigest()
 
 
-# ---------- 交给本机 agent 提炼 ----------
+# ---------- 叫醒本机 agent 来提炼 ----------
 
-def run_agent(cfg, text):
-    cli = cfg["cli"]
+def find_cli(agent):
+    spec = CLI.get(agent)
+    if not spec:
+        return None
+    found = shutil.which(spec["name"])
+    if found:
+        return found
+    for candidate in spec["also"]:
+        path = os.path.expanduser(candidate)
+        if os.path.isfile(path) and os.access(path, os.X_OK):
+            return path
+    return None
+
+
+def run_agent(cfg, agent, text):
+    """让这个 agent 的命令行读一段文字、吐出几行结果。"""
+    cli = (cfg.get("runners") or {}).get(agent)
+    if not cli:
+        raise RuntimeError("本机没有能叫醒的 %s" % agent)
     env = dict(os.environ)
     if cfg.get("path"):
         env["PATH"] = cfg["path"]        # 定时任务里的 PATH 很短，找不到 node 之类的
     prompt = PROMPT.replace("{issues}", NO_ISSUES) + text
-    if cfg["agent"] == "claude-code":
-        # 不带工具、不加载 MCP、不留会话记录：只让它读这段文字、吐出几行结果。
+    if agent == "claude-code":
+        # 不带工具、不加载 MCP、不留会话记录。
         # 不留记录很要紧，否则这次提炼本身会变成一段新对话，下次又被扫进来。
         args = [cli, "-p", "--output-format", "text", "--no-session-persistence",
                 "--strict-mcp-config", "--tools", ""]
         r = subprocess.run(args, input=prompt, capture_output=True, text=True,
                            timeout=AGENT_TIMEOUT, cwd=str(HOME), env=env)
         if r.returncode:
-            raise RuntimeError("claude 退出码 %d：%s" % (r.returncode, (r.stderr or r.stdout)[-300:]))
+            raise RuntimeError("claude 退出码 %d：%s" % (
+                r.returncode, (r.stderr or r.stdout).strip()[-300:]))
         return r.stdout
-    if cfg["agent"] == "codex":
+    if agent == "codex":
+        # --ephemeral 同样是为了不留会话记录；只读沙箱，它什么都改不了
         out = HOME / "codex-last.txt"
+        if out.exists():
+            out.unlink()
         args = [cli, "exec", "--skip-git-repo-check", "--ephemeral", "-s", "read-only",
                 "-o", str(out), "-"]
         r = subprocess.run(args, input=prompt, capture_output=True, text=True,
                            timeout=AGENT_TIMEOUT, cwd=str(HOME), env=env)
         if r.returncode:
-            raise RuntimeError("codex 退出码 %d：%s" % (r.returncode, (r.stderr or r.stdout)[-300:]))
+            raise RuntimeError("codex 退出码 %d：%s" % (
+                r.returncode, (r.stderr or r.stdout).strip()[-300:]))
         return out.read_text(encoding="utf-8") if out.exists() else r.stdout
-    raise RuntimeError("还不支持用 %s 提炼" % cfg["agent"])
+    raise RuntimeError("还不支持在后台叫醒 %s" % agent)
+
+
+def probe(cfg, agent):
+    """装的时候真叫醒一次。叫不醒就别装——不然每晚悄悄失败，谁也不知道。"""
+    try:
+        parse_entries(run_agent(cfg, agent, PROBE_TEXT))
+        return True, "能叫醒"
+    except subprocess.TimeoutExpired:
+        return False, "等了 %d 秒没回话" % AGENT_TIMEOUT
+    except Exception as exc:                  # noqa: BLE001
+        return False, str(exc)[:200]
 
 
 # ---------- check：定时任务每 15 分钟跑的 ----------
@@ -439,10 +492,10 @@ def check(cfg, force_date=None):
 
 
 def scan_day(cfg, due):
+    """每个开着扫描的 agent，用它自己的命令行扫它自己的对话。"""
     date = due["date"]
-    agents = [a for a in due.get("agents") or [] if a["agent"] == cfg["agent"]]
-    log("开始扫 %s（白名单 %d 个文件夹）" % (date, len(due.get("folders") or [])))
-    groups = collect(date, due.get("folders") or [], agents)
+    folders = due.get("folders") or []
+    log("开始扫 %s（白名单 %d 个文件夹）" % (date, len(folders)))
 
     # 这一天已经提炼并上传成功的段落记在本机，失败重试时不再重复花 token
     done_file = DONE_DIR / ("%s.json" % date)
@@ -452,28 +505,35 @@ def scan_day(cfg, due):
         done = set()
 
     errors, uploaded, pieces = [], 0, 0
-    for (agent, session_id, cwd), rows in sorted(groups.items()):
-        for part in split(rows):
-            seed = event_key(agent, session_id, part, -1)
-            if seed in done:
-                continue
-            pieces += 1
-            try:
-                items = parse_entries(run_agent(cfg, render(part)))
-            except Exception as exc:              # noqa: BLE001 一段失败不拖累别的段
-                errors.append("%s: %s" % (Path(cwd).name, str(exc)[:160]))
-                log("提炼失败 %s：%s" % (cwd, str(exc)[:200]))
-                continue
-            entries = [{"content": it["content"], "kind": it["kind"], "date": date,
-                        "project": cwd, "agent": agent, "session_id": session_id,
-                        "source_event_key": event_key(agent, session_id, part, i)}
-                       for i, it in enumerate(items)]
-            for start in range(0, len(entries), UPLOAD_BATCH):
-                r = api(cfg, "POST", "/api/scan/submit",
-                        {"date": date, "entries": entries[start:start + UPLOAD_BATCH]})
-                uploaded += int(r.get("recorded") or 0)
-            done.add(seed)
-            save_json(done_file, sorted(done))
+    for spec in due.get("agents") or []:
+        agent = spec["agent"]
+        if not (cfg.get("runners") or {}).get(agent):
+            # 服务器上开着，本机却叫不醒：必须算失败，不能悄悄当成「今天没对话」
+            errors.append("%s 在网页上开着扫描，但这台电脑叫不醒它" % agent)
+            log("跳过 %s：本机叫不醒它。%s" % (agent, FIX_HINT.get(agent, "")))
+            continue
+        for (session_id, cwd), rows in sorted(collect(date, folders, agent, spec["transcripts"]).items()):
+            for part in split(rows):
+                seed = event_key(agent, session_id, part, -1)
+                if seed in done:
+                    continue
+                pieces += 1
+                try:
+                    items = parse_entries(run_agent(cfg, agent, render(part)))
+                except Exception as exc:          # noqa: BLE001 一段失败不拖累别的段
+                    errors.append("%s/%s: %s" % (agent, Path(cwd).name, str(exc)[:160]))
+                    log("%s 提炼失败 %s：%s" % (agent, cwd, str(exc)[:200]))
+                    continue
+                entries = [{"content": it["content"], "kind": it["kind"], "date": date,
+                            "project": cwd, "agent": agent, "session_id": session_id,
+                            "source_event_key": event_key(agent, session_id, part, i)}
+                           for i, it in enumerate(items)]
+                for start in range(0, len(entries), UPLOAD_BATCH):
+                    r = api(cfg, "POST", "/api/scan/submit",
+                            {"date": date, "entries": entries[start:start + UPLOAD_BATCH]})
+                    uploaded += int(r.get("recorded") or 0)
+                done.add(seed)
+                save_json(done_file, sorted(done))
 
     error = "；".join(errors)[:500] if errors else None
     api(cfg, "POST", "/api/scan/submit",
@@ -484,6 +544,12 @@ def scan_day(cfg, due):
 
 
 # ---------- install ----------
+
+def used_agents():
+    """这台电脑上用过哪些 agent：有聊天记录的就算。"""
+    return [a for a, pattern in TRANSCRIPTS.items()
+            if glob.glob(os.path.expanduser(pattern), recursive=True)]
+
 
 def work_folders():
     """用 agent 干过活的文件夹。只读路径，不读对话内容。"""
@@ -534,19 +600,39 @@ def install_launchd(script):
 
 def cmd_install(args):
     url = args.url.rstrip("/")
-    cli = args.cli or shutil.which(CLI_NAMES.get(args.agent, ""))
-    if not cli:
-        raise SystemExit("找不到 %s 命令，没法用它提炼对话。装好后再来，或用 --cli 指定路径。"
-                         % CLI_NAMES.get(args.agent, args.agent))
-    cfg = {"url": url, "token": args.token, "agent": args.agent, "cli": cli,
-           # 定时任务里的 PATH 很短，claude 这类命令要靠 node，得把现在的 PATH 带过去
-           "path": os.environ.get("PATH", "")}
+    # 定时任务里的 PATH 很短，claude 这类命令要靠 node，得把现在的 PATH 带过去
+    cfg = {"url": url, "token": args.token, "path": os.environ.get("PATH", ""), "runners": {}}
     try:
         api(cfg, "GET", "/api/scan/due")
     except ApiError as exc:
         raise SystemExit("连不上 Fecho 或 token 不对：%s" % exc)
 
-    # 把自己放到固定位置，定时任务指向这里
+    wanted = [a.strip() for a in args.agents.split(",")] if args.agents else used_agents()
+    report = []
+    for agent in wanted:
+        if agent not in TRANSCRIPTS:
+            raise SystemExit("不认识的 agent：%s（支持 %s）" % (agent, "、".join(TRANSCRIPTS)))
+        if agent not in CLI:
+            report.append((agent, False, "还不支持在后台叫醒它（没实测过），暂时不扫它的对话"))
+            continue
+        cli = find_cli(agent)
+        if not cli:
+            report.append((agent, False, "找不到它的命令行"))
+            continue
+        cfg["runners"][agent] = cli
+        ok, why = probe(cfg, agent)
+        if not ok:
+            del cfg["runners"][agent]
+            report.append((agent, False, "%s。%s" % (why, FIX_HINT.get(agent, ""))))
+        else:
+            report.append((agent, True, cli))
+
+    print("逐个试叫醒本机的 agent：")
+    for agent, ok, detail in report:
+        print("  %s %s：%s" % ("✓" if ok else "✗", agent, detail))
+    if not cfg["runners"]:
+        raise SystemExit("\n一个都叫不醒，没有装定时任务。按上面的提示修好后，重新运行这条 install。")
+
     HOME.mkdir(parents=True, exist_ok=True)
     os.chmod(HOME, 0o700)
     script = HOME / "fecho_local.py"
@@ -554,13 +640,18 @@ def cmd_install(args):
         shutil.copyfile(__file__, script)
     save_json(CONFIG, cfg)
 
-    api(cfg, "POST", "/api/agents/%s" % args.agent, {"scan_enabled": True})
+    # 能叫醒的开扫描；叫不醒的明确关掉——否则服务器以为它会扫、每晚等一个永远不来的结果
+    for agent, ok, _ in report:
+        api(cfg, "POST", "/api/agents/%s" % agent, {"scan_enabled": ok})
     folders = work_folders()
     api(cfg, "POST", "/api/folders/report", {"folders": folders})
     install_launchd(script)
 
-    print("装好了。")
-    print("- 用 %s 提炼对话（%s）" % (args.agent, cli))
+    print("\n装好了。")
+    print("- 会扫对话的 agent：%s" % "、".join(sorted(cfg["runners"])))
+    skipped = [a for a, ok, _ in report if not ok]
+    if skipped:
+        print("- 暂时不扫：%s。修好后重新运行这条 install 就会加上" % "、".join(skipped))
     print("- 上报了 %d 个用 agent 干过活的文件夹，请到 %s/onboard 勾选哪些算工作" % (len(folders), url))
     print("- 每 15 分钟问一次服务器该不该扫；日志在 %s" % LOG)
 
@@ -589,7 +680,8 @@ def cmd_status(_args):
     cfg = load_config()
     print("服务：%s" % cfg["url"])
     print("token：%s…" % cfg["token"][:10])
-    print("提炼用：%s（%s）" % (cfg["agent"], cfg["cli"]))
+    for agent, cli in sorted((cfg.get("runners") or {}).items()):
+        print("扫 %s 的对话，用：%s" % (agent, cli))
     print("定时任务：%s" % ("已装" if PLIST.exists() else "没装"))
     try:
         due = api(cfg, "GET", "/api/scan/due")
@@ -609,8 +701,7 @@ def main(argv=None):
     i = sub.add_parser("install", help="装好并开始定时检查")
     i.add_argument("--url", required=True)
     i.add_argument("--token", required=True)
-    i.add_argument("--agent", default="claude-code", choices=sorted(CLI_NAMES))
-    i.add_argument("--cli", help="agent 命令的完整路径（默认自动找）")
+    i.add_argument("--agents", help="只装这几个，逗号分隔（默认：这台电脑上用过的全部）")
     c = sub.add_parser("check", help="问一次服务器，该扫就扫")
     c.add_argument("--date", help="不管到没到点，直接扫这一天（YYYY-MM-DD）")
     sub.add_parser("status", help="看状态")

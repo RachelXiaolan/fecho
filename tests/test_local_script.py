@@ -1,17 +1,19 @@
 """同事电脑上跑的本机采集脚本（presets/local/fecho_local.py）。
 
 它不能 import fecho（同事电脑上没装），所以提示词和解析规则是抄了一份过去的。
-这里最要紧的是盯住两件事：
+这里最要紧的是盯住三件事：
 1. 抄过去的那份和服务器上 scan.py 不走样
 2. 隐私边界：白名单外的对话、工具输出、宿主样板，一个字都不能交给 agent
+3. 每个 agent 只扫自己的对话：Claude 的交给 claude 提炼，Codex 的交给 codex 提炼
 """
 import _env  # noqa: F401  必须在 import fecho 之前
+import argparse
 import importlib.util
 import json
 import os
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from unittest import mock
 
@@ -38,22 +40,39 @@ def claude_line(ts, role, cwd, content):
                        "message": {"role": role, "content": content}}, ensure_ascii=False)
 
 
+def codex_lines(session, cwd, ts, text):
+    return [
+        json.dumps({"type": "session_meta", "timestamp": ts,
+                    "payload": {"id": session, "cwd": cwd}}),
+        json.dumps({"type": "response_item", "timestamp": ts,
+                    "payload": {"type": "message", "role": "user",
+                                "content": [{"type": "input_text", "text": text}]}},
+                   ensure_ascii=False),
+    ]
+
+
 class ScriptCase(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="fecho-local-"))
         self.mod = load_script(self.tmp / "home")
+        self.claude_glob = str(self.tmp / "projects" / "*" / "*.jsonl")
+        self.codex_glob = str(self.tmp / "codex" / "*" / "*.jsonl")
 
-    def write_transcript(self, lines, name="s1.jsonl", mtime="2030-01-10T12:00:00+08:00"):
-        d = self.tmp / "projects" / "proj"
-        d.mkdir(parents=True, exist_ok=True)
-        path = d / name
+    def _write(self, path, lines, mtime):
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("\n".join(lines) + "\n", encoding="utf-8")
         t = datetime.fromisoformat(mtime).timestamp()
         os.utime(path, (t, t))
         return path
 
-    def agents(self):
-        return [{"agent": "claude-code", "transcripts": str(self.tmp / "projects" / "*" / "*.jsonl")}]
+    def write_transcript(self, lines, name="s1.jsonl", mtime="2030-01-10T12:00:00+08:00"):
+        return self._write(self.tmp / "projects" / "proj" / name, lines, mtime)
+
+    def write_codex(self, lines, name="r1.jsonl", mtime="2030-01-10T12:00:00+08:00"):
+        return self._write(self.tmp / "codex" / "2030" / name, lines, mtime)
+
+    def collect_claude(self, date="2030-01-10", folders=(WORK,)):
+        return self.mod.collect(date, list(folders), "claude-code", self.claude_glob)
 
 
 class TestSameRulesAsServer(ScriptCase):
@@ -76,6 +95,11 @@ class TestSameRulesAsServer(ScriptCase):
     def test_no_issue_block_matches_server(self):
         self.assertEqual(self.mod.PROMPT.replace("{issues}", self.mod.NO_ISSUES),
                          scan._prompt([]))
+
+    def test_transcript_locations_match_the_server(self):
+        from fecho import cloudscan
+        for agent, spec in cloudscan.AGENTS.items():
+            self.assertEqual(self.mod.TRANSCRIPTS[agent], spec["transcripts"])
 
     def test_runs_on_the_python_macs_ship_with(self):
         """同事电脑上是 macOS 自带的 Python 3.9。脚本只能用标准库、不能用 3.10+ 的语法。"""
@@ -100,8 +124,7 @@ class TestPrivacy(ScriptCase):
             claude_line("2030-01-10T02:01:00Z", "user", "/Users/alice/Documents/private", "私事"),
             claude_line("2030-01-10T02:02:00Z", "user", WORK + "-备份", "名字像但不是子目录"),
         ])
-        groups = self.mod.collect("2030-01-10", [WORK], self.agents())
-        texts = [r["text"] for rows in groups.values() for r in rows]
+        texts = [r["text"] for rows in self.collect_claude().values() for r in rows]
         self.assertEqual(texts, ["把登录做完"])
 
     def test_tool_output_and_host_boilerplate_are_dropped(self):
@@ -115,8 +138,7 @@ class TestPrivacy(ScriptCase):
                 {"type": "tool_result", "content": "SECRET=abc123"}]),
             claude_line("2030-01-10T02:00:06Z", "user", WORK, "<system-reminder>宿主注入</system-reminder>"),
         ])
-        groups = self.mod.collect("2030-01-10", [WORK], self.agents())
-        rendered = "".join(self.mod.render(rows) for rows in groups.values())
+        rendered = "".join(self.mod.render(rows) for rows in self.collect_claude().values())
         self.assertIn("改好了", rendered)
         for leaked in ("cat .env", "SECRET", "宿主注入"):
             self.assertNotIn(leaked, rendered)
@@ -127,8 +149,7 @@ class TestPrivacy(ScriptCase):
             claude_line("2030-01-09T17:30:00Z", "user", WORK, "北京 1 月 10 日凌晨 1 点半"),
             claude_line("2030-01-10T16:30:00Z", "user", WORK, "北京 1 月 11 日凌晨"),
         ])
-        texts = [r["text"] for rows in self.mod.collect("2030-01-10", [WORK], self.agents()).values()
-                 for r in rows]
+        texts = [r["text"] for rows in self.collect_claude().values() for r in rows]
         self.assertEqual(texts, ["北京 1 月 10 日凌晨 1 点半"])
 
     def test_files_untouched_since_before_that_day_are_not_opened(self):
@@ -137,7 +158,7 @@ class TestPrivacy(ScriptCase):
             mtime="2030-01-09T12:00:00+08:00")
         with mock.patch.object(self.mod, "normalized_records",
                                side_effect=AssertionError("不该打开 %s" % path)):
-            self.assertEqual(self.mod.collect("2030-01-10", [WORK], self.agents()), {})
+            self.assertEqual(self.collect_claude(), {})
 
 
 class TestParse(ScriptCase):
@@ -163,8 +184,9 @@ class TestScanDay(ScriptCase):
             claude_line("2030-01-10T02:00:00Z", "user", WORK, "把登录做完"),
             claude_line("2030-01-10T02:05:00Z", "assistant", WORK, "登录做完了，测试通过"),
         ])
-        self.cfg = {"url": "http://x", "token": "t", "agent": "claude-code", "cli": "claude"}
-        self.due = {"due": True, "date": "2030-01-10", "folders": [WORK], "agents": self.agents()}
+        self.cfg = {"url": "http://x", "token": "t", "runners": {"claude-code": "claude"}}
+        self.due = {"due": True, "date": "2030-01-10", "folders": [WORK],
+                    "agents": [{"agent": "claude-code", "transcripts": self.claude_glob}]}
         self.calls = []
 
     def fake_api(self, cfg, method, path, body=None, timeout=60):
@@ -183,11 +205,43 @@ class TestScanDay(ScriptCase):
         self.assertTrue(entry["source_event_key"].startswith("scan:"))
         self.assertEqual((last["finished"], last["error"], last["entries"]), (True, None, []))
 
+    def test_each_agent_scans_only_its_own_transcripts(self):
+        """Claude 的对话交给 claude 提炼，Codex 的交给 codex 提炼，不交叉。"""
+        self.write_codex(codex_lines("cx1", WORK, "2030-01-10T03:00:00Z", "codex 这边写完了报表"))
+        self.cfg["runners"]["codex"] = "codex"
+        self.due["agents"].append({"agent": "codex", "transcripts": self.codex_glob})
+        seen = []
+
+        def fake_agent(cfg, agent, text):
+            seen.append((agent, text))
+            return "done | - | %s 那边的进展" % agent
+
+        with mock.patch.object(self.mod, "api", side_effect=self.fake_api), \
+             mock.patch.object(self.mod, "run_agent", side_effect=fake_agent):
+            self.assertEqual(self.mod.scan_day(self.cfg, self.due), 0)
+        by_agent = dict(seen)
+        self.assertEqual(set(by_agent), {"claude-code", "codex"})
+        self.assertIn("把登录做完", by_agent["claude-code"])
+        self.assertNotIn("报表", by_agent["claude-code"])
+        self.assertIn("报表", by_agent["codex"])
+        self.assertNotIn("登录", by_agent["codex"])
+        uploaded = {e["agent"]: e for _, body in self.calls for e in (body or {}).get("entries") or []}
+        self.assertEqual(uploaded["codex"]["session_id"], "codex:cx1")
+
+    def test_enabled_agent_that_cannot_be_woken_is_a_failure(self):
+        """网页上开着 Codex 的扫描、这台电脑却叫不醒它：必须报失败让服务器重试，
+        不能悄悄当成「今天 Codex 没有对话」。"""
+        self.due["agents"].append({"agent": "codex", "transcripts": self.codex_glob})
+        with mock.patch.object(self.mod, "api", side_effect=self.fake_api), \
+             mock.patch.object(self.mod, "run_agent", return_value="NONE"):
+            self.assertEqual(self.mod.scan_day(self.cfg, self.due), 1)
+        self.assertIn("codex", self.calls[-1][1]["error"])
+
     def test_failure_is_reported_so_the_server_retries(self):
         with mock.patch.object(self.mod, "api", side_effect=self.fake_api), \
              mock.patch.object(self.mod, "run_agent", side_effect=RuntimeError("claude 超时")):
             self.assertEqual(self.mod.scan_day(self.cfg, self.due), 1)
-        path, last = self.calls[-1]
+        _, last = self.calls[-1]
         self.assertTrue(last["finished"])
         self.assertIn("claude 超时", last["error"])
 
@@ -204,10 +258,60 @@ class TestScanDay(ScriptCase):
         seen = []
         with mock.patch.object(self.mod, "api", side_effect=self.fake_api), \
              mock.patch.object(self.mod, "run_agent",
-                               side_effect=lambda cfg, text: seen.append(text) or "NONE"):
+                               side_effect=lambda cfg, agent, text: seen.append(text) or "NONE"):
             self.mod.scan_day(self.cfg, self.due)
         self.assertTrue(seen)
         self.assertFalse(any("私事" in t for t in seen))
+
+
+class TestInstall(ScriptCase):
+    def setUp(self):
+        super().setUp()
+        self.api_calls = []
+        self.args = argparse.Namespace(url="http://x/", token="fecho_t", agents=None)
+
+    def fake_api(self, cfg, method, path, body=None, timeout=60):
+        self.api_calls.append((method, path, body))
+        return {}
+
+    def install(self, awake):
+        with mock.patch.object(self.mod, "api", side_effect=self.fake_api), \
+             mock.patch.object(self.mod, "used_agents", return_value=["claude-code", "codex"]), \
+             mock.patch.object(self.mod, "find_cli", side_effect=lambda a: "/bin/" + a), \
+             mock.patch.object(self.mod, "probe",
+                               side_effect=lambda cfg, a: (a in awake, "Not logged in")), \
+             mock.patch.object(self.mod, "work_folders", return_value=[]), \
+             mock.patch.object(self.mod, "install_launchd") as launchd:
+            self.mod.cmd_install(self.args)
+        return launchd
+
+    def test_agents_that_cannot_be_woken_are_skipped_and_switched_off(self):
+        """真遇到过：命令行 claude 没登录（桌面版登录了不算）。它叫不醒就别指望它每晚扫，
+        在服务器上明确关掉，Codex 照常装。"""
+        launchd = self.install(awake={"codex"})
+        launchd.assert_called_once()
+        cfg = json.loads(self.mod.CONFIG.read_text(encoding="utf-8"))
+        self.assertEqual(cfg["runners"], {"codex": "/bin/codex"})
+        toggles = {path: body["scan_enabled"] for method, path, body in self.api_calls
+                   if path.startswith("/api/agents/")}
+        self.assertEqual(toggles, {"/api/agents/codex": True, "/api/agents/claude-code": False})
+
+    def test_nothing_is_installed_when_no_agent_can_be_woken(self):
+        with self.assertRaises(SystemExit):
+            self.install(awake=set())
+        self.assertFalse(self.mod.CONFIG.exists())
+        self.assertFalse(any(p.startswith("/api/agents/") for _, p, _ in self.api_calls))
+
+    def test_finds_codex_hidden_inside_the_chatgpt_app(self):
+        """ChatGPT 桌面版把 codex 命令行藏在 app 包里，不在 PATH 上。"""
+        fake = self.tmp / "ChatGPT.app" / "Contents" / "Resources" / "codex"
+        fake.parent.mkdir(parents=True)
+        fake.write_text("#!/bin/sh\n")
+        fake.chmod(0o755)
+        spec = {"name": "codex", "also": [str(fake)]}
+        with mock.patch.dict(self.mod.CLI, {"codex": spec}), \
+             mock.patch.object(self.mod.shutil, "which", return_value=None):
+            self.assertEqual(self.mod.find_cli("codex"), str(fake))
 
 
 class TestServerEndpoints(WebCase):
