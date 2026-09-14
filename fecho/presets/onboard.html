@@ -30,6 +30,14 @@
     .err{color:var(--danger);font-size:13.5px}
     select{font:inherit;border:1px solid var(--line);border-radius:9px;padding:9px 12px;background:#fff}
     a{color:#5b4fb0}
+    .folders{border:1px solid var(--line);border-radius:9px;max-height:320px;overflow:auto;background:#fff}
+    .folders label{display:flex;gap:10px;align-items:flex-start;padding:9px 12px;border-top:1px solid var(--line);
+      font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all;cursor:pointer}
+    .folders label:first-child{border-top:0}
+    .folders label:hover{background:#fbfaf7}
+    .folders input{margin-top:3px;accent-color:var(--nav)}
+    .folders .when{margin-left:auto;padding-left:10px;color:var(--muted);white-space:nowrap;font-family:inherit}
+    .folders .hint{margin:0;padding:14px;color:var(--muted);font-size:13.5px}
     .foot{display:flex;justify-content:space-between;margin-top:22px;font-size:14px}
   </style>
 </head>
@@ -62,13 +70,25 @@
       </div>
     </section>
 
+    <section class="step">
+      <h2><span class="num">3</span>勾选哪些文件夹算工作</h2>
+      <p>agent 装好本机采集后，会把你用 agent 干过活的文件夹报上来。只有勾选的文件夹里的对话会被扫描，没勾的连打开都不会打开。</p>
+      <div class="folders" id="folders"><p class="hint">加载中…</p></div>
+      <div class="row">
+        <button class="ghost" id="reload-folders">刷新</button>
+        <button id="save-folders">保存勾选</button>
+        <span id="folder-msg"></span>
+      </div>
+    </section>
+
     <div class="foot">
-      <a href="/">打开 Dashboard →</a>
+      <a href="/">打开 Dashboard →（以后在 Settings 里改这些）</a>
       <a href="#" id="logout">退出登录</a>
     </div>
   </main>
   <script>
     const $ = s => document.querySelector(s);
+    const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const api = (path, body) => fetch(path, body === undefined ? {} : {
       method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
     }).then(async r => { const d = await r.json().catch(() => ({})); if (!r.ok) throw new Error(d.detail || d.error || r.status); return d; });
@@ -104,6 +124,24 @@
         const d = await api('/api/settings', {daily_time: $('#time').value});
         $('#time-msg').className = 'ok'; $('#time-msg').textContent = `已保存：每天 ${d.daily_time}`;
       } catch (e) { $('#time-msg').className = 'err'; $('#time-msg').textContent = e.message; }
+    };
+
+    async function loadFolders() {
+      try {
+        const d = await api('/api/folders');
+        $('#folders').innerHTML = d.items.length
+          ? d.items.map(f => `<label><input type="checkbox" value="${esc(f.path)}" ${f.selected ? 'checked' : ''}><span>${esc(f.path)}</span><span class="when">${f.last_used ? '最近 ' + esc(f.last_used) : ''}</span></label>`).join('')
+          : '<p class="hint">还没有上报的文件夹。等 agent 装好本机采集，再点「刷新」。</p>';
+      } catch (e) { $('#folders').innerHTML = `<p class="hint">${esc(e.message)}</p>`; }
+    }
+    loadFolders();
+    $('#reload-folders').onclick = loadFolders;
+    $('#save-folders').onclick = async () => {
+      const selected = [...document.querySelectorAll('#folders input:checked')].map(i => i.value);
+      try {
+        const d = await api('/api/folders', {selected});
+        $('#folder-msg').className = 'ok'; $('#folder-msg').textContent = `已保存：${d.selected.length} 个工作文件夹`;
+      } catch (e) { $('#folder-msg').className = 'err'; $('#folder-msg').textContent = e.message; }
     };
     $('#logout').onclick = async e => { e.preventDefault(); await api('/auth/logout', {}); location.href = '/login'; };
   </script>

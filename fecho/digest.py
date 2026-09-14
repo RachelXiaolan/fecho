@@ -71,22 +71,111 @@ STATUS_ICON = {"done": "✅", "wip": "⭕️", "blocked": "❌", "unknown": "•
 _TITLE_TRIM = re.compile(r"[（(【\[].*?[）)】\]]")
 
 
-def short_name(task: Dict[str, Any], persona: Dict[str, Any]) -> str:
-    """任务在日报里显示的名字。优先用人配的别名，否则用标题——不让模型起名。
+def task_key(task: Dict[str, Any]) -> str:
+    """短名按什么存：有 issue 就按 issue 号（同一个 issue 天天叫同一个名），自由任务按任务 ID。"""
+    return task.get("issue_key") or "task:%s" % task["task_id"]
 
-    模型给任务起名时会把当天还在讨论的候选名当成已确定（把 fecho 写成 fmjot）。
-    标题和 issue 号在库里是确定的，没理由让它猜。
+
+def short_name(task: Dict[str, Any], persona: Dict[str, Any],
+               aliases: Optional[Dict[str, str]] = None) -> str:
+    """任务在日报里显示的名字：人配的别名 > 模型起的短名 > 完整标题。
+
+    模型起的短名见 task_aliases()：起一次就存下来，起得不像名字就不用。
 
     不截断、不加省略号。真踩过：「agent 原生 time-off：Fecho」先按冒号砍掉了后半截，
     剩下的又超长被截成「agent 原生…」——最能认出是哪件事的「Fecho」反而没了。
     """
-    aliases = persona.get("task_aliases") or {}
-    if task.get("issue_key") and task["issue_key"] in aliases:
-        return aliases[task["issue_key"]]
+    manual = persona.get("task_aliases") or {}
+    if task.get("issue_key") and task["issue_key"] in manual:
+        return manual[task["issue_key"]]
+    auto = (aliases or {}).get(task_key(task))
+    if auto:
+        return auto
 
     title = (task.get("title") or "").strip()
     name = _TITLE_TRIM.sub("", title).strip(" -—、,，。") or title
     return name or (task.get("issue_key") or "未命名")
+
+
+# ---------- 任务短名 ----------
+# 日报里任务的名字由模型看 issue 标题和进展来起。真踩过模型起名的坑：它会把当天还在
+# 讨论的候选名当成已定（把 fecho 写成 fmjot）。所以两道保险：
+#   1. 起一次就存下来，以后一直用——不会今天一个明天一个，也不会被某天的讨论带偏
+#   2. 起得不像名字（太长、带链接、带竖线、就是个 issue 号）就不用，退回完整标题
+ALIAS_MAX_CHARS = 12
+
+
+def _valid_alias(text: str) -> Optional[str]:
+    name = re.sub(r"^[\s*`\"'「『【]+|[\s*`\"'」』】。，,;；:：]+$", "", text or "")
+    if not name or "\n" in name or len(name) > ALIAS_MAX_CHARS:
+        return None
+    if re.search(r"https?://|[|\[\]()]", name) or re.fullmatch(r"[A-Za-z]+-\d+", name):
+        return None
+    return name
+
+
+def _alias_prompt(tasks: List[Dict[str, Any]]) -> List[dict]:
+    sys = (
+        "你给工作日志里的任务起短名，让人在日报里一眼认出是哪件事。\n"
+        "规则：\n"
+        "- 每个短名不超过 %d 个字符，是个名字，不是一句话。\n"
+        "- 优先用 issue 标题里已经有的项目名、产品名、专有名词。"
+        "比如标题「agent 原生 time-off：Fecho」就叫「Fecho」。\n"
+        "- 标题里没有现成的名字，再根据进展内容概括这是哪件事。\n"
+        "- 不要用进展里还在讨论中的候选名。\n"
+        "- 不要写 issue 号、链接、emoji、引号。\n"
+        "输出格式：一行一个，`[序号] 短名`，不要别的。"
+    ) % ALIAS_MAX_CHARS
+    blocks = []
+    for i, t in enumerate(tasks, 1):
+        head = ("%s %s" % (t["issue_key"], t["title"]) if t.get("issue_key")
+                else "（自由任务）%s" % t.get("title", ""))
+        ups = [u["content_md"].strip().splitlines()[0][:80]
+               for u in t["updates"][:5] if (u.get("content_md") or "").strip()]
+        blocks.append("[%d] %s\n%s" % (i, head, "\n".join("  - " + x for x in ups)))
+    return [{"role": "system", "content": sys}, {"role": "user", "content": "\n\n".join(blocks)}]
+
+
+def _parse_aliases(raw: str, n: int) -> Dict[int, str]:
+    out: Dict[int, str] = {}
+    for line in re.sub(r"^```\w*\s*|\s*```$", "", (raw or "").strip()).splitlines():
+        m = re.match(r"^\s*\[(\d+)\]\s*(.+)$", line)
+        if m and 1 <= int(m.group(1)) <= n:
+            name = _valid_alias(m.group(2))
+            if name:
+                out[int(m.group(1))] = name
+    return out
+
+
+def task_aliases(author: str, tasks: List[Dict[str, Any]], persona: Dict[str, Any],
+                 warnings: Optional[List[str]] = None) -> Dict[str, str]:
+    """这个人所有任务的短名。还没起过名的，让模型起一次并存下来。
+
+    模型不可用或起名失败，不影响出日报——那几个任务先用完整标题。
+    """
+    with db.cursor() as conn:
+        known = {r["task_key"]: r["alias"] for r in conn.execute(
+            "SELECT task_key, alias FROM task_aliases WHERE author=?", (author,)).fetchall()}
+    manual = persona.get("task_aliases") or {}
+    missing = [t for t in tasks
+               if task_key(t) not in known and t.get("issue_key") not in manual]
+    if not missing or not config.llm_configured():
+        return known
+    try:
+        raw = llm.chat(_alias_prompt(missing), temperature=0.2, max_tokens=2000)
+    except llm.LLMError as exc:
+        if warnings is not None:
+            warnings.append("任务短名没起成（%s），先用完整标题" % str(exc)[:120])
+        return known
+    now = store.now_iso()
+    with db.cursor() as conn:
+        for idx, name in _parse_aliases(raw, len(missing)).items():
+            key = task_key(missing[idx - 1])
+            conn.execute(
+                "INSERT INTO task_aliases (author, task_key, alias, created_at) VALUES (?,?,?,?)"
+                " ON CONFLICT (author, task_key) DO NOTHING", (author, key, name, now))
+            known.setdefault(key, name)
+    return known
 
 
 def _daily_prompt(author, date, tasks, persona) -> List[dict]:
@@ -190,7 +279,7 @@ def _link(task: Dict[str, Any], label: str, persona: Dict[str, Any]) -> str:
     return "[**%s**](%s)" % (label, url)
 
 
-def _assemble_daily(date, tasks, items, todos, persona) -> str:
+def _assemble_daily(date, tasks, items, todos, persona, aliases=None) -> str:
     header = persona.get("daily_header", "{date_slash} 工作日志").format(
         date_slash=date.replace("-", "/"), date=date,
         display_name=persona.get("display_name", ""))
@@ -207,7 +296,7 @@ def _assemble_daily(date, tasks, items, todos, persona) -> str:
             t = tasks[i - 1]
             it = items.get(i) or {}
             icon = STATUS_ICON[status_key]
-            head = _link(t, short_name(t, persona), persona)
+            head = _link(t, short_name(t, persona, aliases), persona)
             summary = it.get("summary", "")
             out.append("%d. %s %s%s" % (i, icon, head, "：" + summary if summary else ""))
             for bullet_status, text in it.get("bullets", []):
@@ -217,7 +306,7 @@ def _assemble_daily(date, tasks, items, todos, persona) -> str:
         out += ["", "## To do", ""]
         for n, (idx, text) in enumerate(todos, 1):
             if idx and 1 <= idx <= len(tasks):
-                head = _link(tasks[idx - 1], short_name(tasks[idx - 1], persona), persona)
+                head = _link(tasks[idx - 1], short_name(tasks[idx - 1], persona, aliases), persona)
                 out.append("%d. %s：%s" % (n, head, text))
             else:
                 out.append("%d. %s" % (n, text))
@@ -248,7 +337,7 @@ def _voice_prompt(author, date, daily_md, persona, target_items, feedback=None) 
 
 # ---------- fallback（LLM 不可用时的确定性产物） ----------
 
-def _fallback_daily(author, date, tasks, persona) -> str:
+def _fallback_daily(author, date, tasks, persona, aliases=None) -> str:
     """LLM 挂了也要出同样结构的稿——链接、短名、图标照拼，内容用进展原文顶上。"""
     items = {}
     for i, t in enumerate(tasks, 1):
@@ -265,7 +354,7 @@ def _fallback_daily(author, date, tasks, persona) -> str:
             task_status = "unknown"
         items[i] = {"status": task_status, "summary": ups[0] if ups else "",
                     "bullets": [(statuses[n], u) for n, u in enumerate(ups[1:], 1)]}
-    return (_assemble_daily(date, tasks, items, [], persona)
+    return (_assemble_daily(date, tasks, items, [], persona, aliases)
             + "\n> 本篇为兜底稿（LLM 不可用），内容取自进展原文，未经整理。\n")
 
 
@@ -529,6 +618,7 @@ def generate(author: str, date: str, force: bool = False,
     if verified.get("error"):
         warnings.append("交叉验证未执行：%s" % verified["error"])
     model = config.LLM_MODEL
+    aliases = task_aliases(author, tasks, persona, warnings)
 
     # 日报和口播稿各自独立降级：一个挂了不该把另一个也拖成兜底稿。
     try:
@@ -548,11 +638,11 @@ def generate(author: str, date: str, force: bool = False,
             warnings.append("只整理出 %d/%d 个任务，其余可能因长度被截断"
                             % (len(items), len(tasks)))
         # 链接和结构在这里拼死，模型碰不到——它写错 URL 的账已经吃过一次了。
-        daily = _assemble_daily(date, tasks, items, todos, persona)
+        daily = _assemble_daily(date, tasks, items, todos, persona, aliases)
         daily_gen = "llm"
     except llm.LLMError as exc:
         warnings.append("日报 LLM 失败（%s），已输出兜底稿" % str(exc)[:160])
-        daily = _fallback_daily(author, date, tasks, persona)
+        daily = _fallback_daily(author, date, tasks, persona, aliases)
         daily_gen = "fallback"
 
     try:

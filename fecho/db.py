@@ -285,6 +285,16 @@ CREATE TABLE IF NOT EXISTS app_settings (
     value         TEXT NOT NULL,
     updated_at    TEXT NOT NULL
 );
+
+-- 日报里任务的短名。模型起一次就存下来，以后一直用这个：名字不会今天一个明天一个，
+-- 也不会被某天对话里还在讨论的候选名带偏。人在个人配置里写的别名优先于这里。
+CREATE TABLE IF NOT EXISTS task_aliases (
+    author        TEXT NOT NULL,
+    task_key      TEXT NOT NULL,        -- issue 号；自由任务是 task:<task_id>
+    alias         TEXT NOT NULL,
+    created_at    TEXT NOT NULL,
+    PRIMARY KEY (author, task_key)
+);
 """
 
 

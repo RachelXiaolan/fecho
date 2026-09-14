@@ -160,6 +160,37 @@
     .toast.show{display:flex;animation:toast-in .2s ease both}@keyframes toast-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
     .toast button{border:1px solid rgba(255,255,255,.3);background:transparent;color:#fff;border-radius:7px;padding:5px 9px}
     .toast.error{background:#6e2725}
+    [hidden]{display:none!important}
+    .viewas{display:none;align-items:center;justify-content:space-between;gap:16px;padding:12px 16px;
+      border-radius:10px;background:#eceaf5;color:#3f3a6b;margin-bottom:16px}
+    .viewas.show{display:flex}
+    .setting-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 18px;flex-wrap:wrap}
+    .agent-card{display:grid;grid-template-columns:40px minmax(0,1fr) auto;gap:14px;align-items:center;
+      padding:14px 18px;border-top:1px solid var(--line)}
+    .agent-card:first-child{border-top:0}
+    .agent-card.on{background:linear-gradient(90deg,rgba(201,180,250,.16),rgba(201,180,250,0) 65%)}
+    .agent-badge{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;font-weight:700;
+      font-size:12px;letter-spacing:.3px;background:var(--surface-soft);color:var(--muted)}
+    .agent-card.on .agent-badge{background:var(--nav);color:var(--violet)}
+    .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--faint);margin-right:5px;vertical-align:1px}
+    .dot.live{background:#3fae7d}
+    .switch{position:relative;display:inline-block;width:40px;height:22px;flex:none}
+    .switch input{opacity:0;width:0;height:0;min-height:0;position:absolute}
+    .switch span{position:absolute;inset:0;border-radius:99px;background:#d9d6ce;transition:.15s;cursor:pointer}
+    .switch span:before{content:"";position:absolute;width:16px;height:16px;left:3px;top:3px;border-radius:50%;
+      background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:.15s}
+    .switch input:checked+span{background:var(--nav)}
+    .switch input:checked+span:before{transform:translateX(18px)}
+    .switch input:focus-visible+span{box-shadow:0 0 0 3px rgba(119,113,166,.3)}
+    .folder{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;
+      padding:11px 18px;border-top:1px solid var(--line);cursor:pointer}
+    .folder:first-child{border-top:0}
+    .folder:hover{background:#fbfaf7}
+    .folder input{width:16px;height:16px;min-height:0;accent-color:var(--nav)}
+    .folder-path{font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}
+    .panel-foot{display:flex;gap:10px;align-items:center;padding:12px 18px;border-top:1px solid var(--line);
+      background:#fbfaf7;flex-wrap:wrap}
+    .panel-foot input{flex:1;min-width:220px}
     @media(max-width:900px){
       .shell{grid-template-columns:78px minmax(0,1fr)}.sidebar{padding:22px 10px}.brand{padding:0 8px 26px}.brand-copy,.brand-name,.nav-label,.nav button span:first-child,.sidebar-foot span{display:none}
       .nav button{justify-content:center;min-height:44px}.topbar{padding:17px 22px;align-items:flex-start}.toolbar{max-width:480px}
@@ -168,7 +199,7 @@
     }
     @media(max-width:640px){
       .shell{display:block}.sidebar{position:fixed;z-index:20;top:auto;bottom:0;width:100%;height:62px;padding:7px 8px;background:var(--nav-deep)}
-      .brand,.nav-label,.sidebar-foot{display:none}.nav{grid-template-columns:repeat(5,1fr);gap:2px}.nav button{padding:6px 3px;display:grid;place-items:center;gap:2px;font-size:10px}.nav button span:first-child{display:block}.nav .count{font-size:9px;min-width:18px;padding:0 4px}
+      .brand,.nav-label,.sidebar-foot{display:none}.nav{grid-auto-flow:column;grid-auto-columns:1fr;gap:2px}.nav button{padding:6px 3px;display:grid;place-items:center;gap:2px;font-size:10px}.nav button span:first-child{display:block}.nav .count{font-size:9px;min-width:18px;padding:0 4px}
       .topbar{position:static;display:block;padding:18px 16px}.toolbar{margin-top:15px;display:grid;grid-template-columns:1fr 1fr}.toolbar .field:first-child{grid-column:1/-1}.toolbar input,.toolbar select{width:100%;max-width:none}
       main{padding:20px 14px 92px}.hero{padding:23px 21px}.hero h2{font-size:25px}.hero .hero-action{position:static;margin-top:18px}.metrics{gap:8px}.metric{padding:14px}.metric strong{font-size:23px}
       .two-col{display:block}.two-col>div+div{margin-top:18px}.task-row{grid-template-columns:1fr}.task-actions{justify-content:flex-start}.report-paper{padding:22px 18px}.toast{left:14px;right:14px;bottom:76px}
@@ -186,6 +217,8 @@
       <button data-view="tasks"><span>Tasks</span><span class="count" id="nav-tasks">—</span></button>
       <button data-view="reports"><span>Reports</span><span class="count" id="nav-reports">—</span></button>
       <button data-view="system"><span>System</span><span class="count" id="nav-system">—</span></button>
+      <button data-view="settings" data-cloud-only hidden><span>Settings</span><span class="count" id="nav-settings">—</span></button>
+      <button data-view="admin" data-admin-only hidden><span>Admin</span><span class="count" id="nav-admin">—</span></button>
     </nav>
     <div class="sidebar-foot"><div class="connection"><i class="pulse"></i><span id="connection-copy">本地服务已连接</span></div></div>
   </aside>
@@ -203,6 +236,7 @@
 
     <main>
       <div id="error-state" class="error-state"><span id="error-copy"></span><button class="btn small" id="retry">重试</button></div>
+      <div id="viewas" class="viewas" role="status"><span id="viewas-copy"></span><button class="btn small" id="viewas-exit">回到我自己的</button></div>
       <div id="loading" class="loading show"><div class="spinner"></div>正在整理工作现场…</div>
 
       <section class="view active" data-page="today" aria-labelledby="today-heading">
@@ -239,6 +273,26 @@
         <div class="two-col"><div><div class="panel panel-pad" id="doctor"></div></div><div><div class="panel panel-pad" id="automation-status"></div><div class="panel panel-pad" id="sources" style="margin-top:18px"></div></div></div>
         <div class="section-head"><div><h2>最近扫描</h2><p>失败会保留重试边界，不会静默跳过。</p></div></div><div class="panel" style="overflow:auto"><table><thead><tr><th>时间</th><th>Agent</th><th>项目</th><th>状态</th><th>结果</th></tr></thead><tbody id="scan-runs"></tbody></table></div>
       </section>
+      <section class="view" data-page="settings" aria-labelledby="settings-heading">
+        <div class="section-head"><div><h2 id="settings-heading">出日报时间</h2><p>北京时间。到点服务器整理日报和口播稿；你电脑上的扫描自动提前 15 分钟。改了之后本机下次来问就按新时间，不用重装。</p></div></div>
+        <div class="panel"><div class="setting-row"><div><div class="item-title">每天几点出日报</div><div class="meta" id="daily-time-copy">—</div></div><div class="button-row"><select id="daily-time" aria-label="出日报时间"></select><button class="btn primary" id="save-daily-time">保存</button></div></div></div>
+
+        <div class="section-head"><div><h2>Agent</h2><p>每个 agent 扫它自己的对话。「已接入」表示它连过 Fecho；开关决定每晚扫不扫它的聊天记录。</p></div></div>
+        <div class="panel" id="agent-list"></div>
+
+        <div class="section-head"><div><h2>工作文件夹</h2><p>只有勾选的文件夹里的对话会被扫描；没勾的，对话连打开都不会打开。</p></div><span class="tag" id="folder-count">—</span></div>
+        <div class="panel"><div id="folder-list"></div><div class="panel-foot"><input id="folder-add" placeholder="手动加一个文件夹的完整路径，比如 /Users/you/Documents/work" aria-label="手动添加文件夹"><button class="btn small" id="folder-add-btn">添加</button><button class="btn primary" id="save-folders">保存勾选</button></div></div>
+
+        <div class="section-head"><div><h2>管理员</h2><p>admin 可以查看全员的日志、审批新的 admin。</p></div></div>
+        <div class="panel panel-pad" id="admin-status"></div>
+      </section>
+
+      <section class="view" data-page="admin" aria-labelledby="admin-heading">
+        <div class="section-head"><div><h2 id="admin-heading">待审批</h2><p>有人申请成为 admin。批准后对方可以查看全员的日志。</p></div><span class="tag" id="request-count">0</span></div>
+        <div class="panel" id="request-list"></div>
+        <div class="section-head"><div><h2>全员</h2><p>点「查看日志」进入对方的面板。只读，不会改动别人的数据。</p></div></div>
+        <div class="panel" style="overflow:auto"><table><thead><tr><th>成员</th><th>角色</th><th>出日报</th><th>最近有记录</th><th>进展条数</th><th></th></tr></thead><tbody id="user-list"></tbody></table></div>
+      </section>
     </main>
   </div>
 </div>
@@ -249,18 +303,20 @@
   const $ = (selector, root=document) => root.querySelector(selector);
   const $$ = (selector, root=document) => [...root.querySelectorAll(selector)];
   const esc = value => String(value == null ? '' : value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
-  const state = {data:null, view:'today', taskStatus:'all', reportTab:'daily', undo:null, toastTimer:null};
+  const state = {data:null, view:'today', taskStatus:'all', reportTab:'daily', undo:null, toastTimer:null,
+    me:null, viewAs:null, settings:{agents:[], folders:[]}};
   const pageCopy = {
     today:['Today','今天发生了什么，一眼看清。'], review:['Review inbox','把自动判断变成人工确认。'],
     tasks:['Tasks','一件事是一条持续生长的任务。'], reports:['Reports','让成品和事实始终同步。'],
-    system:['System','知道系统哪里正常，哪里需要处理。']
+    system:['System','知道系统哪里正常，哪里需要处理。'],
+    settings:['Settings','出日报时间、agent、工作文件夹。'], admin:['Admin','审批 admin，查看全员的日志。']
   };
 
   async function request(path, options={}){
     const response = await fetch(path, options);
     let payload = {};
     try { payload = await response.json(); } catch (_) { payload = {}; }
-    if (!response.ok) throw new Error(payload.error || `请求失败（${response.status}）`);
+    if (!response.ok) throw new Error(payload.error || payload.detail || `请求失败（${response.status}）`);
     if (payload.ok === false) throw new Error(payload.error || '操作失败');
     return payload;
   }
@@ -276,7 +332,9 @@
     if (!quiet) $('#loading').classList.add('show');
     $('#error-state').classList.remove('show');
     try{
-      state.data = await request(`/api/dashboard?date=${encodeURIComponent(date)}`);
+      state.data = await request(state.viewAs
+        ? `/api/admin/dashboard?author=${encodeURIComponent(state.viewAs.author)}&date=${encodeURIComponent(date)}`
+        : `/api/dashboard?date=${encodeURIComponent(date)}`);
       hydrateFilters(); renderAll();
     }catch(error){ showError(error.message); }
     finally{ $('#loading').classList.remove('show'); }
@@ -456,10 +514,11 @@
     $('#scan-runs').innerHTML=runs.length?runs.map(run=>`<tr><td>${esc((run.started_at||'').slice(0,16).replace('T',' '))}</td><td>${esc(run.producer_agent)}</td><td>${esc(run.project.split('/').pop())}</td><td>${run.status==='succeeded'?'<span class="tag done">成功</span>':'<span class="tag blocked">失败</span>'}</td><td>${run.error?esc(run.error):`${run.entries} 条 / ${run.chunks} 块`}</td></tr>`).join(''):`<tr><td colspan="5">还没有扫描记录。</td></tr>`;
   }
 
-  function switchView(view){ state.view=view; $$('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===view)); $$('.view').forEach(p=>p.classList.toggle('active',p.dataset.page===view)); const copy=pageCopy[view]; $('#page-title').textContent=copy[0]; $('#page-subtitle').textContent=copy[1]; window.scrollTo({top:0,behavior:'smooth'}); }
+  function switchView(view){ state.view=view; $$('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===view)); $$('.view').forEach(p=>p.classList.toggle('active',p.dataset.page===view)); $('.toolbar').hidden=['settings','admin'].includes(view); const copy=pageCopy[view]; $('#page-title').textContent=copy[0]; $('#page-subtitle').textContent=copy[1]; window.scrollTo({top:0,behavior:'smooth'}); }
   function showError(message){ $('#error-copy').textContent=message; $('#error-state').classList.add('show'); }
   function toast(message, undo=null, isError=false){ clearTimeout(state.toastTimer); state.undo=undo; $('#toast-copy').textContent=message; $('#undo-action').style.display=undo?'block':'none'; $('#toast').classList.toggle('error',isError); $('#toast').classList.add('show'); state.toastTimer=setTimeout(()=>$('#toast').classList.remove('show'),6000); }
   async function mutate(path, body, success, undo=null){
+    if(state.viewAs){ toast('正在查看别人的日志，只读',null,true); throw new Error('只读'); }
     try{ const result=await post(path,body); if(result.dashboard){state.data=result.dashboard;renderAll();}else await loadDashboard({quiet:true}); toast(success,undo); return result; }
     catch(error){ toast(error.message,null,true); throw error; }
   }
@@ -467,6 +526,10 @@
   document.addEventListener('click', async event=>{
     const nav=event.target.closest('[data-view]'); if(nav){switchView(nav.dataset.view);return;}
     const go=event.target.closest('[data-go]'); if(go){switchView(go.dataset.go);return;}
+    const viewAs=event.target.closest('[data-view-as]'); if(viewAs){setViewAs(viewAs.dataset.viewAs,viewAs.dataset.name);return;}
+    const decide=event.target.closest('[data-decide]');
+    if(decide){ decide.disabled=true; try{ await post(`/api/admin/requests/${encodeURIComponent(decide.dataset.decide)}`,{approve:decide.dataset.approve==='1'}); toast(decide.dataset.approve==='1'?'已批准，对方现在是 admin':'已拒绝'); await loadAdmin(); }catch(error){toast(error.message,null,true);} finally{decide.disabled=false;} return; }
+    if(event.target.closest('#request-admin')){ try{ await post('/api/admin/request',{}); state.me=await request('/api/me'); renderSettings(); toast('申请已提交，等 admin 审批'); }catch(error){toast(error.message,null,true);} return; }
     const reportTab=event.target.closest('[data-report-tab]'); if(reportTab){state.reportTab=reportTab.dataset.reportTab;renderReports();return;}
     const taskTab=event.target.closest('[data-task-status]'); if(taskTab){state.taskStatus=taskTab.dataset.taskStatus;renderTasks();return;}
     const action=event.target.closest('[data-action]'); if(!action)return;
@@ -489,6 +552,7 @@
   });
 
   async function regenerate(){
+    if(state.viewAs){ toast('正在查看别人的日志，只读',null,true); return; }
     const buttons=[$('#regenerate'),$('#dirty-regenerate')]; buttons.forEach(b=>b.disabled=true);
     toast('正在调用模型整理日报…');
     // 云端版出日报要几分钟，接口只是排了个队——这时候说「已更新」是假话
@@ -503,6 +567,94 @@
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')loadDashboard({quiet:true});});
   window.addEventListener('focus',()=>loadDashboard({quiet:true}));
   setInterval(()=>{if(document.visibilityState==='visible')loadDashboard({quiet:true});},60000);
+  // ---------- 云端版：设置与管理 ----------
+  const AGENT_BADGE={'claude-code':'CC','codex':'CX','hermes':'HM'};
+  // 服务器存的是 UTC；给人看要换成北京时间，否则傍晚 6 点会显示成上午 10 点
+  const stamp=value=>{
+    if(!value) return '';
+    const d=new Date(value); if(isNaN(d)) return String(value).slice(0,16).replace('T',' ');
+    const p=Object.fromEntries(new Intl.DateTimeFormat('en',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(d).map(x=>[x.type,x.value]));
+    return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}`;
+  };
+  function scanAt(time){ const [h,m]=time.split(':').map(Number), x=h*60+m-15; return String(Math.floor(x/60)).padStart(2,'0')+':'+String(x%60).padStart(2,'0'); }
+
+  async function loadMe(){
+    try{ state.me=await request('/api/me'); }catch(_){ state.me=null; }
+    const cloud=!!(state.me&&state.me.cloud);
+    $$('[data-cloud-only]').forEach(el=>el.hidden=!cloud);
+    $$('[data-admin-only]').forEach(el=>el.hidden=!(cloud&&state.me.is_admin));
+    if(!cloud) return;
+    $('#connection-copy').textContent=state.me.display_name||state.me.author;
+    try{ await loadSettings(); if(state.me.is_admin) await loadAdmin(); }catch(error){ toast(error.message,null,true); }
+  }
+  async function loadSettings(){
+    const [agents,folders]=await Promise.all([request('/api/agents'),request('/api/folders')]);
+    state.settings.agents=agents.items; state.settings.folders=folders.items;
+    renderSettings();
+  }
+  function renderSettings(){
+    const me=state.me, select=$('#daily-time');
+    if(!select.options.length) for(let m=15;m<22*60;m+=15){ const v=String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); select.add(new Option(v,v)); }
+    select.value=me.daily_time;
+    $('#daily-time-copy').textContent=`现在：每天 ${me.daily_time} 出日报，${scanAt(me.daily_time)} 扫描`;
+    $('#nav-settings').textContent=state.settings.folders.some(f=>f.selected)?'✓':'!';
+    $('#agent-list').innerHTML=state.settings.agents.map(a=>`<div class="agent-card ${a.scan_enabled?'on':''}"><div class="agent-badge">${esc(AGENT_BADGE[a.agent]||a.agent.slice(0,2).toUpperCase())}</div><div><div class="item-title">${esc(a.label)}</div><div class="meta"><span><i class="dot ${a.connected?'live':''}"></i>${a.connected?'已接入 · 最近 '+esc(stamp(a.last_seen)):'还没接入'}</span><span>${a.scan_enabled?'每晚扫它的对话':'不扫它的对话'}</span></div></div><label class="switch"><input type="checkbox" data-agent-toggle="${esc(a.agent)}" ${a.scan_enabled?'checked':''} aria-label="扫描 ${esc(a.label)} 的对话"><span></span></label></div>`).join('');
+    renderFolders();
+    const req=me.admin_request;
+    $('#admin-status').innerHTML=me.is_admin
+      ?'<div class="item-title">你是 admin</div><div class="meta">可以在左侧 Admin 里审批申请、查看全员的日志。</div>'
+      :req?`<div class="item-title">申请已提交，等待审批</div><div class="meta">提交于 ${esc(stamp(req.created_at))}</div>`
+      :'<div class="item-head"><div><div class="item-title">你还不是 admin</div><div class="meta">需要查看全员日志的话可以申请，由现有 admin 审批。</div></div><button class="btn" id="request-admin">申请 admin</button></div>';
+  }
+  function renderFolders(){
+    const items=state.settings.folders, picked=items.filter(f=>f.selected).length;
+    $('#folder-count').textContent=`已勾选 ${picked} / ${items.length}`;
+    $('#folder-list').innerHTML=items.length
+      ?items.map(f=>`<label class="folder"><input type="checkbox" data-folder="${esc(f.path)}" ${f.selected?'checked':''}><span class="folder-path">${esc(f.path)}</span><span class="meta" style="margin:0">${f.last_used?'最近 '+esc(f.last_used):''}</span></label>`).join('')
+      :'<div class="empty"><strong>还没有上报的文件夹</strong>本机采集装好后，用 agent 干过活的文件夹会自动出现在这里。也可以在下面手动添加。</div>';
+  }
+  async function loadAdmin(){
+    const [reqs,users]=await Promise.all([request('/api/admin/requests'),request('/api/admin/users')]);
+    $('#nav-admin').textContent=reqs.items.length||'—'; $('#request-count').textContent=reqs.items.length;
+    $('#request-list').innerHTML=reqs.items.length
+      ?reqs.items.map(r=>`<div class="item item-head"><div><div class="item-title">${esc(r.display_name||r.author)}</div><div class="meta">${esc(r.author)} · 申请于 ${esc(stamp(r.created_at))}</div></div><div class="button-row"><button class="btn small" data-decide="${esc(r.request_id)}" data-approve="0">拒绝</button><button class="btn small primary" data-decide="${esc(r.request_id)}" data-approve="1">批准</button></div></div>`).join('')
+      :'<div class="empty"><strong>没有待审批的申请</strong></div>';
+    $('#user-list').innerHTML=users.items.map(u=>`<tr><td><div class="item-title">${esc(u.display_name)}</div><div class="meta" style="margin-top:2px">${esc(u.author)}</div></td><td>${u.is_admin?'<span class="tag done">admin</span>':'<span class="tag">成员</span>'}</td><td>${esc(u.daily_time||'')}</td><td>${esc(u.last_active_date||'—')}</td><td>${u.update_count||0}</td><td><button class="btn small" data-view-as="${esc(u.author)}" data-name="${esc(u.display_name)}">查看日志</button></td></tr>`).join('');
+  }
+  function setViewAs(author,name){
+    state.viewAs=author&&author!==(state.me||{}).author?{author,name}:null;
+    $('#viewas').classList.toggle('show',!!state.viewAs);
+    $('#viewas-copy').textContent=state.viewAs?`正在查看 ${state.viewAs.name}（${state.viewAs.author}）的日志 · 只读`:'';
+    switchView('today'); loadDashboard();
+  }
+
+  $('#viewas-exit').addEventListener('click',()=>setViewAs(null));
+  $('#save-daily-time').addEventListener('click',async()=>{
+    try{ const r=await post('/api/settings',{daily_time:$('#daily-time').value}); state.me.daily_time=r.daily_time; renderSettings(); toast(`已保存：每天 ${r.daily_time} 出日报`); }
+    catch(error){toast(error.message,null,true);}
+  });
+  document.addEventListener('change',async event=>{
+    const toggle=event.target.closest('[data-agent-toggle]');
+    if(toggle){ const on=toggle.checked; toggle.disabled=true;
+      try{ await post(`/api/agents/${encodeURIComponent(toggle.dataset.agentToggle)}`,{scan_enabled:on}); await loadSettings(); toast(on?'以后每晚扫它的对话':'不再扫它的对话'); }
+      catch(error){ toggle.checked=!on; toggle.disabled=false; toast(error.message,null,true); }
+      return; }
+    const folder=event.target.closest('[data-folder]');
+    if(folder){ const item=state.settings.folders.find(f=>f.path===folder.dataset.folder); if(item) item.selected=folder.checked; renderFolders(); }
+  });
+  $('#folder-add-btn').addEventListener('click',()=>{
+    const path=$('#folder-add').value.trim().replace(/\/+$/,'');
+    if(!path.startsWith('/')){ toast('要填完整路径，以 / 开头',null,true); return; }
+    const hit=state.settings.folders.find(f=>f.path===path);
+    if(hit) hit.selected=true; else state.settings.folders.unshift({path,selected:true,last_used:null});
+    $('#folder-add').value=''; renderFolders(); toast('已加到列表，记得点「保存勾选」');
+  });
+  $('#save-folders').addEventListener('click',async()=>{
+    try{ const r=await post('/api/folders',{selected:state.settings.folders.filter(f=>f.selected).map(f=>f.path)}); await loadSettings(); toast(`已保存：${r.selected.length} 个工作文件夹`); }
+    catch(error){toast(error.message,null,true);}
+  });
+
+  loadMe();
   loadDashboard();
 </script>
 </body>
