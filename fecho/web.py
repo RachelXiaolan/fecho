@@ -508,9 +508,36 @@ def build_app():
             return {"ok": True, "queued": True, "job": job,
                     "message": "已排队，几分钟后刷新就能看到新的日报",
                     "dashboard": dashboard_payload(me, date_)}
-        result = service.end_of_day(date_, author=me, force=True)
+        # 人点了「重新生成」：明确要覆盖，改过的版本会留在历史版本里
+        result = service.end_of_day(date_, author=me, force=True, keep_human=False)
         return {"ok": True, "result": result,
                 "dashboard": dashboard_payload(me, date_)}
+
+    @app.post("/api/reports/daily")
+    def api_edit_daily(request: Request, body: Dict[str, Any] = Body(...),
+                       authorization: Optional[str] = Header(None)):
+        """人亲手改日报。只能改自己的：admin 看别人的面板是只读的，这里也只认 me。"""
+        me = guard(request, authorization)
+        from . import digest, service
+        date_ = body.get("date") or store.today()
+        saved = digest.save_human_edit(me, date_, body.get("content_md") or "")
+        follow = service.after_human_edit(me, date_) if saved["status"] == "saved" else {}
+        return {"ok": True, "saved": saved, "follow_up": follow,
+                "dashboard": dashboard_payload(me, date_)}
+
+    @app.get("/api/style")
+    def api_style(request: Request, authorization: Optional[str] = Header(None)):
+        """我的写作偏好。每个人只能看自己的。"""
+        me = guard(request, authorization)
+        from . import style
+        return style.get(me)
+
+    @app.post("/api/style")
+    def api_style_save(request: Request, body: Dict[str, Any] = Body(...),
+                       authorization: Optional[str] = Header(None)):
+        me = guard(request, authorization)
+        from . import style
+        return style.save(me, body.get("content_md") or "")
 
     # ---- 云端版：登录 ----
     from fastapi.responses import RedirectResponse

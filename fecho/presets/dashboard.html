@@ -161,6 +161,11 @@
     .toast button{border:1px solid rgba(255,255,255,.3);background:transparent;color:#fff;border-radius:7px;padding:5px 9px}
     .toast.error{background:#6e2725}
     [hidden]{display:none!important}
+    .report-edit{display:grid;gap:10px}
+    .report-editor,.style-editor{display:block;width:100%;resize:vertical;
+      font:13px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace}
+    .report-editor{min-height:440px;padding:14px 16px}
+    .style-editor{min-height:170px;border:0;border-radius:0;padding:14px 18px}
     .viewas{display:none;align-items:center;justify-content:space-between;gap:16px;padding:12px 16px;
       border-radius:10px;background:#eceaf5;color:#3f3a6b;margin-bottom:16px}
     .viewas.show{display:flex}
@@ -263,8 +268,8 @@
       </section>
 
       <section class="view" data-page="reports" aria-labelledby="reports-heading">
-        <div class="section-head"><div><h2 id="reports-heading">Reports</h2><p>日报、口播和每一次生成历史都在这里。</p></div><button class="btn primary" id="regenerate">重新生成</button></div>
-        <div id="report-dirty" class="dirty"><span>进展或归属已经变化，这份报告需要重新生成。</span><button class="btn small" id="dirty-regenerate">现在生成</button></div>
+        <div class="section-head"><div><h2 id="reports-heading">Reports</h2><p>日报、口播和每一次生成历史都在这里。</p></div><div class="button-row"><button class="btn" id="edit-report" hidden>修改</button><button class="btn primary" id="regenerate">重新生成</button></div></div>
+        <div id="report-dirty" class="dirty"><span id="report-dirty-copy">进展或归属已经变化，这份报告需要重新生成。</span><button class="btn small" id="dirty-regenerate">现在生成</button></div>
         <div class="panel report-layout"><div class="report-nav" id="report-tabs"><button class="active" data-report-tab="daily">日报</button><button data-report-tab="voice">口播稿</button><button data-report-tab="history">历史版本</button><button data-report-tab="warnings">生成提示</button></div><div class="report-paper" id="report-content">尚未生成。</div></div>
       </section>
 
@@ -282,6 +287,9 @@
 
         <div class="section-head"><div><h2>工作文件夹</h2><p>只有勾选的文件夹里的对话会被扫描；没勾的，对话连打开都不会打开。</p></div><span class="tag" id="folder-count">—</span></div>
         <div class="panel"><div id="folder-list"></div><div class="panel-foot"><input id="folder-add" placeholder="手动加一个文件夹的完整路径，比如 /Users/you/Documents/work" aria-label="手动添加文件夹"><button class="btn small" id="folder-add-btn">添加</button><button class="btn primary" id="save-folders">保存勾选</button></div></div>
+
+        <div class="section-head"><div><h2>写作偏好</h2><p>从你亲手改日报的地方总结出来，以后出日报照着写。只有你自己看得到；学偏了直接改掉或删掉那一条。</p></div><span class="tag" id="style-updated">—</span></div>
+        <div class="panel"><textarea id="style-editor" class="style-editor" aria-label="写作偏好" placeholder="还没有。你在 Reports 里改过日报之后，这里会出现总结出来的偏好。"></textarea><div class="panel-foot"><span class="meta" style="margin:0;flex:1">每条一行，以「- 」开头。清空就是不要任何偏好。</span><button class="btn small" id="clear-style">清空</button><button class="btn primary" id="save-style">保存</button></div></div>
 
         <div class="section-head"><div><h2>管理员</h2><p>admin 可以查看全员的日志、审批新的 admin。</p></div></div>
         <div class="panel panel-pad" id="admin-status"></div>
@@ -304,7 +312,7 @@
   const $$ = (selector, root=document) => [...root.querySelectorAll(selector)];
   const esc = value => String(value == null ? '' : value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
   const state = {data:null, view:'today', taskStatus:'all', reportTab:'daily', undo:null, toastTimer:null,
-    me:null, viewAs:null, settings:{agents:[], folders:[]}};
+    me:null, viewAs:null, editing:false, settings:{agents:[], folders:[]}};
   const pageCopy = {
     today:['Today','今天发生了什么，一眼看清。'], review:['Review inbox','把自动判断变成人工确认。'],
     tasks:['Tasks','一件事是一条持续生长的任务。'], reports:['Reports','让成品和事实始终同步。'],
@@ -473,6 +481,12 @@
 
   function renderReports(){
     const report=state.data.reports; $('#report-dirty').classList.toggle('show',report.dirty);
+    $('#report-dirty-copy').textContent=report.generator==='human'
+      ?'有新的进展或归属变化。这份日报被你改过，重新生成会覆盖你的修改（修改版会留在历史版本里）。'
+      :'进展或归属已经变化，这份报告需要重新生成。';
+    $('#edit-report').hidden=!report.daily||!!state.viewAs||state.editing;
+    // 正在改的时候，每分钟的自动刷新不能把编辑框重画掉——写了一半的字会没
+    if(state.editing&&state.reportTab==='daily'&&$('#report-editor')) return;
     $$('#report-tabs button').forEach(button=>button.classList.toggle('active',button.dataset.reportTab===state.reportTab));
     const empty=text=>`<p class="report-empty">${esc(text)}</p>`;
     let html='';
@@ -482,10 +496,12 @@
     const noDaily=updates
       ?`这天有 ${updates} 条记录，日报还没生成。到了每天出日报的时间会自动生成，也可以点「重新生成」。`
       :'这天还没有收到任何工作记录。agent 随手记的内容和每晚扫描到的内容上传后，会出现在这里。';
-    if(state.reportTab==='daily') html=report.daily?md(report.daily):empty(noDaily);
+    if(state.reportTab==='daily') html=state.editing
+      ?`<div class="report-edit"><textarea id="report-editor" class="report-editor" aria-label="修改日报">${esc(report.daily||'')}</textarea><p class="meta" style="margin:0">保存后：旧版本进「历史版本」；口播稿按新日报重出；你的写作偏好在后台更新，以后出日报照着写。</p><div class="button-row"><button class="btn" id="cancel-edit">取消</button><button class="btn primary" id="save-edit">保存</button></div></div>`
+      :(report.daily?md(report.daily):empty(noDaily));
     if(state.reportTab==='voice') html=report.voice?md(report.voice):empty('尚未生成口播稿。');
     if(state.reportTab==='history') html=report.history.length
-      ?report.history.map((item,index)=>`<div class="report-version">版本 ${index+1} · ${esc(item.kind)} · ${esc(item.created_at)}</div>${md(item.content_md)}`).join('<hr>')
+      ?report.history.map((item,index)=>`<div class="report-version">版本 ${index+1} · ${esc(item.kind)} · ${item.generator==='human'?'人工修改':'模型生成'} · ${esc(stamp(item.created_at))}</div>${md(item.content_md)}`).join('<hr>')
       :empty('还没有历史版本。');
     if(state.reportTab==='warnings') html=report.warnings.length
       ?'<ul>'+report.warnings.map(text=>`<li>${esc(text)}</li>`).join('')+'</ul>'
@@ -530,6 +546,14 @@
     const decide=event.target.closest('[data-decide]');
     if(decide){ decide.disabled=true; try{ await post(`/api/admin/requests/${encodeURIComponent(decide.dataset.decide)}`,{approve:decide.dataset.approve==='1'}); toast(decide.dataset.approve==='1'?'已批准，对方现在是 admin':'已拒绝'); await loadAdmin(); }catch(error){toast(error.message,null,true);} finally{decide.disabled=false;} return; }
     if(event.target.closest('#request-admin')){ try{ await post('/api/admin/request',{}); state.me=await request('/api/me'); renderSettings(); toast('申请已提交，等 admin 审批'); }catch(error){toast(error.message,null,true);} return; }
+    if(event.target.closest('#edit-report')){ if(state.viewAs){toast('正在查看别人的日志，只读',null,true);return;} state.editing=true; state.reportTab='daily'; renderReports(); const editor=$('#report-editor'); if(editor) editor.focus(); return; }
+    if(event.target.closest('#cancel-edit')){ state.editing=false; renderReports(); return; }
+    const saveEdit=event.target.closest('#save-edit');
+    if(saveEdit){ saveEdit.disabled=true;
+      try{ const r=await post('/api/reports/daily',{date:state.data.date,content_md:$('#report-editor').value}); state.editing=false; state.data=r.dashboard; renderAll();
+        toast(r.saved.status==='unchanged'?'没有改动':'已保存。旧版本在历史版本里；口播稿和写作偏好在后台更新'); if(state.me&&state.me.cloud) loadStyle().catch(()=>{}); }
+      catch(error){ saveEdit.disabled=false; toast(error.message,null,true); }
+      return; }
     const reportTab=event.target.closest('[data-report-tab]'); if(reportTab){state.reportTab=reportTab.dataset.reportTab;renderReports();return;}
     const taskTab=event.target.closest('[data-task-status]'); if(taskTab){state.taskStatus=taskTab.dataset.taskStatus;renderTasks();return;}
     const action=event.target.closest('[data-action]'); if(!action)return;
@@ -591,6 +615,7 @@
     const [agents,folders]=await Promise.all([request('/api/agents'),request('/api/folders')]);
     state.settings.agents=agents.items; state.settings.folders=folders.items;
     renderSettings();
+    loadStyle().catch(error=>toast(error.message,null,true));
   }
   function renderSettings(){
     const me=state.me, select=$('#daily-time');
@@ -653,6 +678,18 @@
     try{ const r=await post('/api/folders',{selected:state.settings.folders.filter(f=>f.selected).map(f=>f.path)}); await loadSettings(); toast(`已保存：${r.selected.length} 个工作文件夹`); }
     catch(error){toast(error.message,null,true);}
   });
+
+  async function loadStyle(){ showStyle(await request('/api/style')); }
+  function showStyle(profile){
+    $('#style-editor').value=profile.content_md||'';
+    $('#style-updated').textContent=profile.updated_at?`更新于 ${stamp(profile.updated_at)}`:'还没有';
+  }
+  async function saveStyle(content){
+    try{ showStyle(await post('/api/style',{content_md:content})); toast(content.trim()?'写作偏好已保存，下次出日报生效':'已清空写作偏好'); }
+    catch(error){ toast(error.message,null,true); }
+  }
+  $('#save-style').addEventListener('click',()=>saveStyle($('#style-editor').value));
+  $('#clear-style').addEventListener('click',()=>{ if(confirm('清空所有写作偏好？以后出日报不再按这些写。')) saveStyle(''); });
 
   loadMe();
   loadDashboard();

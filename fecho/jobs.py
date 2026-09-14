@@ -29,11 +29,12 @@ def enqueue(author: str, kind: str, date: str, run_after: Optional[str] = None) 
                 (author, date)).fetchone()
             if existing:
                 return dict(existing)
-        # 同一天已经有排着或正在跑的重新生成，就不再叠一个
-        if kind == "regenerate":
+        # 其余几种（regenerate / refresh / voice / learn）：同一天已经有同一种排着或正在跑的，
+        # 就不再叠一个——连着改两次日报，不该排两次重出口播稿
+        else:
             existing = conn.execute(
-                "SELECT * FROM jobs WHERE author=? AND kind='regenerate' AND date=?"
-                " AND status IN ('queued','running')", (author, date)).fetchone()
+                "SELECT * FROM jobs WHERE author=? AND kind=? AND date=?"
+                " AND status IN ('queued','running')", (author, kind, date)).fetchone()
             if existing:
                 return dict(existing)
         conn.execute(

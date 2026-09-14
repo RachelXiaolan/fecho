@@ -133,7 +133,7 @@ class TestRunJob(WorkerCase):
         jobs.enqueue(B, "daily", "2030-01-10")
         batch = worker.claim(limit=2)
 
-        def flaky(date, author=None, force=False):
+        def flaky(date, author=None, force=False, **_kw):
             if author == A:
                 raise RuntimeError("Alice 这边炸了")
             return {"status": "generated"}

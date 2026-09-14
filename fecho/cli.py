@@ -336,7 +336,7 @@ def cmd_web(args) -> int:
 
 def cmd_digest(args) -> int:
     db.init()
-    r = service.end_of_day(args.date, force=args.force)
+    r = service.end_of_day(args.date, force=args.force, keep_human=not args.force)
     line = "[%s] %s %s · %d 个任务 / %d 条进展" % (
         r["status"], r["date"], r["author"], r["task_count"], r["update_count"])
     if r.get("generator"):

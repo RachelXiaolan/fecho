@@ -317,7 +317,8 @@ def submit(author: str, entries: Iterable[Dict[str, Any]], date: Optional[str] =
     requeued = []
     for d in sorted(touched_dates):
         if db.get_report(author, d, "daily"):
-            jobs.enqueue(author, "regenerate", d)
+            # refresh 不是 regenerate：自动重出不覆盖人亲手改过的日报，只在网页上提示有新进展
+            jobs.enqueue(author, "refresh", d)
             requeued.append(d)
 
     return {"recorded": recorded, "duplicate": duplicate, "out_of_scope": out_of_scope,

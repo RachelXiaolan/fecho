@@ -286,6 +286,14 @@ CREATE TABLE IF NOT EXISTS app_settings (
     updated_at    TEXT NOT NULL
 );
 
+-- 每个人写日报的偏好：从他亲手改日报的地方总结出来，以后出日报照着写。
+-- 一人一份，互相隔离。不算进日报指纹——算进去的话，偏好一更新所有日报都会被标成要重出。
+CREATE TABLE IF NOT EXISTS style_profiles (
+    author        TEXT PRIMARY KEY,
+    content_md    TEXT NOT NULL,        -- 每条一行，以「- 」开头
+    updated_at    TEXT NOT NULL
+);
+
 -- 日报里任务的短名。模型起一次就存下来，以后一直用这个：名字不会今天一个明天一个，
 -- 也不会被某天对话里还在讨论的候选名带偏。人在个人配置里写的别名优先于这里。
 CREATE TABLE IF NOT EXISTS task_aliases (

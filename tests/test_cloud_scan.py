@@ -172,7 +172,8 @@ class TestSubmit(ScanCase):
         self.assertEqual(r["regenerate_queued"], ["2030-01-10"])
         with db.cursor() as c:
             job = dict(c.execute("SELECT kind, date FROM jobs WHERE author=?", (A,)).fetchone())
-        self.assertEqual(job, {"kind": "regenerate", "date": "2030-01-10"})
+        # refresh 而不是 regenerate：自动重出不覆盖人亲手改过的日报
+        self.assertEqual(job, {"kind": "refresh", "date": "2030-01-10"})
 
     def test_no_requeue_when_no_report_exists_yet(self):
         r = cloudscan.submit(A, [self.entry("正常时间扫到的")], date="2030-01-10")

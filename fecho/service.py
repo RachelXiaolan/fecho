@@ -64,11 +64,32 @@ def report(date: str, author: Optional[str] = None) -> Dict[str, Any]:
             "voice": db.get_report(who, date, "voice")}
 
 
+def after_human_edit(author: str, date: str) -> Dict[str, Any]:
+    """人改完日报之后的两件事：按新日报重出口播稿；把这次改动总结进他的写作偏好。
+
+    都要等模型回话。云端版排队交给后台程序；本机版没有后台程序，当场做。
+    """
+    if config.CLOUD:
+        from . import jobs
+
+        return {"queued": [jobs.enqueue(author, "voice", date)["kind"],
+                           jobs.enqueue(author, "learn", date)["kind"]]}
+    from . import llm, style
+
+    out: Dict[str, Any] = {"voice": digest.regenerate_voice(author, date)}
+    if config.llm_configured():
+        try:
+            out["style"] = style.learn(author, date)
+        except llm.LLMError as exc:
+            out["style"] = {"status": "failed", "reason": str(exc)[:160]}
+    return out
+
+
 def end_of_day(date: Optional[str] = None, author: Optional[str] = None,
-               force: bool = False) -> Dict[str, Any]:
+               force: bool = False, keep_human: bool = True) -> Dict[str, Any]:
     who = author or whoami()
     when = date or store.today()
-    r = digest.generate(who, when, force=force)
+    r = digest.generate(who, when, force=force, keep_human=keep_human)
     if r["status"] in ("generated", "skipped", "pto-exempt") and not config.CLOUD:
         # 无论这次是不是重新生成，都把本地当前的成品同步给团队 collector；
         # 没配 collector 或推送失败都不影响本地产物，只是团队视图暂时看不到这份。

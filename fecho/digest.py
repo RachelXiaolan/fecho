@@ -178,7 +178,7 @@ def task_aliases(author: str, tasks: List[Dict[str, Any]], persona: Dict[str, An
     return known
 
 
-def _daily_prompt(author, date, tasks, persona) -> List[dict]:
+def _daily_prompt(author, date, tasks, persona, style_md: str = "") -> List[dict]:
     """模型只出语义，不出符号也不起名。
 
     实测它复述精确字符串会出错（把 RachelXiaolan 写成 RachelXiaelan、把已经改掉的
@@ -208,6 +208,7 @@ def _daily_prompt(author, date, tasks, persona) -> List[dict]:
         "- [1] 跟任务 1 有关的待办\n"
         "- 跟具体任务无关的待办\n"
     ) % (persona.get("display_name") or author, persona.get("daily_style", ""))
+    sys += style_md          # 这个人的写作偏好（style.py），没有就是空串
 
     # 把扫描时判好的 kind 一起给它。之前不给，模型只能瞎猜，实测把所有条目
     # 都标成了 done——包括「只读 UI 先不做」「准确率待优化」这种明显没完成的。
@@ -579,7 +580,12 @@ def persona_for(author: str, persona_name: Optional[str] = None) -> Dict[str, An
 
 
 def generate(author: str, date: str, force: bool = False,
-             persona_name: Optional[str] = None) -> Dict[str, Any]:
+             persona_name: Optional[str] = None, keep_human: bool = True) -> Dict[str, Any]:
+    """出一天的日报和口播稿。
+
+    keep_human：这天的日报被人亲手改过的话，不覆盖。到点出日报、补扫后自动重出都走这个；
+    只有人明确点「重新生成」才传 False——覆盖掉的修改版照样留在历史版本里。
+    """
     persona = persona_for(author, persona_name)
 
     # 出稿前先把归属重判一次。记的时候手上只有当前那一条的上下文，这里能看到
@@ -592,6 +598,10 @@ def generate(author: str, date: str, force: bool = False,
     fp = fingerprint(tasks, persona, pto_status)
 
     existing = db.get_report(author, date, "daily")
+    if existing and existing.get("generator") == "human" and keep_human:
+        # 新进展进来只在网页上提示「有新进展」，由人决定要不要重出
+        return _result(author, date, "kept-human", pto_status, len(tasks), n_updates,
+                       reason="这份日报被人改过，不自动覆盖；要覆盖请点「重新生成」")
     if existing and existing["fingerprint"] == fp and not force:
         return _result(author, date, "skipped", pto_status, len(tasks), n_updates,
                        reason="输入未变，跳过重生成")
@@ -619,17 +629,19 @@ def generate(author: str, date: str, force: bool = False,
         warnings.append("交叉验证未执行：%s" % verified["error"])
     model = config.LLM_MODEL
     aliases = task_aliases(author, tasks, persona, warnings)
+    from . import style
+    style_md = style.for_prompt(author)
 
     # 日报和口播稿各自独立降级：一个挂了不该把另一个也拖成兜底稿。
     try:
         # 预算按任务数给。上一版固定 4000，28 条进展的日报被截断在半句话上，
         # 后两个任务只剩标题。宁可给多，llm.chat 那边本来就有截断重试。
         budget = max(4000, 1200 * len(tasks) + 2000)
-        raw = llm.chat(_daily_prompt(author, date, tasks, persona), max_tokens=budget)
+        raw = llm.chat(_daily_prompt(author, date, tasks, persona, style_md), max_tokens=budget)
         items, todos = _parse_daily(raw, len(tasks))
         if len(items) < len(tasks):
             # 少解析出任务块，多半是被 max_tokens 截断了——翻倍再来一次。
-            raw = llm.chat(_daily_prompt(author, date, tasks, persona),
+            raw = llm.chat(_daily_prompt(author, date, tasks, persona, style_md),
                            max_tokens=min(budget * 2, llm.MAX_TOKEN_CEILING))
             items, todos = _parse_daily(raw, len(tasks))
         if not items:
@@ -645,6 +657,37 @@ def generate(author: str, date: str, force: bool = False,
         daily = _fallback_daily(author, date, tasks, persona, aliases)
         daily_gen = "fallback"
 
+    voice, voice_gen = _make_voice(author, date, daily, tasks, persona, lo, hi, warnings)
+
+    generator = daily_gen if daily_gen == voice_gen else "%s+%s" % (daily_gen, voice_gen)
+
+    if pto_status == "pto":
+        daily = "> 当日为 PTO（请假），以下为期间仍产生的进展。\n\n" + daily
+        warnings.append("当日为 PTO，日报已降级标注")
+
+    _persist(author, date, "daily", daily, fp, daily_gen,
+             model if daily_gen == "llm" else None, n_updates, warnings)
+    _persist(author, date, "voice", voice, fp, voice_gen,
+             model if voice_gen == "llm" else None, n_updates, warnings)
+    paths = _write_files(author, date, daily, voice, persona)
+    _stamp_pto(author, date, pto_status)
+
+    res = _result(author, date, "generated", pto_status, len(tasks), n_updates)
+    res.update({
+        "generator": generator,
+        "model": model if "llm" in generator else None,
+        "warnings": warnings,
+        "files": paths,
+        "voice_chars": _cjk_len(voice),
+        "voice_seconds_est": speaking_seconds(voice),
+        "daily_md": daily,
+        "voice_md": voice,
+    })
+    return res
+
+
+def _make_voice(author, date, daily, tasks, persona, lo, hi, warnings):
+    """按日报写口播稿。字数超界就调结构重写，仍超界按句号裁；模型挂了走兜底稿。"""
     try:
         items = max(2, min(4, len(tasks)))
         voice = llm.chat(_voice_prompt(author, date, daily, persona, items),
@@ -690,32 +733,66 @@ def generate(author: str, date: str, force: bool = False,
         warnings.append("口播稿仍短于目标下限，已切换到满足区间的确定性兜底稿")
         voice = _fallback_voice(author, date, tasks, persona, lo, hi)
         voice_gen = "fallback"
+    return voice, voice_gen
 
-    generator = daily_gen if daily_gen == voice_gen else "%s+%s" % (daily_gen, voice_gen)
 
-    if pto_status == "pto":
-        daily = "> 当日为 PTO（请假），以下为期间仍产生的进展。\n\n" + daily
-        warnings.append("当日为 PTO，日报已降级标注")
+def regenerate_voice(author: str, date: str) -> Dict[str, Any]:
+    """人改完日报后，按改好的日报重出口播稿。日报本身不动。"""
+    daily = db.get_report(author, date, "daily")
+    if not daily:
+        return {"status": "empty", "reason": "这天没有日报"}
+    persona = persona_for(author)
+    tasks = db.day_tasks(author, date)
+    lo, hi = persona.get("voice_target_chars", [config.VOICE_MIN_CHARS, config.VOICE_MAX_CHARS])
+    warnings: List[str] = []
+    voice, gen = _make_voice(author, date, daily["content_md"], tasks, persona, lo, hi, warnings)
+    _persist(author, date, "voice", voice, daily["fingerprint"], gen,
+             config.LLM_MODEL if gen == "llm" else None, daily["entry_count"], warnings)
+    return {"status": "generated", "generator": gen, "warnings": warnings,
+            "task_count": len(tasks), "update_count": daily["entry_count"]}
 
-    _persist(author, date, "daily", daily, fp, daily_gen,
-             model if daily_gen == "llm" else None, n_updates, warnings)
-    _persist(author, date, "voice", voice, fp, voice_gen,
-             model if voice_gen == "llm" else None, n_updates, warnings)
-    paths = _write_files(author, date, daily, voice, persona)
-    _stamp_pto(author, date, pto_status)
 
-    res = _result(author, date, "generated", pto_status, len(tasks), n_updates)
-    res.update({
-        "generator": generator,
-        "model": model if "llm" in generator else None,
-        "warnings": warnings,
-        "files": paths,
-        "voice_chars": _cjk_len(voice),
-        "voice_seconds_est": speaking_seconds(voice),
-        "daily_md": daily,
-        "voice_md": voice,
-    })
-    return res
+# 日报里带 issue 链接的任务名：[**名字**](https://…/issue/AI-2541)
+_ISSUE_HEAD = re.compile(r"\[\*\*(.+?)\*\*\]\(https?://[^)\s]*/issue/([A-Za-z]+-\d+)\)")
+
+
+def _renamed_tasks(before: str, after: str) -> Dict[str, str]:
+    old = {key.upper(): name for name, key in _ISSUE_HEAD.findall(before or "")}
+    new = {key.upper(): name for name, key in _ISSUE_HEAD.findall(after or "")}
+    return {key: name for key, name in new.items() if key in old and old[key] != name}
+
+
+def save_human_edit(author: str, date: str, content_md: str) -> Dict[str, Any]:
+    """人亲手改日报。
+
+    - 改之前的版本进历史版本（_persist 本来就这么做）
+    - 新版本标成 generator=human；以后到点出日报、补扫后重出都不会覆盖它
+    - 指纹沿用原来的：事实没变，不该被标成「需要重新生成」；等真有新进展进来才提示
+    - 改了带 issue 链接的任务名，直接把那个任务的短名换成人写的——这是确定的事，不用模型学
+    """
+    content = (content_md or "").strip()
+    if not content:
+        raise ValueError("日报不能是空的")
+    prev = db.get_report(author, date, "daily")
+    if not prev:
+        raise ValueError("这天还没有日报，没法修改")
+    if content == (prev["content_md"] or "").strip():
+        return {"status": "unchanged", "renamed": {}}
+    renamed: Dict[str, str] = {}
+    now = store.now_iso()
+    with db.cursor() as conn:
+        for key, name in _renamed_tasks(prev["content_md"], content).items():
+            name = name.strip()
+            if not name or len(name) > 40 or "http" in name:
+                continue
+            conn.execute(
+                "INSERT INTO task_aliases (author, task_key, alias, created_at) VALUES (?,?,?,?)"
+                " ON CONFLICT (author, task_key) DO UPDATE SET alias=excluded.alias",
+                (author, key, name, now))
+            renamed[key] = name
+    _persist(author, date, "daily", content + "\n", prev["fingerprint"], "human", None,
+             prev["entry_count"], prev.get("warnings") or [])
+    return {"status": "saved", "renamed": renamed}
 
 
 def _stamp_pto(author: str, date: str, status: str) -> None:

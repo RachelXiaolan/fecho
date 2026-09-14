@@ -112,15 +112,32 @@ def finish(job: Dict[str, Any], error: Optional[str] = None) -> None:
 # ---------- 干活 ----------
 
 def run_job(job: Dict[str, Any]) -> None:
-    author, date = job["author"], job["date"]
-    label = "%s %s(%s)" % (author, date, job["kind"])
+    """任务种类：
+    - daily      到点出日报
+    - regenerate 人点了「重新生成」：覆盖人改过的日报（修改版留在历史里）
+    - refresh    补扫交上来新进展后自动重出：不覆盖人改过的日报
+    - voice      人改完日报后，按新日报重出口播稿
+    - learn      人改完日报后，把这次改动总结进他的写作偏好
+    """
+    author, date, kind = job["author"], job["date"], job["kind"]
+    label = "%s %s(%s)" % (author, date, kind)
     try:
-        sync_issues(author)                       # 同步失败不挡着出日报
-        from . import service
+        from . import digest, service, style
 
-        r = service.end_of_day(date, author=author, force=(job["kind"] == "regenerate"))
-        log("%s → %s（%d 个任务 / %d 条进展）" % (
-            label, r.get("status"), r.get("task_count", 0), r.get("update_count", 0)))
+        if kind == "voice":
+            r = digest.regenerate_voice(author, date)
+            log("%s → %s" % (label, r.get("status")))
+        elif kind == "learn":
+            r = style.learn(author, date)
+            log("%s → %s%s" % (label, r.get("status"),
+                              "（%d 条偏好）" % r["rules"] if r.get("rules") else ""))
+        else:
+            sync_issues(author)                   # 同步失败不挡着出日报
+            r = service.end_of_day(date, author=author,
+                                   force=kind in ("regenerate", "refresh"),
+                                   keep_human=kind != "regenerate")
+            log("%s → %s（%d 个任务 / %d 条进展）" % (
+                label, r.get("status"), r.get("task_count", 0), r.get("update_count", 0)))
         for w in r.get("warnings") or []:
             log("  ! %s" % w)
         finish(job)

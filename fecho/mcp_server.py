@@ -460,7 +460,9 @@ def call_tool(name: str, args: Dict[str, Any], context: Optional[MCPContext] = N
         return "\n".join(out)
 
     if name == "end_of_day":
-        r = service.end_of_day(args.get("date"), author=me, force=bool(args.get("force")))
+        # 只有明确要强制重出才覆盖人亲手改过的日报
+        r = service.end_of_day(args.get("date"), author=me, force=bool(args.get("force")),
+                               keep_human=not args.get("force"))
         if r["status"] != "generated":
             return "状态：%s（%s）" % (r["status"], r.get("reason", ""))
         return _fmt_report(r)
