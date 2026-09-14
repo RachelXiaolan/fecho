@@ -161,6 +161,8 @@
     .toast button{border:1px solid rgba(255,255,255,.3);background:transparent;color:#fff;border-radius:7px;padding:5px 9px}
     .toast.error{background:#6e2725}
     [hidden]{display:none!important}
+    .guide-link{display:block;margin-top:14px;padding:10px 12px;border-radius:8px;color:#bcbac9;text-decoration:none;font-size:13px}
+    .guide-link:hover{background:rgba(255,255,255,.06);color:#fff}
     .topbar-actions{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;justify-content:flex-end}
     .lang-switch{display:flex;gap:2px;background:var(--surface-soft);padding:3px;border-radius:9px;align-self:center}
     .lang-switch button{border:0;background:transparent;padding:6px 10px;border-radius:7px;font-size:11px;font-weight:700;color:var(--muted)}
@@ -229,6 +231,7 @@
       <button data-view="settings" data-cloud-only hidden><span data-i18n="nav_settings"></span><span class="count" id="nav-settings">—</span></button>
       <button data-view="admin" data-admin-only hidden><span data-i18n="nav_admin"></span><span class="count" id="nav-admin">—</span></button>
     </nav>
+    <a class="guide-link" href="/guide" target="_blank" rel="noopener" data-i18n="nav_guide"></a>
     <div class="sidebar-foot"><div class="connection"><i class="pulse"></i><span id="connection-copy" data-i18n="connection_local"></span></div></div>
   </aside>
 
@@ -321,7 +324,7 @@
   "zh": {
     "doc_title": "Fecho · 工作日志",
     "nav_aria": "主导航", "nav_today": "今天", "nav_review": "复核", "nav_tasks": "任务", "nav_reports": "日报",
-    "nav_system": "系统", "nav_settings": "设置", "nav_admin": "管理",
+    "nav_system": "系统", "nav_settings": "设置", "nav_admin": "管理", "nav_guide": "接入指南 ↗",
     "connection_local": "本地服务已连接", "lang_aria": "界面语言", "filters_aria": "全局筛选",
     "filter_date": "工作日期", "filter_agent": "Agent", "filter_source": "记录方式", "filter_status": "完成状态", "all": "全部",
     "retry": "重试", "viewas_exit": "回到我自己的", "viewas_copy": "正在查看 {name}（{author}）的日志 · 只读",
@@ -427,7 +430,7 @@
   "en": {
     "doc_title": "Fecho · Work log",
     "nav_aria": "Main navigation", "nav_today": "Today", "nav_review": "Review", "nav_tasks": "Tasks", "nav_reports": "Reports",
-    "nav_system": "System", "nav_settings": "Settings", "nav_admin": "Admin",
+    "nav_system": "System", "nav_settings": "Settings", "nav_admin": "Admin", "nav_guide": "Setup guide ↗",
     "connection_local": "Local service connected", "lang_aria": "Interface language", "filters_aria": "Filters",
     "filter_date": "Work date", "filter_agent": "Agent", "filter_source": "Captured via", "filter_status": "Status", "all": "All",
     "retry": "Retry", "viewas_exit": "Back to mine", "viewas_copy": "Viewing {name} ({author}) · read-only",

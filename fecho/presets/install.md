@@ -114,7 +114,7 @@ mkdir -p ~/.claude/skills/fecho && curl -fsSL __URL__/local/SKILL.md -o ~/.claud
 1. 调用 `fecho_doctor`，确认显示的是用户的邮箱
 2. 运行 `python3 ~/.fecho-cloud/fecho_local.py status`，确认「定时任务：已装」，服务器那行没有报错
 
-把两边的结果告诉用户。
+把两边的结果告诉用户，并告诉用户：接入与验收指南在 __URL__/guide ，照着里面的验收清单逐项确认。
 
 ---
 

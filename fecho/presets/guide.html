@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>接入与验收指南 · Fecho</title>
+  <style>
+    /* 和 Fecho 面板同一套颜色、同一套字体；不引外部字体，断网也能打开 */
+    :root{
+      --ground:#f7f6f2; --surface:#ffffff; --sunk:#efede6;
+      --ink:#292827; --muted:#6f6b75; --line:#e3e0d8;
+      --brand:#1b1938; --brand-ink:#ffffff; --accent:#c9b4fa; --accent-soft:#eee7fd;
+      --done:#23634d; --done-soft:#e4f1ea; --warn:#8a5b17; --warn-soft:#fbf0d9;
+      --sans:"Avenir Next","SF Pro Text","PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+      --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+    }
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth;background:var(--ground)}
+    @media (prefers-reduced-motion: reduce){ html{scroll-behavior:auto} }
+    body{margin:0;background:var(--ground);color:var(--ink);font:16px/1.75 var(--sans);
+      padding-inline:20px;padding-block:0 96px;-webkit-font-smoothing:antialiased}
+    a{color:inherit;text-decoration-color:var(--accent);text-underline-offset:3px;text-decoration-thickness:2px}
+    a:focus-visible,button:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--brand);outline-offset:3px;border-radius:4px}
+    code{font-family:var(--mono);font-size:.86em;color:var(--brand);background:var(--sunk);padding:1px 6px;border-radius:5px}
+
+    .top{max-width:1060px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;padding-block:18px;
+      border-bottom:1px solid var(--line);font-size:14px}
+    .mark{display:flex;align-items:center;gap:10px;font-weight:600;text-decoration:none}
+    .mark i{width:28px;height:28px;border-radius:8px;background:var(--accent);color:var(--brand);display:grid;place-items:center;font-style:normal;font-weight:700}
+    .top a.back{color:var(--muted);text-decoration:none}
+    .top a.back:hover{color:var(--ink)}
+
+    .shell{max-width:1060px;margin:0 auto;display:grid;grid-template-columns:200px minmax(0,1fr);gap:56px}
+    @media (max-width:860px){ .shell{grid-template-columns:1fr;gap:0} .rail{display:none} }
+    .rail{position:sticky;top:0;align-self:start;padding-block:40px 24px;display:flex;flex-direction:column;gap:26px}
+    .rail nav{display:flex;flex-direction:column;gap:2px;font-size:14px}
+    .rail nav a{padding:6px 10px;border-radius:7px;text-decoration:none;color:var(--muted)}
+    .rail nav a:hover{background:var(--sunk);color:var(--ink)}
+    .progress{font-size:13px;color:var(--muted);display:flex;flex-direction:column;gap:8px}
+    .progress b{font:600 22px/1 var(--sans);color:var(--ink);font-variant-numeric:tabular-nums}
+    .bar{height:6px;border-radius:99px;background:var(--line);overflow:hidden}
+    .bar span{display:block;height:100%;width:0;background:var(--done);transition:width .25s}
+
+    main{max-width:700px;padding-block:40px 0}
+    .eyebrow{font-size:12px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+    h1{font-size:38px;line-height:1.15;letter-spacing:-.8px;font-weight:700;margin:10px 0 14px;text-wrap:balance}
+    .lede{font-size:18px;color:var(--muted);margin:0;max-width:62ch}
+    h2{font-size:24px;line-height:1.3;letter-spacing:-.3px;font-weight:650;margin:0 0 6px;text-wrap:balance}
+    h3{font-size:17px;font-weight:600;margin:0}
+    section{padding-block:40px 8px;border-top:1px solid var(--line);margin-top:40px;scroll-margin-top:16px}
+    section > p{max-width:65ch}
+    .sub{color:var(--muted);margin:0 0 22px}
+
+    .flow{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));margin:24px 0 8px;
+      border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--surface)}
+    .flow div{padding:14px 14px 16px;border-left:1px solid var(--line);display:flex;flex-direction:column;gap:4px}
+    .flow div:first-child{border-left:0}
+    .flow b{font-size:15px}
+    .flow span{font-size:13px;color:var(--muted);line-height:1.5}
+    .flow .where{font-family:var(--mono);font-size:11px;color:var(--brand)}
+    @media (max-width:640px){ .flow{grid-template-columns:1fr} .flow div{border-left:0;border-top:1px solid var(--line)} .flow div:first-child{border-top:0} }
+
+    .needs{display:grid;grid-template-columns:auto 1fr;gap:10px 18px;margin:0;padding:18px 20px;
+      background:var(--surface);border:1px solid var(--line);border-radius:12px}
+    .needs dt{font-weight:600;white-space:nowrap}
+    .needs dd{margin:0;color:var(--muted)}
+    @media (max-width:520px){ .needs{grid-template-columns:1fr;gap:2px} .needs dd{margin-bottom:10px} }
+
+    ol.steps{list-style:none;counter-reset:s;margin:0;padding:0;display:flex;flex-direction:column;gap:24px}
+    ol.steps > li{counter-increment:s;display:grid;grid-template-columns:34px minmax(0,1fr);gap:16px}
+    ol.steps > li::before{content:counter(s);width:34px;height:34px;border-radius:50%;background:var(--brand);color:var(--brand-ink);
+      display:grid;place-items:center;font-weight:600;font-size:15px;font-variant-numeric:tabular-nums}
+    ol.steps p{margin:6px 0 0}
+    .cmd{margin-top:12px;display:flex;align-items:stretch;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--sunk)}
+    .cmd pre{margin:0;padding:12px 14px;flex:1;overflow-x:auto;font:13.5px/1.6 var(--mono);color:var(--brand);white-space:pre-wrap;word-break:break-all}
+    .cmd button{flex:none;border:0;border-left:1px solid var(--line);background:var(--surface);color:var(--ink);
+      font:600 13px var(--sans);padding:0 16px;cursor:pointer}
+    .cmd button:hover{background:var(--accent-soft)}
+    .note{margin-top:12px;padding:12px 14px;border-radius:10px;background:var(--warn-soft);font-size:14.5px}
+    .note b{color:var(--warn)}
+
+    .phase{margin-top:24px}
+    .phase h3{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:10px}
+    .phase h3 small{font:500 13px var(--sans);color:var(--muted);font-variant-numeric:tabular-nums}
+    .checks{list-style:none;margin:0;padding:0;background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+    .checks li{border-top:1px solid var(--line)}
+    .checks li:first-child{border-top:0}
+    .checks label{display:grid;grid-template-columns:22px minmax(0,1fr);gap:14px;padding:14px 18px;cursor:pointer}
+    .checks input{appearance:none;width:22px;height:22px;margin:2px 0 0;border:2px solid var(--line);border-radius:6px;background:var(--surface);
+      display:grid;place-items:center;cursor:pointer}
+    .checks input:checked{background:var(--done);border-color:var(--done)}
+    .checks input:checked::after{content:"";width:6px;height:11px;border:solid var(--surface);border-width:0 2px 2px 0;transform:translateY(-1px) rotate(45deg)}
+    .checks .what{font-weight:500}
+    .checks .how{display:block;font-size:14px;color:var(--muted);margin-top:2px}
+    .checks li:has(input:checked){background:var(--done-soft)}
+    .checks li:has(input:checked) .what{color:var(--done)}
+    .reset{margin-top:14px;background:none;border:0;color:var(--muted);font:14px var(--sans);text-decoration:underline;cursor:pointer;padding:0}
+
+    .say{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--surface)}
+    .say > div{padding:12px 16px;border-top:1px solid var(--line)}
+    .say > div:nth-child(-n+2){border-top:0}
+    .say > div:nth-child(odd){font-weight:500;background:var(--sunk)}
+    .say .h{font-size:12px;font-weight:600;letter-spacing:.08em;color:var(--muted)}
+    @media (max-width:560px){ .say{grid-template-columns:1fr} .say > div:nth-child(2){border-top:1px solid var(--line)} }
+
+    .privacy{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:12px}
+    .privacy li{padding-left:18px;position:relative;max-width:65ch}
+    .privacy li::before{content:"";position:absolute;left:0;top:.75em;width:7px;height:7px;border-radius:2px;background:var(--accent)}
+
+    details{border-top:1px solid var(--line)}
+    details:last-of-type{border-bottom:1px solid var(--line)}
+    summary{cursor:pointer;padding:15px 2px;font-weight:500;list-style:none;display:flex;justify-content:space-between;gap:16px}
+    summary::-webkit-details-marker{display:none}
+    summary::after{content:"+";color:var(--muted);font-weight:400;font-size:20px;line-height:1}
+    details[open] summary::after{content:"−"}
+    details > div{padding:0 2px 18px;color:var(--muted);max-width:65ch}
+    details > div p{margin:0 0 8px}
+
+    .known{border-left:3px solid var(--warn);padding:2px 0 2px 16px;display:flex;flex-direction:column;gap:12px}
+    .known p{margin:0;max-width:65ch}
+
+    .feedback{background:var(--brand);color:var(--brand-ink);border-radius:14px;padding:26px 28px}
+    .feedback h2{color:inherit}
+    .feedback p{margin:8px 0 0;opacity:.88;max-width:60ch}
+    .feedback ul{margin:14px 0 0;padding-left:20px}
+    .feedback code{background:rgba(255,255,255,.14);color:inherit}
+  </style>
+</head>
+<body>
+  <header class="top">
+    <a class="mark" href="/"><i>f</i>Fecho</a>
+    <a class="back" href="/">打开 Fecho →</a>
+  </header>
+
+  <div class="shell">
+    <aside class="rail" aria-label="目录">
+      <nav>
+        <a href="#what">它是什么</a>
+        <a href="#before">装之前</a>
+        <a href="#install">安装</a>
+        <a href="#check">验收清单</a>
+        <a href="#daily">平时怎么用</a>
+        <a href="#privacy">隐私</a>
+        <a href="#faq">常见问题</a>
+        <a href="#known">已知问题</a>
+        <a href="#feedback">反馈</a>
+      </nav>
+      <div class="progress" aria-live="polite">
+        <span>验收进度</span>
+        <b id="progress-num">0 / 12</b>
+        <div class="bar"><span id="progress-bar"></span></div>
+      </div>
+    </aside>
+
+    <main>
+      <div class="eyebrow">FeedMob 内部 · 云端版</div>
+      <h1>Fecho 接入与验收</h1>
+      <p class="lede">Fecho 替你记下每天用 agent 做成了什么，每天到点自动出一份日报和口播稿。装一次大约 10 分钟，不用装任何软件包，也不用任何密钥。</p>
+
+      <section id="what">
+        <h2>它是什么</h2>
+        <p class="sub">一条链路，你只需要管第一段和最后一段。</p>
+        <div class="flow">
+          <div><span class="where">你的电脑</span><b>① 采集</b><span>agent 干完活随手记一条；每晚再扫一遍当天对话补漏</span></div>
+          <div><span class="where">服务器</span><b>② 归属</b><span>把每条进展对到你名下的 Mobius issue 上</span></div>
+          <div><span class="where">服务器</span><b>③ 存储</b><span>每人只看得到自己的记录</span></div>
+          <div><span class="where">服务器</span><b>④ 整理</b><span>到点把一天的进展写成日报，按你的写作偏好</span></div>
+          <div><span class="where">网页</span><b>⑤ 交付</b><span>日报 + 口播稿；可以直接改，改完它会学</span></div>
+        </div>
+        <p>默认每天北京时间 <strong>21:00</strong> 出日报，你电脑上的扫描提前 15 分钟，也就是 <strong>20:45</strong>。时间可以自己改。这份指南随时能在 Fecho 左侧「接入指南」里找到。</p>
+      </section>
+
+      <section id="before">
+        <h2>装之前</h2>
+        <p class="sub">四个条件都满足再开始。</p>
+        <dl class="needs">
+          <dt>账号</dt><dd>能登录 Mobius 的 <code>@feedmob.com</code> 邮箱</dd>
+          <dt>电脑</dt><dd>Mac。每晚的自动扫描用的是 macOS 自带的定时任务</dd>
+          <dt>agent</dt><dd><strong>Codex</strong>（ChatGPT 桌面版里的就行）或 <strong>Claude Code</strong>。Hermes 暂时只能随手记，不能每晚扫描</dd>
+          <dt>Claude Code 用户</dt><dd>在「终端」里输入 <code>claude</code> 能正常对话。只在桌面版登录过不算，扫描要用命令行版</dd>
+        </dl>
+      </section>
+
+      <section id="install">
+        <h2>安装</h2>
+        <p class="sub">主要是 agent 在干，你负责登录、复制 token、勾文件夹。</p>
+        <ol class="steps">
+          <li><div>
+            <h3>把这句话发给你的 agent</h3>
+            <p>在 Codex 或 Claude Code 里新开一个对话，粘贴：</p>
+            <div class="cmd"><pre id="prompt-install">读 https://fecho.techmob.net/install ，按里面的步骤帮我接入 Fecho。</pre><button type="button" data-copy="prompt-install">复制</button></div>
+          </div></li>
+          <li><div>
+            <h3>登录，把 token 交给 agent</h3>
+            <p>agent 会帮你打开网页。用 Mobius 登录，点「生成 token」，把那串 <code>fecho_</code> 开头的字符复制粘回给 agent。这串只显示一次，别发到群里。</p>
+          </div></li>
+          <li><div>
+            <h3>等 agent 装完，看它的汇报</h3>
+            <p>它会逐个试着在后台叫醒你电脑上的 agent，每个一行：<code>✓</code> 表示以后每晚扫它的对话，<code>✗</code> 表示暂时不扫，后面跟着原因和修法。</p>
+            <div class="note"><b>最常见的 ✗：</b>Claude 的命令行版没登录。在终端输入 <code>claude</code> 登录（用 CC Switch 的，在 CC Switch 里给 Claude 选一个能用的线路），然后让 agent 把安装那条命令再跑一遍。</div>
+          </div></li>
+          <li><div>
+            <h3>勾选工作文件夹</h3>
+            <p>回到网页（<a href="/onboard">fecho.techmob.net/onboard</a>），第 3 步里列着你用 agent 干过活的文件夹。只勾工作的。<strong>一个都不勾，就什么都不会扫。</strong></p>
+          </div></li>
+          <li><div>
+            <h3>重启 agent 会话</h3>
+            <p>新接上的工具要重启一次会话才出现。重启后跟 agent 说「调一下 fecho_doctor」，它应该显示你的邮箱。</p>
+          </div></li>
+        </ol>
+      </section>
+
+      <section id="check">
+        <h2>验收清单</h2>
+        <p class="sub">按时间分三段。勾选状态只存在你自己的浏览器里，全部做完截图发给 Rachel。</p>
+
+        <div class="phase" data-phase>
+          <h3>装完当天 <small data-count></small></h3>
+          <ul class="checks">
+            <li><label><input type="checkbox" id="c-login"><span><span class="what">网页登录后，左下角是你的名字</span><span class="how">打开 fecho.techmob.net</span></span></label></li>
+            <li><label><input type="checkbox" id="c-doctor"><span><span class="what">agent 调 fecho_doctor 显示你的邮箱</span><span class="how">重启会话之后再问</span></span></label></li>
+            <li><label><input type="checkbox" id="c-agent"><span><span class="what">设置 → Agent：你用的 agent 显示「已接入」，扫描开关和安装汇报一致</span><span class="how">左侧「设置」</span></span></label></li>
+            <li><label><input type="checkbox" id="c-folders"><span><span class="what">设置 → 工作文件夹：至少勾了一个</span><span class="how">左侧「设置」旁边是 ✓ 而不是 !</span></span></label></li>
+            <li><label><input type="checkbox" id="c-status"><span><span class="what">本机采集在跑</span><span class="how">终端运行 <code>python3 ~/.fecho-cloud/fecho_local.py status</code>，看到「定时任务：已装」，服务器那一行没有报错</span></span></label></li>
+            <li><label><input type="checkbox" id="c-log"><span><span class="what">随手记能进网页，来源是你用的 agent</span><span class="how">让 agent 干完一件事后说「记一下」，刷新「今天」页能看到这一条</span></span></label></li>
+          </ul>
+        </div>
+
+        <div class="phase" data-phase>
+          <h3>当晚，过了出日报时间 <small data-count></small></h3>
+          <ul class="checks">
+            <li><label><input type="checkbox" id="c-report"><span><span class="what">「日报」页有日报，「口播稿」有内容</span><span class="how">默认 21:00 之后几分钟</span></span></label></li>
+            <li><label><input type="checkbox" id="c-names"><span><span class="what">日报里的任务名看得懂，对得上 Mobius issue</span><span class="how">带链接的任务名点进去是对的 issue</span></span></label></li>
+            <li><label><input type="checkbox" id="c-scan"><span><span class="what">扫描补上了你没让 agent 记的事</span><span class="how">「今天」页里，记录方式是 <code>transcript-scan</code> 的就是扫描补的</span></span></label></li>
+          </ul>
+        </div>
+
+        <div class="phase" data-phase>
+          <h3>第二天 <small data-count></small></h3>
+          <ul class="checks">
+            <li><label><input type="checkbox" id="c-edit"><span><span class="what">改一处日报并保存，「历史版本」里出现改之前的那版</span><span class="how">日报页右上角「修改」</span></span></label></li>
+            <li><label><input type="checkbox" id="c-style"><span><span class="what">设置 → 写作偏好出现了从你的修改里总结出的规则</span><span class="how">保存修改后几分钟再刷新</span></span></label></li>
+            <li><label><input type="checkbox" id="c-lang"><span><span class="what">右上角切到 EN，界面变成英文，刷新后还是英文</span><span class="how">日报内容和服务器提示仍是中文，这是预期的</span></span></label></li>
+          </ul>
+        </div>
+        <button type="button" class="reset" id="reset">清空勾选</button>
+      </section>
+
+      <section id="daily">
+        <h2>平时怎么用</h2>
+        <p class="sub">大部分时候什么都不用做。需要的时候，直接跟 agent 说。</p>
+        <div class="say">
+          <div class="h">你想</div><div class="h">跟 agent 说 / 去网页</div>
+          <div>记下刚做完的事</div><div>「记一下」</div>
+          <div>开工前接上昨天的进度</div><div>「用 fecho 看看昨天做到哪了」</div>
+          <div>改出日报时间</div><div>「把 fecho 出日报时间改到 19:30」，或网页「设置」</div>
+          <div>增减工作文件夹</div><div>网页「设置 → 工作文件夹」</div>
+          <div>现在就扫一遍今天</div><div><code>python3 ~/.fecho-cloud/fecho_local.py check --date 今天日期</code></div>
+          <div>日报写得不对</div><div>网页「日报 → 修改」。改的写法会被学进你的写作偏好</div>
+          <div>某条进展归错了任务</div><div>网页「复核」里改归属，确认后模型不会再覆盖</div>
+          <div>需要看全员日志</div><div>网页「设置 → 管理员 → 申请 admin」，等 Rachel 审批</div>
+        </div>
+      </section>
+
+      <section id="privacy">
+        <h2>隐私</h2>
+        <ul class="privacy">
+          <li><strong>只扫你勾选的文件夹。</strong>没勾的文件夹，对话连打开都不会打开。</li>
+          <li><strong>对话原文不离开你的电脑。</strong>你电脑上的 agent 读完对话，只把提炼出来的「做成了什么」传上去；工具调用、工具输出一律丢掉。</li>
+          <li><strong>每个人只看得到自己的记录。</strong>admin 能看全员日志，admin 由 Rachel 审批。</li>
+          <li><strong>写作偏好每人一份</strong>，只有你自己看得到，可以随时改或清空。</li>
+        </ul>
+      </section>
+
+      <section id="faq">
+        <h2>常见问题</h2>
+        <details><summary>日报页是空的，点「重新生成」提示没有记录</summary>
+          <div><p>那天确实一条记录都没有，生成不出东西。先检查验收清单里「装完当天」那几项，尤其是工作文件夹有没有勾、随手记能不能进网页。</p></div></details>
+        <details><summary>出日报那会儿电脑合上了 / 没开机</summary>
+          <div><p>第二天早上电脑一联网，本机采集会先把昨天补扫上去，那天的日报会自动重出。什么都不用做。</p></div></details>
+        <details><summary>agent 说 token 无效或过期</summary>
+          <div><p>token 连续 7 天没用才会过期。回 <a href="/onboard">onboard 页</a> 再生成一个交给 agent，让它按安装说明重新接一次。</p></div></details>
+        <details><summary>我改过的日报，会不会被自动重出的覆盖掉</summary>
+          <div><p>不会。改过的日报只有你自己点「重新生成」才会被覆盖，覆盖掉的版本仍然留在「历史版本」里。有新进展时页面会提示你。</p></div></details>
+        <details><summary>写作偏好学偏了</summary>
+          <div><p>「设置 → 写作偏好」里直接删掉那一行，保存。下次出日报就不按它写了。</p></div></details>
+        <details><summary>想卸载</summary>
+          <div><p>终端运行 <code>python3 ~/.fecho-cloud/fecho_local.py uninstall</code> 停掉每晚扫描；再让 agent 移除名为 fecho 的 MCP 连接。</p></div></details>
+      </section>
+
+      <section id="known">
+        <h2>已知问题</h2>
+        <p class="sub">验收时碰到这些不用单独报，已经记着了。</p>
+        <div class="known">
+          <p><b>Hermes 不能每晚扫描。</b>后台叫醒 Hermes 还没实测过，网页上它的开关是灰的。</p>
+          <p><b>只支持 Mac。</b>其他系统能随手记，但每晚扫描需要自己配定时任务。</p>
+          <p><b>切到英文后，服务器返回的提示和日报正文仍是中文。</b>目前只翻译了界面。</p>
+        </div>
+      </section>
+
+      <section id="feedback">
+        <div class="feedback">
+          <h2>反馈给 Rachel</h2>
+          <p>验收做完，或者卡在某一步，直接发给 Rachel：</p>
+          <ul>
+            <li>这页清单的截图（左侧有进度）</li>
+            <li>卡住的话：第几步、日期时间、页面或终端的截图</li>
+            <li>终端里 <code>python3 ~/.fecho-cloud/fecho_local.py status</code> 的输出</li>
+          </ul>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    (function(){
+      var KEY = 'fecho-guide-checks';
+      var boxes = Array.prototype.slice.call(document.querySelectorAll('.checks input[type=checkbox]'));
+      var saved = {};
+      try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { saved = {}; }
+      boxes.forEach(function(b){ b.checked = !!saved[b.id]; });
+      function update(){
+        var done = boxes.filter(function(b){ return b.checked; }).length;
+        document.getElementById('progress-num').textContent = done + ' / ' + boxes.length;
+        document.getElementById('progress-bar').style.width = (100 * done / boxes.length) + '%';
+        document.querySelectorAll('[data-phase]').forEach(function(p){
+          var inner = p.querySelectorAll('input[type=checkbox]');
+          var n = Array.prototype.filter.call(inner, function(b){ return b.checked; }).length;
+          p.querySelector('[data-count]').textContent = n + ' / ' + inner.length;
+        });
+      }
+      function save(){
+        var state = {};
+        boxes.forEach(function(b){ if (b.checked) state[b.id] = true; });
+        try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+      }
+      boxes.forEach(function(b){ b.addEventListener('change', function(){ save(); update(); }); });
+      document.getElementById('reset').addEventListener('click', function(){
+        boxes.forEach(function(b){ b.checked = false; }); save(); update();
+      });
+      update();
+
+      document.querySelectorAll('[data-copy]').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          var pre = document.getElementById(btn.getAttribute('data-copy'));
+          function done(){ btn.textContent = '已复制'; setTimeout(function(){ btn.textContent = '复制'; }, 1800); }
+          function fallback(){
+            var range = document.createRange(); range.selectNodeContents(pre);
+            var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+            btn.textContent = '已选中，按 ⌘C';
+          }
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(pre.textContent).then(done, fallback);
+          } else { fallback(); }
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

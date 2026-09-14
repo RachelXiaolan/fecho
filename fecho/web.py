@@ -320,6 +320,29 @@ def build_app():
         return JSONResponse(status_code=202, content={"ok": True})
 
     # ---- MCP over Streamable HTTP ----
+    def _remember_session(sid: str, author: str, client_name: str) -> None:
+        """agent 连上来时报的名字记进库：云端版的下一个请求可能落到别的实例上。"""
+        try:
+            with db.cursor() as conn:
+                conn.execute(
+                    "INSERT INTO mcp_sessions (session_id, author, client_name, created_at)"
+                    " VALUES (?,?,?,?) ON CONFLICT (session_id) DO UPDATE SET"
+                    " author=excluded.author, client_name=excluded.client_name,"
+                    " created_at=excluded.created_at",
+                    (sid, author, client_name, store.now_iso()))
+        except Exception:                           # noqa: BLE001 记不下来不该挡住连接
+            pass
+
+    def _session_client(sid: str, author: str) -> Optional[str]:
+        """按会话号查回 agent 名字。只认同一个人的会话：拿着别人的会话号查不到别人的 agent。"""
+        try:
+            with db.cursor() as conn:
+                row = conn.execute("SELECT client_name FROM mcp_sessions"
+                                   " WHERE session_id=? AND author=?", (sid, author)).fetchone()
+            return row["client_name"] if row else None
+        except Exception:                           # noqa: BLE001 表还没建好时照常工作
+            return None
+
     @app.post("/mcp")
     async def mcp_endpoint(request: Request,
                            authorization: Optional[str] = Header(None),
@@ -346,7 +369,15 @@ def build_app():
             else:
                 # 身份每次都按这次请求的 token 重填，不信任缓存里的
                 context = dataclasses.replace(context, author=me)
+                if context.client_name == "unknown-agent" and sid:
+                    # 这个实例没见过这个会话的 initialize：去库里找回是哪个 agent，
+                    # 否则记下的进展来源会是 unknown-agent
+                    name = _session_client(sid, me)
+                    if name:
+                        context = dataclasses.replace(context, client_name=name)
         resp = mcp_server.handle(msg, context)
+        if config.CLOUD and method == "initialize" and sid:
+            _remember_session(sid, me, context.client_name)
         headers = {"Mcp-Session-Id": sid} if sid else {}
         if resp is None:                       # 通知类消息没有响应体
             return JSONResponse(status_code=202, content=None, headers=headers)
@@ -724,6 +755,11 @@ def build_app():
         rel, kind = _LOCAL_FILES[name]
         text = _page(rel).replace("__URL__", config.PUBLIC_URL)
         return PlainTextResponse(text, media_type=kind + "; charset=utf-8")
+
+    @app.get("/guide", response_class=HTMLResponse)
+    def guide_page():
+        """给同事的接入与验收指南。不用登录就能看：还没装的人也得先读到它。"""
+        return _page("guide.html")
 
     @app.get("/install")
     @app.get("/install.md")

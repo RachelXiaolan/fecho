@@ -71,7 +71,7 @@ fecho onboard \
   --time 21:00
 ```
 
-`onboard` 会为本机已安装的 Codex、Claude Code、Hermes 注册 MCP 和 Fecho Skill，打开浏览器让当前用户完成 Mobius OAuth，并安装每日任务与 Dashboard 后台服务。完成后重启 Agent。完整说明见 [INSTALL.md](INSTALL.md)；ChatGPT 远程连接见 [CONNECT-CHATGPT.md](CONNECT-CHATGPT.md)。
+`onboard` 会为本机已安装的 Codex、Claude Code、Hermes 注册 MCP 和 Fecho Skill，打开浏览器让当前用户完成 Mobius OAuth，并安装每日任务与 Dashboard 后台服务。完成后重启 Agent。给同事的接入与验收指南见 [ONBOARDING.md](ONBOARDING.md)（网页版在 https://fecho.techmob.net/guide ）；ChatGPT 远程连接见 [CONNECT-CHATGPT.md](CONNECT-CHATGPT.md)。
 
 常用命令：
 

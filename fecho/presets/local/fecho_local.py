@@ -138,7 +138,10 @@ def log(msg):
     line = "[%s] %s" % (datetime.now(BEIJING).strftime("%Y-%m-%d %H:%M:%S"), msg)
     with LOG.open("a", encoding="utf-8") as f:
         f.write(line + "\n")
-    print(line, flush=True)
+    # 定时任务把屏幕输出也导进了同一个日志文件，再 print 一遍每行就会出现两次。
+    # 只有人在终端里手动跑的时候才打到屏幕上。
+    if sys.stdout.isatty():
+        print(line, flush=True)
 
 
 def load_config():

@@ -303,6 +303,16 @@ CREATE TABLE IF NOT EXISTS task_aliases (
     created_at    TEXT NOT NULL,
     PRIMARY KEY (author, task_key)
 );
+
+-- MCP 会话是哪个 agent 开的。云端版跑在多个实例上，agent 连上来（initialize）时报的名字
+-- 只留在那个实例的内存里；后面的请求落到别的实例，就不知道是谁记的，进展来源成了
+-- unknown-agent。连上时记一笔，别的实例按会话号查回来。只认同一个人的会话。
+CREATE TABLE IF NOT EXISTS mcp_sessions (
+    session_id    TEXT PRIMARY KEY,
+    author        TEXT NOT NULL,
+    client_name   TEXT NOT NULL,
+    created_at    TEXT NOT NULL
+);
 """
 
 
