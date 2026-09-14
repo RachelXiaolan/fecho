@@ -418,7 +418,13 @@
     $$('#report-tabs button').forEach(button=>button.classList.toggle('active',button.dataset.reportTab===state.reportTab));
     const empty=text=>`<p class="report-empty">${esc(text)}</p>`;
     let html='';
-    if(state.reportTab==='daily') html=report.daily?md(report.daily):empty('尚未生成日报。');
+    // 没有日报时要说清楚是哪种「没有」：这天根本没收到记录，重新生成也生成不出东西；
+    // 有记录只是还没生成，才值得去点生成。
+    const updates=(state.data.overview||{}).updates||0;
+    const noDaily=updates
+      ?`这天有 ${updates} 条记录，日报还没生成。到了每天出日报的时间会自动生成，也可以点「重新生成」。`
+      :'这天还没有收到任何工作记录。agent 随手记的内容和每晚扫描到的内容上传后，会出现在这里。';
+    if(state.reportTab==='daily') html=report.daily?md(report.daily):empty(noDaily);
     if(state.reportTab==='voice') html=report.voice?md(report.voice):empty('尚未生成口播稿。');
     if(state.reportTab==='history') html=report.history.length
       ?report.history.map((item,index)=>`<div class="report-version">版本 ${index+1} · ${esc(item.kind)} · ${esc(item.created_at)}</div>${md(item.content_md)}`).join('<hr>')
@@ -485,7 +491,8 @@
   async function regenerate(){
     const buttons=[$('#regenerate'),$('#dirty-regenerate')]; buttons.forEach(b=>b.disabled=true);
     toast('正在调用模型整理日报…');
-    try{ const result=await post('/api/regenerate',{date:state.data.date}); state.data=result.dashboard; renderAll(); toast('日报和口播稿已更新'); }
+    // 云端版出日报要几分钟，接口只是排了个队——这时候说「已更新」是假话
+    try{ const result=await post('/api/regenerate',{date:state.data.date}); state.data=result.dashboard; renderAll(); toast(result.queued?(result.message||'已排队，几分钟后刷新就能看到新的日报'):'日报和口播稿已更新'); }
     catch(error){toast(error.message,null,true)} finally{buttons.forEach(b=>b.disabled=false)}
   }
   $('#regenerate').addEventListener('click',regenerate); $('#dirty-regenerate').addEventListener('click',regenerate);

@@ -1014,6 +1014,14 @@ class TestDailyFormat(unittest.TestCase):
         self.assertEqual(digest.short_name(t, p), "写一个提交工作日志的系统")
         self.assertNotIn("（", digest.short_name(t, p))
 
+    def test_short_name_keeps_the_whole_title(self):
+        """真踩过：「agent 原生 time-off：Fecho」按冒号砍掉后半截、再超长截断，
+        日报里只剩「agent 原生…」，最能认出是哪件事的「Fecho」反而没了。"""
+        t = dict(self._tasks()[0], title="agent 原生 time-off：Fecho")
+        p = dict(self.persona); p["task_aliases"] = {}
+        self.assertEqual(digest.short_name(t, p), "agent 原生 time-off：Fecho")
+        self.assertNotIn("…", digest.short_name(t, p))
+
     def test_status_icons_render_from_tokens(self):
         items = {1: {"status": "wip", "summary": "在做",
                      "bullets": [("done", "这条做完了"), ("blocked", "这条卡住了")]}}

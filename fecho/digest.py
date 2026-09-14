@@ -67,27 +67,25 @@ def _tasks_block(tasks: List[Dict[str, Any]]) -> str:
 
 STATUS_ICON = {"done": "✅", "wip": "⭕️", "blocked": "❌", "unknown": "•"}
 
-# 标题里这些后缀对短名没信息量，砍掉
-_TITLE_TRIM = re.compile(r"[（(【\[].*?[）)】\]]|[:：].*$")
+# 标题里括号包着的后缀（「（Q3）」「[内部]」这类）对名字没信息量，砍掉
+_TITLE_TRIM = re.compile(r"[（(【\[].*?[）)】\]]")
 
 
-def short_name(task: Dict[str, Any], persona: Dict[str, Any], limit: int = 14) -> str:
-    """任务短名。优先用人配的别名，否则从标题派生——不让模型起名。
+def short_name(task: Dict[str, Any], persona: Dict[str, Any]) -> str:
+    """任务在日报里显示的名字。优先用人配的别名，否则用标题——不让模型起名。
 
-    模型给任务起短名时会把当天还在讨论的候选名当成已确定（把 fecho 写成 fmjot）。
+    模型给任务起名时会把当天还在讨论的候选名当成已确定（把 fecho 写成 fmjot）。
     标题和 issue 号在库里是确定的，没理由让它猜。
+
+    不截断、不加省略号。真踩过：「agent 原生 time-off：Fecho」先按冒号砍掉了后半截，
+    剩下的又超长被截成「agent 原生…」——最能认出是哪件事的「Fecho」反而没了。
     """
     aliases = persona.get("task_aliases") or {}
     if task.get("issue_key") and task["issue_key"] in aliases:
         return aliases[task["issue_key"]]
 
     title = (task.get("title") or "").strip()
-    trimmed = _TITLE_TRIM.sub("", title).strip(" -—、,，。")
-    name = trimmed or title
-    if len(name) > limit:
-        cut = max((name.rfind(c, 0, limit + 1) for c in "，,、 ；;"), default=-1)
-        name = name[:cut] if cut >= 6 else name[:limit]
-        name = name.rstrip(" ，,、；;") + "…"
+    name = _TITLE_TRIM.sub("", title).strip(" -—、,，。") or title
     return name or (task.get("issue_key") or "未命名")
 
 
@@ -466,8 +464,13 @@ def verify_assignments(author: str, date: str) -> Dict[str, Any]:
     return out
 
 
-def generate(author: str, date: str, force: bool = False,
-             persona_name: Optional[str] = None) -> Dict[str, Any]:
+def persona_for(author: str, persona_name: Optional[str] = None) -> Dict[str, Any]:
+    """这个人出日报用的 persona。
+
+    出日报和网页判断「这份日报要不要重出」必须拿同一份：persona 算进了日报指纹，
+    两边各取各的，指纹就永远对不上。真踩过——云端这边用数据库里的显示名，
+    网页那边用的是邮箱，结果日报刚生成就被标成「需要重新生成」，点多少次都消不掉。
+    """
     if config.CLOUD:
         # 云端版：身份来自数据库，不是本机的 token 文件；所有人共用同一套文风
         from . import accounts
@@ -475,13 +478,20 @@ def generate(author: str, date: str, force: bool = False,
         user = accounts.get_user(author) or {}
         persona = personas.load(persona_name or "default")
         persona["display_name"] = user.get("display_name") or author.split("@")[0]
-    else:
-        from . import auth
+        return persona
 
-        ident = auth.all_authors().get(author, {})
-        persona = personas.load(persona_name or ident.get("persona") or author)
-        if not persona.get("display_name"):
-            persona["display_name"] = ident.get("display_name") or author
+    from . import auth
+
+    ident = auth.all_authors().get(author, {})
+    persona = personas.load(persona_name or ident.get("persona") or author)
+    if not persona.get("display_name"):
+        persona["display_name"] = ident.get("display_name") or author
+    return persona
+
+
+def generate(author: str, date: str, force: bool = False,
+             persona_name: Optional[str] = None) -> Dict[str, Any]:
+    persona = persona_for(author, persona_name)
 
     # 出稿前先把归属重判一次。记的时候手上只有当前那一条的上下文，这里能看到
     # 一整天——连 agent 明确填的 issue 号也重判，那同样是模型的判断，一样会错。

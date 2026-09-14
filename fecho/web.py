@@ -161,14 +161,11 @@ def task_list(author: str) -> List[Dict[str, Any]]:
 
 
 def report_payload(author: str, date: str) -> Dict[str, Any]:
-    from . import auth, digest, personas, pto
+    from . import digest, pto
 
     daily = db.get_report(author, date, "daily")
     voice = db.get_report(author, date, "voice")
-    ident = auth.all_authors().get(author, {})
-    persona = personas.load(ident.get("persona") or author)
-    if not persona.get("display_name"):
-        persona["display_name"] = ident.get("display_name") or author
+    persona = digest.persona_for(author)      # 必须和出日报时同一份，否则指纹永远对不上
     current_fp = digest.fingerprint(db.day_tasks(author, date), persona, pto.status(author, date))
     return {
         "daily": (daily or {}).get("content_md"),
@@ -654,6 +651,47 @@ def build_app():
         _cloud_only()
         me = guard(request, authorization)
         return {"selected": cloudscan.set_selected(me, body.get("selected") or [])}
+
+    @app.post("/api/scan/submit")
+    def api_scan_submit(request: Request, body: Dict[str, Any] = Body(...),
+                        authorization: Optional[str] = Header(None)):
+        """本机脚本交扫描结果。和 MCP 的 submit_scan 进的是同一个函数，只是走普通 HTTP：
+        脚本自己就能把结果和失败原因交上来，不必经过 agent——提炼到一半 agent 崩了，
+        服务器照样知道这天没扫成、半小时后要重试。"""
+        from . import cloudscan
+        _cloud_only()
+        me = guard(request, authorization)
+        entries = body.get("entries") or []
+        if not isinstance(entries, list):
+            raise ValueError("entries 必须是列表")
+        return cloudscan.submit(me, entries, date=body.get("date"),
+                                finished=bool(body.get("finished")), error=body.get("error"),
+                                producer="local-script")
+
+    @app.post("/api/folders/report")
+    def api_folders_report(request: Request, body: Dict[str, Any] = Body(...),
+                           authorization: Optional[str] = Header(None)):
+        """本机脚本上报「用 agent 干过活的文件夹」。只有路径，新上报的默认不勾。"""
+        from . import cloudscan
+        _cloud_only()
+        me = guard(request, authorization)
+        return cloudscan.report_folders(me, body.get("folders") or [])
+
+    # 本机要下载的文件。里面没有任何密钥，不用登录也能下——装的时候 token 还在命令行参数里。
+    _LOCAL_FILES = {
+        "fecho_local.py": ("local/fecho_local.py", "text/x-python"),
+        "SKILL.md": ("skill/SKILL.md", "text/markdown"),
+    }
+
+    @app.get("/local/{name}")
+    def local_file(name: str):
+        from fastapi.responses import PlainTextResponse
+        _cloud_only()
+        if name not in _LOCAL_FILES:
+            raise HTTPException(404, "没有这个文件")
+        rel, kind = _LOCAL_FILES[name]
+        text = _page(rel).replace("__URL__", config.PUBLIC_URL)
+        return PlainTextResponse(text, media_type=kind + "; charset=utf-8")
 
     @app.get("/install")
     @app.get("/install.md")

@@ -273,7 +273,9 @@ class TestCloudMcpAndApi(WebCase):
     def test_install_doc_points_at_this_server(self):
         doc = self.client.get("/install").text
         self.assertIn("http://testserver/mcp", doc)
-        self.assertIn("report_work_folders", doc)
+        # 上报文件夹改由本机脚本做（只读路径、不经过 agent 读对话），文档指向脚本
+        self.assertIn("http://testserver/local/fecho_local.py", doc)
+        self.assertIn("http://testserver/local/SKILL.md", doc)
         self.assertNotIn("__URL__", doc)
 
 

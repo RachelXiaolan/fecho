@@ -25,8 +25,10 @@ class TestPackageContents(unittest.TestCase):
         patterns = pyproject.split("[tool.setuptools.package-data]", 1)[1].split("]", 1)[0]
         patterns = [x.strip().strip('"') for x in patterns.split("[", 1)[1].split(",")]
         presets = ROOT / "fecho" / "presets"
-        for f in list(presets.glob("*.html")) + list(presets.glob("*.md")):
-            rel = "presets/" + f.name
+        shipped = (list(presets.glob("*.html")) + list(presets.glob("*.md"))
+                   + list(presets.glob("local/*")) + list(presets.glob("skill/*")))
+        for f in shipped:
+            rel = "presets/" + f.relative_to(presets).as_posix()
             self.assertTrue(any(fnmatch.fnmatch(rel, pat) for pat in patterns),
                             "%s 不会被打进安装包" % rel)
 
