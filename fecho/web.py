@@ -501,6 +501,11 @@ def build_app():
         me = guard(request, authorization)
         from . import service
         date_ = body.get("date") or store.today()
+        # 这天一条记录都没有，排队也生成不出东西——直接说清楚，别让人以为几分钟后会有日报
+        if not overview(me, date_)["updates"]:
+            return {"ok": True, "queued": False, "empty": True,
+                    "message": "这天没有任何记录，生成不出日报",
+                    "dashboard": dashboard_payload(me, date_)}
         if config.CLOUD:
             # 出日报要好几分钟，网页请求等不了——排队交给 lu2 上的后台程序
             from . import jobs

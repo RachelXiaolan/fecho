@@ -294,6 +294,10 @@ def _cloud_call(name: str, args: Dict[str, Any], me: str, context: MCPContext) -
     if name == "end_of_day":
         # 出日报要好几分钟，放在请求里做会超时——排队交给后台程序
         date = args.get("date") or store.today()
+        from .web import overview
+        if not overview(me, date)["updates"]:
+            return ("%s 没有任何记录，生成不出日报。先用 log_progress 记几条进展，"
+                    "或等每晚本机扫描上传。" % date)
         job = jobs.enqueue(me, "regenerate", date)
         return "已排队生成 %s 的日报（%s），几分钟后在 %s 能看到。" % (date, job["status"], url)
 

@@ -417,6 +417,7 @@
     "toast_confirmed": "进展已确认并锁定", "toast_undo_assign": "已撤销归属修改", "toast_restored": "进展已恢复",
     "toast_completed": "任务已完成", "toast_reopened": "任务已重新打开", "toast_pick_merge": "请先选择合并目标", "toast_merged": "任务已合并",
     "toast_generating": "正在调用模型整理日报…", "toast_queued": "已排队，几分钟后刷新就能看到新的日报", "toast_generated": "日报和口播稿已更新",
+    "toast_nothing_to_generate": "这天没有任何记录，生成不出日报。先让 agent 记几条进展，或等每晚扫描上传。",
     "toast_time_saved": "已保存：每天 {time} 出日报", "toast_scan_on": "以后每晚扫它的对话", "toast_scan_off": "不再扫它的对话",
     "toast_need_path": "要填完整路径，以 / 开头", "toast_folder_added": "已加到列表，记得点「保存勾选」",
     "toast_folders_saved": "已保存：{n} 个工作文件夹",
@@ -522,6 +523,7 @@
     "toast_confirmed": "Update confirmed and locked", "toast_undo_assign": "Assignment change undone", "toast_restored": "Update restored",
     "toast_completed": "Task completed", "toast_reopened": "Task reopened", "toast_pick_merge": "Pick a task to merge into first", "toast_merged": "Tasks merged",
     "toast_generating": "Asking the model to write the report…", "toast_queued": "Queued — refresh in a few minutes to see the new report", "toast_generated": "Report and voice script updated",
+    "toast_nothing_to_generate": "Nothing was recorded for this day, so there's no report to generate. Log some progress with your agent, or wait for the nightly scan.",
     "toast_time_saved": "Saved: report at {time} every day", "toast_scan_on": "Its conversations will be scanned nightly", "toast_scan_off": "Its conversations won't be scanned",
     "toast_need_path": "Enter a full path starting with /", "toast_folder_added": "Added — remember to click Save selection",
     "toast_folders_saved": "Work folders saved: {n}",
@@ -823,7 +825,7 @@
     const buttons=[$('#regenerate'),$('#dirty-regenerate')]; buttons.forEach(b=>b.disabled=true);
     toast(t('toast_generating'));
     // 云端版出日报要几分钟，接口只是排了个队——这时候说「已更新」是假话
-    try{ const result=await post('/api/regenerate',{date:state.data.date}); state.data=result.dashboard; renderAll(); toast(t(result.queued?'toast_queued':'toast_generated')); }
+    try{ const result=await post('/api/regenerate',{date:state.data.date}); state.data=result.dashboard; renderAll(); toast(t(result.empty?'toast_nothing_to_generate':result.queued?'toast_queued':'toast_generated'),null,!!result.empty); }
     catch(error){toast(error.message,null,true)} finally{buttons.forEach(b=>b.disabled=false)}
   }
   $('#regenerate').addEventListener('click',regenerate); $('#dirty-regenerate').addEventListener('click',regenerate);
