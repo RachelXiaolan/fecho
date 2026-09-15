@@ -561,6 +561,29 @@ def build_app():
         return {"ok": True, "saved": saved, "follow_up": follow,
                 "dashboard": dashboard_payload(me, date_)}
 
+    @app.post("/api/reports/images")
+    def api_report_image_upload(request: Request, body: Dict[str, Any] = Body(...),
+                                authorization: Optional[str] = Header(None)):
+        """日报里贴图：先传图拿地址，网页再把地址写进日报。一次一张。"""
+        from . import report_images
+        me = guard(request, authorization)
+        return {"ok": True, **report_images.save(me, body.get("data"))}
+
+    @app.get("/api/reports/images/{image_id}")
+    def api_report_image(image_id: str, request: Request,
+                         authorization: Optional[str] = Header(None)):
+        from fastapi.responses import Response
+        from . import report_images
+        me = guard(request, authorization)
+        found = report_images.image_for(image_id, me)
+        if not found:
+            raise HTTPException(404, "没有这张图")
+        mime, raw = found
+        return Response(raw, media_type=mime, headers={
+            "X-Content-Type-Options": "nosniff",
+            "Content-Security-Policy": "default-src 'none'; sandbox",
+            "Cache-Control": "private, max-age=86400"})
+
     @app.get("/api/style")
     def api_style(request: Request, authorization: Optional[str] = Header(None)):
         """我的写作偏好。每个人只能看自己的。"""

@@ -224,10 +224,11 @@ class TestOverHttp(WebCase):
         self.assertEqual(kinds, ["learn", "voice"])
 
     def test_you_can_only_edit_your_own_report(self):
-        """B 没有这天的日报：带着 B 的 token 改，改的只能是 B 自己的。"""
+        """B 没有这天的日报：带着 B 的 token 写，写成的是 B 自己的日报，A 的一个字都不动。"""
         r = self.post("/api/reports/daily", B, {"date": self.today, "content_md": "改别人的"})
-        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.status_code, 200)
         self.assertEqual(db.get_report(A, self.today, "daily")["content_md"], MODEL_DAILY)
+        self.assertEqual(db.get_report(B, self.today, "daily")["content_md"].strip(), "改别人的")
 
     def test_style_profiles_are_private(self):
         self.assertEqual(self.post("/api/style", A, {"content_md": "- Alice 的偏好"}).status_code, 200)

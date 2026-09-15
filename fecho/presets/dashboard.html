@@ -149,6 +149,56 @@
     .report-paper hr{border:0;border-top:1px dashed var(--line);margin:26px 0}
     .report-paper .report-version{font-size:12px;color:var(--muted);font-weight:600;margin-bottom:12px}
     .report-paper .report-empty{color:var(--muted)}
+    /* 日报按 Obsidian 的写法显示：折叠、待办、提示框、表格、代码块、图片 */
+    .report-paper .md-doc>:first-child{margin-top:0}
+    .report-paper .md-h,.report-paper li.foldable{position:relative}
+    .report-paper .fold{position:absolute;left:-22px;top:.35em;width:18px;height:18px;padding:0;border:0;border-radius:4px;
+      background:transparent;cursor:pointer;opacity:0;transition:opacity .15s}
+    .report-paper .fold::before{content:'';position:absolute;left:6px;top:4px;width:5px;height:5px;
+      border-right:1.5px solid var(--muted);border-bottom:1.5px solid var(--muted);transform:rotate(45deg);transition:transform .15s}
+    .report-paper .fold:hover{background:var(--surface-soft)}
+    .report-paper .md-h:hover>.fold,.report-paper li.foldable:hover>.fold,.report-paper .folded>.fold,.report-paper .fold:focus-visible{opacity:1}
+    .report-paper .folded>.fold::before{transform:rotate(-45deg);left:5px;top:6px}
+    .report-paper li.folded>ul,.report-paper li.folded>ol{display:none}
+    .report-paper .fold-hidden{display:none!important}
+    @media (hover:none){.report-paper .fold{opacity:.6}}
+    .report-paper li.task{list-style:none;position:relative;padding-left:24px;margin-left:-24px}
+    .report-paper .task-box{position:absolute;left:0;top:.4em;width:15px;height:15px;box-sizing:border-box;
+      border:1.5px solid var(--faint);border-radius:4px}
+    .report-paper li.checked>.task-box{background:#6f5fc7;border-color:#6f5fc7}
+    .report-paper li.checked>.task-box::after{content:'';position:absolute;left:4px;top:1px;width:4px;height:8px;
+      border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}
+    .report-paper li.done>.task-text{text-decoration:line-through;color:var(--muted)}
+    .report-paper .callout{--c:#4f78d1;margin:0 0 16px;padding:10px 14px;border-radius:8px;border-left:3px solid var(--c);
+      background:color-mix(in srgb,var(--c) 8%,transparent)}
+    .report-paper .c-abstract{--c:#1a9bb0}.report-paper .c-tip{--c:#1f9d7a}.report-paper .c-success{--c:#3a9d4f}
+    .report-paper .c-question{--c:#c48a12}.report-paper .c-warning{--c:#d9772b}.report-paper .c-danger{--c:#d24b4b}
+    .report-paper .c-example{--c:#7b61d1}.report-paper .c-quote{--c:#8a8580}
+    .report-paper .callout-title{font-weight:650;color:var(--c);display:flex;align-items:center;gap:8px}
+    .report-paper summary.callout-title{cursor:pointer;list-style:none}
+    .report-paper summary.callout-title::-webkit-details-marker{display:none}
+    .report-paper summary.callout-title::after{content:'';width:5px;height:5px;border-right:1.5px solid currentColor;
+      border-bottom:1.5px solid currentColor;transform:rotate(-45deg);transition:transform .15s}
+    .report-paper details[open]>summary.callout-title::after{transform:rotate(45deg)}
+    .report-paper .callout-body{margin-top:6px}
+    .report-paper .callout-body>:last-child{margin-bottom:0}
+    .report-paper .md-table{overflow-x:auto;margin:0 0 14px}
+    .report-paper table{border-collapse:collapse;min-width:50%;font-size:13.5px;line-height:1.6}
+    .report-paper th,.report-paper td{border:1px solid var(--line);padding:6px 10px;text-align:left;vertical-align:top}
+    .report-paper th{background:var(--surface-soft);font-weight:650}
+    .report-paper pre.md-code{margin:0 0 14px;padding:12px 14px;border-radius:8px;background:var(--surface-soft);overflow-x:auto;line-height:1.55}
+    .report-paper pre.md-code code{background:none;padding:0;border:0;white-space:pre}
+    .report-paper .md-img{position:relative;display:inline-block;max-width:100%;vertical-align:top;margin:4px 0}
+    .report-paper .md-img img{display:block;max-width:100%;height:auto;border-radius:6px;cursor:zoom-in}
+    .report-paper .img-handle{display:none}
+    .md-preview .img-handle{display:block;position:absolute;right:-6px;bottom:-6px;width:14px;height:14px;border-radius:4px;
+      background:#6f5fc7;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.25);cursor:nwse-resize;touch-action:none}
+    .edit-split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:start}
+    .md-preview{border:1px solid var(--line);border-radius:10px;padding:16px 20px 16px 34px;min-height:440px;max-height:75vh;overflow:auto}
+    @media (max-width:1100px){.edit-split{grid-template-columns:1fr}}
+    .lightbox{position:fixed;inset:0;z-index:40;display:none;place-items:center;padding:24px;background:rgba(16,14,36,.86);cursor:zoom-out}
+    .lightbox.show{display:grid}
+    .lightbox img{max-width:100%;max-height:100%;border-radius:6px;box-shadow:0 10px 40px rgba(0,0,0,.4)}
     .warning-list{margin:0;padding:0;list-style:none}.warning-list li{padding:10px 0;border-top:1px solid var(--line)}
     .check{display:flex;gap:12px;align-items:flex-start;padding:13px 0;border-top:1px solid var(--line)}.check:first-child{border-top:0}
     .check-mark{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;background:var(--success-bg);color:var(--success);font-size:11px;font-weight:700}
@@ -409,7 +459,7 @@
     "reports_heading": "日报", "reports_sub": "日报、口播稿和每一次生成历史都在这里。",
     "edit": "修改", "regenerate": "重新生成", "regenerate_now": "现在生成",
     "dirty_llm": "进展或归属已经变化，这份报告需要重新生成。",
-    "dirty_human": "有新的进展或归属变化。这份日报被你改过，重新生成会覆盖你的修改（修改版会留在历史版本里）。",
+    "dirty_human": "有新的进展或归属变化。这份日报是你写的，不会被自动覆盖——自动生成的新版本会放进「历史版本」；点「现在生成」会换成自动版（你的版本留在历史版本里）。",
     "tab_daily": "日报", "tab_voice": "口播稿", "tab_history": "历史版本", "tab_warnings": "生成提示",
     "not_generated": "尚未生成。",
     "no_daily_with_updates": "这天有 {n} 条记录，日报还没生成。到了每天出日报的时间会自动生成，也可以点「重新生成」。",
@@ -417,6 +467,12 @@
     "edit_aria": "修改日报",
     "edit_hint": "保存后：旧版本进「历史版本」；口播稿按新日报重出；你的写作偏好在后台更新，以后出日报照着写。",
     "cancel": "取消", "save": "保存", "no_voice": "尚未生成口播稿。",
+    "write_report": "手动写日报", "write_hint": "还没生成日报，可以先自己写。保存后：到点自动生成的版本不会覆盖它，会放进「历史版本」；口播稿按你写的出。",
+    "write_template": "# {date} 工作日志\n\n## Done\n\n- [x] \n\n## In Progress\n\n- [/] \n",
+    "img_insert": "插入图片", "img_alt": "图片", "img_uploading": "图片上传中…", "img_inserted": "图片已插入。在右边预览里拖图片右下角的小方块可以调大小",
+    "img_view": "查看大图", "preview_aria": "预览", "fold": "折叠或展开",
+    "md_hint": "支持 Obsidian 写法：- [ ] 待办、- [x] 完成、- [/] 等其他状态打勾不划掉；> [!note]- 可折叠提示框；表格、代码块；直接粘贴或拖入图片。",
+    "toast_write_saved": "已保存。之后自动生成的版本不会覆盖它，会放进历史版本",
     "version_label": "版本 {n} · {kind} · {by} · {time}", "by_human": "人工修改", "by_model": "模型生成",
     "no_history": "还没有历史版本。", "no_warnings": "本次生成没有警告。",
     "system_heading": "系统", "system_sub": "连接、模型、Mobius 和扫描是否真的在工作。",
@@ -532,7 +588,7 @@
     "reports_heading": "Reports", "reports_sub": "Your daily report, voice script and every earlier version.",
     "edit": "Edit", "regenerate": "Regenerate", "regenerate_now": "Regenerate now",
     "dirty_llm": "Progress or assignments changed; this report should be regenerated.",
-    "dirty_human": "There are new updates or assignment changes. You edited this report — regenerating will replace your edit (your version stays in History).",
+    "dirty_human": "There are new updates or assignment changes. You wrote this report, so it won't be replaced automatically — new automatic versions go to History. \"Regenerate now\" switches to the automatic version (yours stays in History).",
     "tab_daily": "Daily report", "tab_voice": "Voice script", "tab_history": "History", "tab_warnings": "Notes",
     "not_generated": "Not generated yet.",
     "no_daily_with_updates": "There are {n} updates for this day but no report yet. It's generated automatically at your report time, or click Regenerate.",
@@ -540,6 +596,12 @@
     "edit_aria": "Edit report",
     "edit_hint": "After saving: the old version goes to History, the voice script is rewritten from your version, and your writing style is updated in the background for future reports.",
     "cancel": "Cancel", "save": "Save", "no_voice": "No voice script yet.",
+    "write_report": "Write report", "write_hint": "No report yet — you can write your own. After saving, automatic versions won't replace it and go to History instead; the voice script follows what you wrote.",
+    "write_template": "# {date} Work log\n\n## Done\n\n- [x] \n\n## In Progress\n\n- [/] \n",
+    "img_insert": "Insert image", "img_alt": "image", "img_uploading": "Uploading image…", "img_inserted": "Image inserted. Drag the small square at its bottom-right corner in the preview to resize",
+    "img_view": "View image", "preview_aria": "Preview", "fold": "Fold or unfold",
+    "md_hint": "Obsidian syntax works: - [ ] to-do, - [x] done, - [/] and other marks show checked without strikethrough; > [!note]- collapsible callouts; tables, code blocks; paste or drop images.",
+    "toast_write_saved": "Saved. Automatic versions won't replace it; they go to History",
     "version_label": "Version {n} · {kind} · {by} · {time}", "by_human": "Edited by you", "by_model": "Generated",
     "no_history": "No earlier versions.", "no_warnings": "No notes for this run.",
     "system_heading": "System", "system_sub": "Whether connections, the model, Mobius and scanning actually work.",
@@ -649,7 +711,7 @@
     if (!quiet) $('#loading').classList.add('show');
     $('#error-state').classList.remove('show');
     try{
-      state.data = await request(state.viewAs
+      const data = await request(state.viewAs
         ? `/api/admin/dashboard?author=${encodeURIComponent(state.viewAs.author)}&date=${encodeURIComponent(date)}`
         : `/api/dashboard?date=${encodeURIComponent(date)}`);
       hydrateFilters(); renderAll();
@@ -734,18 +796,44 @@
   // 日报是我们自己的代码拼出来的，语法范围很小（标题、有序/嵌套列表、加粗、链接、
   // 引用、行内代码），所以不引外部库：面板要保持零外部依赖，断网也能打开。
   // 内容来自模型输出，一律先转义再加标记；链接只放行 http(s)，挡掉 javascript: 这类。
+  const MD_IMG=/!\[([^\]]*)\]\(((?:https?:\/\/|\/api\/reports\/images\/)[^\s)]+)\)/g;   // 只放行 http(s) 和本站传上来的图
+  let mdImages=0;
   function mdInline(text){
     // 行内代码先换成占位符，免得里面的 ** 被当成加粗。占位符用私有区字符的
     // 转义写法——文件里不能夹原始控制字符，浏览器解析 script 时会把它们换掉。
     const codes=[];
     let s=esc(text).replace(/`([^`]+)`/g,(_,c)=>{codes.push(c);return ''+(codes.length-1)+'';});
+    // 图片：![说明|宽度](地址)，宽度写法和 Obsidian 一样。按出现顺序编号，编辑时拖大小靠编号找回原文那一处
+    s=s.replace(MD_IMG,(_,alt,url)=>{
+      const parts=alt.split('|'); let width='';
+      if(parts.length>1&&/^\d+(x\d+)?$/.test(parts[parts.length-1].trim())) width=parts.pop().trim().split('x')[0];
+      return `<span class="md-img" data-img="${mdImages++}"><img src="${url}" alt="${parts.join('|')}"${width?` style="width:${width}px"`:''} loading="lazy"><span class="img-handle"></span></span>`;
+    });
     s=s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,'<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
     s=s.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
     return s.replace(/(\d+)/g,(_,i)=>'<code>'+codes[+i]+'</code>');
   }
 
+  // Obsidian 的提示框类型和别名，归成几种颜色
+  const CALLOUT_KIND={note:'note',info:'note',todo:'note',abstract:'abstract',summary:'abstract',tldr:'abstract',
+    tip:'tip',hint:'tip',important:'tip',success:'success',check:'success',done:'success',question:'question',help:'question',
+    faq:'question',warning:'warning',caution:'warning',attention:'warning',failure:'danger',fail:'danger',missing:'danger',
+    danger:'danger',error:'danger',bug:'danger',example:'example',quote:'quote',cite:'quote'};
+  const TABLE_SEP=/^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
+  const FENCE=/^\s*(`{3,}|~{3,})/;
+  function tableCells(row){
+    let s=row.trim();
+    if(s.startsWith('|')) s=s.slice(1);
+    if(s.endsWith('|')&&!s.endsWith('\\|')) s=s.slice(0,-1);
+    return s.split(/(?<!\\)\|/).map(cell=>cell.trim().replace(/\\\|/g,'|'));
+  }
+
   function md(src){
-    const lines=String(src||'').replace(/\r\n?/g,'\n').split('\n');
+    mdImages=0;
+    return '<div class="md-doc">'+mdBlocks(String(src||'').replace(/\r\n?/g,'\n').split('\n'))+'</div>';
+  }
+
+  function mdBlocks(lines){
     const out=[], lists=[];              // lists: 当前打开的列表栈 {indent, tag}
     let para=[], quote=[];
     const flushPara=()=>{ if(para.length){ out.push('<p>'+mdInline(para.join(' '))+'</p>'); para=[]; } };
@@ -753,14 +841,52 @@
     const closeLists=(indent)=>{ while(lists.length && lists[lists.length-1].indent>=indent) out.push('</li></'+lists.pop().tag+'>'); };
     const flushAll=()=>{ flushPara(); flushQuote(); closeLists(0); };
 
-    for(const raw of lines){
-      const line=raw.replace(/\s+$/,'');
+    for(let i=0;i<lines.length;i++){
+      const line=lines[i].replace(/\s+$/,'');
+
+      // 代码块：原样显示，里面的符号一律不当标记
+      const fence=line.match(FENCE);
+      if(fence){
+        flushAll(); const body=[];
+        for(i++;i<lines.length&&!lines[i].trim().startsWith(fence[1]);i++) body.push(lines[i]);
+        out.push(`<pre class="md-code"><code>${esc(body.join('\n'))}</code></pre>`);
+        continue;
+      }
       if(!line.trim()){ flushAll(); continue; }
 
       const h=line.match(/^(#{1,6})\s+(.*)$/);
-      if(h){ flushAll(); const n=h[1].length; out.push(`<h${n}>${mdInline(h[2])}</h${n}>`); continue; }
+      if(h){ flushAll(); const n=h[1].length; out.push(`<h${n} class="md-h">${mdInline(h[2])}</h${n}>`); continue; }
 
       if(/^\s*[─—-]{3,}\s*$/.test(line)){ flushAll(); out.push('<hr>'); continue; }
+
+      // 表格：这一行带 |，下一行是 |---|
+      if(line.includes('|')&&i+1<lines.length&&lines[i+1].includes('|')&&TABLE_SEP.test(lines[i+1])){
+        flushAll();
+        const head=tableCells(line);
+        const align=tableCells(lines[i+1]).map(c=>/^:-+:$/.test(c)?'center':/-+:$/.test(c)?'right':'');
+        const cell=(tag,text,k)=>`<${tag}${align[k]?` style="text-align:${align[k]}"`:''}>${mdInline(text)}</${tag}>`;
+        const rows=[];
+        for(i+=2;i<lines.length&&lines[i].includes('|')&&lines[i].trim();i++) rows.push(tableCells(lines[i]));
+        i--;
+        out.push(`<div class="md-table"><table><thead><tr>${head.map((c,k)=>cell('th',c,k)).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${head.map((_,k)=>cell('td',r[k]||'',k)).join('')}</tr>`).join('')}</tbody></table></div>`);
+        continue;
+      }
+
+      // 提示框：> [!note] 标题；带 - 默认折叠，带 + 默认展开
+      const callout=!quote.length&&line.match(/^>\s?\[!(\w+)\]([+-]?)\s*(.*)$/);
+      if(callout){
+        flushPara(); closeLists(0);
+        const body=[];
+        for(i++;i<lines.length&&/^>/.test(lines[i]);i++) body.push(lines[i].replace(/^>\s?/,''));
+        i--;
+        const name=callout[1], kind=CALLOUT_KIND[name.toLowerCase()]||'note';
+        const title=callout[3]?mdInline(callout[3]):esc(name.charAt(0).toUpperCase()+name.slice(1).toLowerCase());
+        const inner=body.some(l=>l.trim())?`<div class="callout-body">${mdBlocks(body)}</div>`:'';
+        out.push(callout[2]
+          ?`<details class="callout c-${kind}"${callout[2]==='+'?' open':''}><summary class="callout-title">${title}</summary>${inner}</details>`
+          :`<div class="callout c-${kind}"><div class="callout-title">${title}</div>${inner}</div>`);
+        continue;
+      }
 
       const q=line.match(/^>\s?(.*)$/);
       if(q){ flushPara(); closeLists(0); quote.push(q[1]); continue; }
@@ -771,14 +897,19 @@
         const indent=li[1].replace(/\t/g,'    ').length, ordered=/^\d+$/.test(li[2]), tag=ordered?'ol':'ul';
         closeLists(indent+1);            // 比这一项缩进更深的都收掉
         const top=lists[lists.length-1];
-        if(top && top.indent===indent && top.tag===tag){ out.push('</li><li>'); }
+        // 待办：[ ] 没做；[x] 做完（划掉）；方括号里放别的字符（[/] [-] [a]…）打勾但不划掉，和 Obsidian 一样
+        const task=li[3].match(/^\[(.)\](?:\s+(.*))?$/);
+        const mark=task&&task[1];
+        const cls=!task?'':mark===' '?'task':/^[xX]$/.test(mark)?'task checked done':'task checked';
+        const open=cls?`<li class="${cls}" data-task="${esc(mark)}">`:'<li>';
+        if(top && top.indent===indent && top.tag===tag){ out.push('</li>'+open); }
         else{
           if(top && top.indent===indent) out.push('</li></'+lists.pop().tag+'>');
           // 保留原编号：Blocked 下面的「2.」不能被重新数成「1.」
-          out.push(`<${tag}${ordered&&li[2]!=='1'?` start="${li[2]}"`:''}><li>`);
+          out.push(`<${tag}${ordered&&li[2]!=='1'?` start="${li[2]}"`:''}>`+open);
           lists.push({indent, tag});
         }
-        out.push(mdInline(li[3]));
+        out.push(task?`<span class="task-box"></span><span class="task-text">${mdInline(task[2]||'')}</span>`:mdInline(li[3]));
         continue;
       }
 
@@ -789,10 +920,75 @@
     return out.join('');
   }
 
+  // 有子项的列表项、标题：左边加折叠箭头（悬停出现，和 Obsidian 一样）
+  function enhanceMd(root){
+    if(!root) return;
+    const button=`<button type="button" class="fold" aria-expanded="true" aria-label="${esc(t('fold'))}"></button>`;
+    root.querySelectorAll('li').forEach(li=>{
+      if(li.querySelector(':scope>ul,:scope>ol')&&!li.querySelector(':scope>.fold')){ li.classList.add('foldable'); li.insertAdjacentHTML('afterbegin',button); }
+    });
+    root.querySelectorAll('.md-h').forEach(h=>{ if(!h.querySelector(':scope>.fold')) h.insertAdjacentHTML('afterbegin',button); });
+  }
+  // 折起一个标题 = 藏起它后面、直到下一个同级或更高级标题之前的内容。里面折着的小标题展开外层后仍保持折着
+  function applyHeadingFolds(container){
+    let hide=null;
+    for(const el of container.children){
+      const m=/^H([1-6])$/.exec(el.tagName), level=m?+m[1]:null;
+      if(level!==null&&hide!==null&&level<=hide) hide=null;
+      el.classList.toggle('fold-hidden',hide!==null);
+      if(level!==null&&hide===null&&el.classList.contains('folded')) hide=level;
+    }
+  }
+  // 拖图片右下角改大小：改原文里第 index 张图的 |宽度。数图的规则和 md() 一致：跳过代码块和行内代码
+  function setImageWidth(src, index, width){
+    let n=0, fence=null;
+    return src.split('\n').map(line=>{
+      if(fence){ if(line.trim().startsWith(fence)) fence=null; return line; }
+      const f=line.match(FENCE); if(f){ fence=f[1]; return line; }
+      return line.split(/(`[^`]+`)/).map((part,k)=>k%2?part:part.replace(MD_IMG,(whole,alt,url)=>{
+        if(n++!==index) return whole;
+        const parts=alt.split('|');
+        if(parts.length>1&&/^\d+(x\d+)?$/.test(parts[parts.length-1].trim())) parts.pop();
+        return `![${parts.join('|')}|${width}](${url})`;
+      })).join('');
+    }).join('\n');
+  }
+  function updatePreview(){
+    const editor=$('#report-editor'), preview=$('#report-preview');
+    if(!editor||!preview) return;
+    preview.innerHTML=md(editor.value); enhanceMd(preview);
+  }
+  function openLightbox(src, alt){
+    let box=$('#lightbox');
+    if(!box){ box=document.createElement('div'); box.id='lightbox'; box.className='lightbox'; box.setAttribute('role','dialog'); box.setAttribute('aria-modal','true'); box.innerHTML='<img alt="">'; document.body.appendChild(box); }
+    box.setAttribute('aria-label',t('img_view'));
+    const img=box.querySelector('img'); img.src=src; img.alt=alt||'';
+    box.classList.add('show');
+  }
+  function closeLightbox(){ const box=$('#lightbox'); if(box) box.classList.remove('show'); }
+  async function uploadReportImages(files){
+    if(state.viewAs){ toast(t('toast_readonly'),null,true); return; }
+    for(const file of files){
+      const editor=$('#report-editor'); if(!editor) return;
+      try{
+        if(!FB_TYPES.test(file.type)) throw new Error(t('fb_bad_type'));
+        toast(t('img_uploading'));
+        const blob=file.size<=FB_TARGET_BYTES?file:await shrinkImage(file);
+        const dataUrl=await readAsDataURL(blob);
+        const r=await post('/api/reports/images',{data:dataUrl.split(',')[1]});
+        const at=editor.selectionStart, before=editor.value.slice(0,at);
+        editor.setRangeText((before&&!before.endsWith('\n')?'\n':'')+`![${t('img_alt')}|480](${r.url})\n`, at, editor.selectionEnd, 'end');
+        editor.focus(); updatePreview(); toast(t('img_inserted'));
+      }catch(error){ toast(error.message,null,true); }
+    }
+  }
+
   function renderReports(){
     const report=state.data.reports; $('#report-dirty').classList.toggle('show',report.dirty);
     $('#report-dirty-copy').textContent=report.generator==='human' ? t('dirty_human') : t('dirty_llm');
-    $('#edit-report').hidden=!report.daily||!!state.viewAs||state.editing;
+    // 还没生成也能先手写：按钮从「修改」变成「手动写日报」
+    $('#edit-report').hidden=!!state.viewAs||state.editing;
+    $('#edit-report').textContent=t(report.daily?'edit':'write_report');
     // 正在改的时候，每分钟的自动刷新不能把编辑框重画掉——写了一半的字会没
     if(state.editing&&state.reportTab==='daily'&&$('#report-editor')) return;
     $$('#report-tabs button').forEach(button=>button.classList.toggle('active',button.dataset.reportTab===state.reportTab));
@@ -803,7 +999,7 @@
     const updates=(state.data.overview||{}).updates||0;
     const noDaily=updates ? t('no_daily_with_updates',{n:updates}) : t('no_daily_empty');
     if(state.reportTab==='daily') html=state.editing
-      ?`<div class="report-edit"><textarea id="report-editor" class="report-editor" aria-label="${esc(t('edit_aria'))}">${esc(report.daily||'')}</textarea><p class="meta" style="margin:0">${esc(t('edit_hint'))}</p><div class="button-row"><button class="btn" id="cancel-edit">${esc(t('cancel'))}</button><button class="btn primary" id="save-edit">${esc(t('save'))}</button></div></div>`
+      ?`<div class="report-edit"><div class="button-row" style="justify-content:space-between;align-items:center"><p class="meta" style="margin:0;flex:1">${esc(t(report.daily?'edit_hint':'write_hint'))}</p><button class="btn small" type="button" id="insert-image">${esc(t('img_insert'))}</button></div><input type="file" id="report-image-file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden><div class="edit-split"><textarea id="report-editor" class="report-editor" aria-label="${esc(t('edit_aria'))}">${esc(report.daily||t('write_template',{date:state.data.date}))}</textarea><div class="md-preview" id="report-preview" aria-label="${esc(t('preview_aria'))}"></div></div><p class="meta" style="margin:0">${esc(t('md_hint'))}</p><div class="button-row"><button class="btn" id="cancel-edit">${esc(t('cancel'))}</button><button class="btn primary" id="save-edit">${esc(t('save'))}</button></div></div>`
       :(report.daily?md(report.daily):empty(noDaily));
     if(state.reportTab==='voice') html=report.voice?md(report.voice):empty(t('no_voice'));
     if(state.reportTab==='history') html=report.history.length
@@ -812,7 +1008,11 @@
     if(state.reportTab==='warnings') html=report.warnings.length
       ?'<ul>'+report.warnings.map(text=>`<li>${esc(text)}</li>`).join('')+'</ul>'
       :empty(t('no_warnings'));
+    // 内容没变就不重画：每分钟的自动刷新不能把人折起来的标题和列表又全展开
+    if(state.reportHtml===html) return;
+    state.reportHtml=html;
     $('#report-content').innerHTML=html;
+    if(state.editing&&state.reportTab==='daily') updatePreview(); else enhanceMd($('#report-content'));
   }
 
   function renderSystem(){
@@ -847,6 +1047,11 @@
   }
 
   document.addEventListener('click', async event=>{
+    const fold=event.target.closest('.report-paper .fold');
+    if(fold){ const host=fold.parentElement; host.classList.toggle('folded'); fold.setAttribute('aria-expanded',String(!host.classList.contains('folded'))); if(host.classList.contains('md-h')) applyHeadingFolds(host.parentElement); return; }
+    const zoom=event.target.closest('.report-paper .md-img img'); if(zoom){ openLightbox(zoom.currentSrc||zoom.src, zoom.alt); return; }
+    if(event.target.closest('#lightbox')){ closeLightbox(); return; }
+    if(event.target.closest('#insert-image')){ $('#report-image-file').click(); return; }
     const langButton=event.target.closest('[data-lang]'); if(langButton){ if(langButton.dataset.lang!==lang) setLang(langButton.dataset.lang); return; }
     const nav=event.target.closest('[data-view]'); if(nav){switchView(nav.dataset.view);return;}
     const go=event.target.closest('[data-go]'); if(go){switchView(go.dataset.go);return;}
@@ -859,7 +1064,7 @@
     const saveEdit=event.target.closest('#save-edit');
     if(saveEdit){ saveEdit.disabled=true;
       try{ const r=await post('/api/reports/daily',{date:state.data.date,content_md:$('#report-editor').value}); state.editing=false; state.data=r.dashboard; renderAll();
-        toast(t(r.saved.status==='unchanged'?'toast_unchanged':'toast_edit_saved')); if(state.me&&state.me.cloud) loadStyle().catch(()=>{}); }
+        toast(t(r.saved.status==='unchanged'?'toast_unchanged':r.saved.new?'toast_write_saved':'toast_edit_saved')); if(state.me&&state.me.cloud) loadStyle().catch(()=>{}); }
       catch(error){ saveEdit.disabled=false; toast(error.message,null,true); }
       return; }
     const fbRemove=event.target.closest('[data-fb-remove]'); if(fbRemove){ state.feedback.images.splice(+fbRemove.dataset.fbRemove,1); renderFeedbackDraft(); return; }
@@ -1091,6 +1296,37 @@
       toast(t('fb_sent'));
     }catch(error){ toast(error.message,null,true); }
     finally{ button.disabled=false; }
+  });
+
+  // 改日报：边写边预览；粘贴、拖入、按钮选图都会先传图再把地址写进原文
+  let previewTimer=null;
+  document.addEventListener('input',event=>{ if(event.target.id==='report-editor'){ clearTimeout(previewTimer); previewTimer=setTimeout(updatePreview,150); } });
+  document.addEventListener('paste',event=>{
+    if(event.target.id!=='report-editor') return;
+    const files=[...((event.clipboardData||{}).files||[])].filter(file=>file.type.startsWith('image/'));
+    if(files.length){ event.preventDefault(); uploadReportImages(files); }
+  });
+  document.addEventListener('dragover',event=>{ if(event.target.id==='report-editor'&&hasFiles(event)) event.preventDefault(); });
+  document.addEventListener('drop',event=>{
+    if(event.target.id!=='report-editor'||!hasFiles(event)) return;
+    event.preventDefault(); uploadReportImages([...event.dataTransfer.files].filter(file=>file.type.startsWith('image/')));
+  });
+  document.addEventListener('change',event=>{ if(event.target.id!=='report-image-file') return; uploadReportImages([...event.target.files]); event.target.value=''; });
+  document.addEventListener('keydown',event=>{ if(event.key==='Escape') closeLightbox(); });
+  // 预览里拖图片右下角的小方块改大小，松手后把新宽度写回原文
+  document.addEventListener('pointerdown',event=>{
+    const handle=event.target.closest('.md-preview .img-handle'); if(!handle) return;
+    const wrap=handle.parentElement, img=wrap.querySelector('img'), preview=handle.closest('.md-preview');
+    const startX=event.clientX, startW=img.getBoundingClientRect().width, maxW=preview.clientWidth-40;
+    let moved=false;
+    event.preventDefault(); handle.setPointerCapture(event.pointerId);
+    const move=ev=>{ moved=true; img.style.width=Math.round(Math.max(60,Math.min(maxW,startW+ev.clientX-startX)))+'px'; };
+    const up=()=>{
+      handle.removeEventListener('pointermove',move); handle.removeEventListener('pointerup',up); handle.removeEventListener('pointercancel',up);
+      const editor=$('#report-editor');
+      if(moved&&editor) editor.value=setImageWidth(editor.value,+wrap.dataset.img,parseInt(img.style.width,10));
+    };
+    handle.addEventListener('pointermove',move); handle.addEventListener('pointerup',up); handle.addEventListener('pointercancel',up);
   });
 
   applyStatic();

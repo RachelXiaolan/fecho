@@ -598,11 +598,13 @@ def generate(author: str, date: str, force: bool = False,
     fp = fingerprint(tasks, persona, pto_status)
 
     existing = db.get_report(author, date, "daily")
-    if existing and existing.get("generator") == "human" and keep_human:
-        # 新进展进来只在网页上提示「有新进展」，由人决定要不要重出
+    # 人写的或改过的日报不覆盖。事实有变时照样出一版自动的，但只放进历史版本给人对照；
+    # 网页上提示「有新进展」，由人决定要不要点「重新生成」换成自动版。
+    archive_only = bool(existing and existing.get("generator") == "human" and keep_human)
+    if archive_only and (not tasks or _archived_fingerprint(author, date) == fp):
         return _result(author, date, "kept-human", pto_status, len(tasks), n_updates,
-                       reason="这份日报被人改过，不自动覆盖；要覆盖请点「重新生成」")
-    if existing and existing["fingerprint"] == fp and not force:
+                       reason="这份日报是人写的，不自动覆盖；要覆盖请点「重新生成」")
+    if not archive_only and existing and existing["fingerprint"] == fp and not force:
         return _result(author, date, "skipped", pto_status, len(tasks), n_updates,
                        reason="输入未变，跳过重生成")
 
@@ -656,6 +658,15 @@ def generate(author: str, date: str, force: bool = False,
         warnings.append("日报 LLM 失败（%s），已输出兜底稿" % str(exc)[:160])
         daily = _fallback_daily(author, date, tasks, persona, aliases)
         daily_gen = "fallback"
+
+    if archive_only:
+        if pto_status == "pto":
+            daily = "> 当日为 PTO（请假），以下为期间仍产生的进展。\n\n" + daily
+        _archive(author, date, daily, fp, daily_gen)
+        res = _result(author, date, "kept-human", pto_status, len(tasks), n_updates,
+                      reason="这份日报是人写的，不自动覆盖；自动生成的版本放进了历史版本")
+        res["warnings"] = warnings
+        return res
 
     voice, voice_gen = _make_voice(author, date, daily, tasks, persona, lo, hi, warnings)
 
@@ -775,7 +786,12 @@ def save_human_edit(author: str, date: str, content_md: str) -> Dict[str, Any]:
         raise ValueError("日报不能是空的")
     prev = db.get_report(author, date, "daily")
     if not prev:
-        raise ValueError("这天还没有日报，没法修改")
+        # 还没生成就先手写：指纹按现在的事实算，没有新进展就不提示「需要重新生成」
+        tasks = db.day_tasks(author, date)
+        fp = fingerprint(tasks, persona_for(author), pto.status(author, date))
+        _persist(author, date, "daily", content + "\n", fp, "human", None,
+                 sum(len(t["updates"]) for t in tasks))
+        return {"status": "saved", "renamed": {}, "new": True}
     if content == (prev["content_md"] or "").strip():
         return {"status": "unchanged", "renamed": {}}
     renamed: Dict[str, str] = {}
@@ -801,15 +817,35 @@ def _stamp_pto(author: str, date: str, status: str) -> None:
                      (status, author, date))
 
 
+def _archive(author: str, date: str, daily: str, fp: str, generator: str) -> None:
+    """人写的日报旁边，把自动生成的版本只存进历史版本。"""
+    with db.cursor() as conn:
+        conn.execute(
+            "INSERT INTO report_history (author,date,kind,content_md,generator,created_at,fingerprint)"
+            " VALUES (?,?,?,?,?,?,?)",
+            (author, date, "daily", daily, generator, store.now_iso(), fp))
+
+
+def _archived_fingerprint(author: str, date: str) -> Optional[str]:
+    """最近一版自动生成的日报是按什么事实写的。事实没变就不必再出一版放进历史。"""
+    with db.cursor() as conn:
+        row = conn.execute(
+            "SELECT fingerprint FROM report_history WHERE author=? AND date=? AND kind='daily'"
+            " AND generator<>'human' ORDER BY created_at DESC, id DESC LIMIT 1",
+            (author, date)).fetchone()
+    return row["fingerprint"] if row else None
+
+
 def _persist(author, date, kind, content, fp, generator, model, n,
              warnings: Optional[List[str]] = None) -> None:
     prev = db.get_report(author, date, kind)
     with db.cursor() as conn:
         if prev:
             conn.execute(
-                "INSERT INTO report_history (author,date,kind,content_md,generator,created_at)"
-                " VALUES (?,?,?,?,?,?)",
-                (author, date, kind, prev["content_md"], prev["generator"], prev["created_at"]))
+                "INSERT INTO report_history (author,date,kind,content_md,generator,created_at,fingerprint)"
+                " VALUES (?,?,?,?,?,?,?)",
+                (author, date, kind, prev["content_md"], prev["generator"], prev["created_at"],
+                 prev["fingerprint"]))
         conn.execute(
             "INSERT INTO reports (report_id,author,date,kind,content_md,fingerprint,"
             "generator,model,entry_count,char_count,warnings,created_at)"

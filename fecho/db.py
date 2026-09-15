@@ -164,7 +164,8 @@ CREATE TABLE IF NOT EXISTS report_history (
     kind        TEXT NOT NULL,
     content_md  TEXT NOT NULL,
     generator   TEXT NOT NULL,
-    created_at  TEXT NOT NULL
+    created_at  TEXT NOT NULL,
+    fingerprint TEXT                    -- 那一版是按什么事实写的；人写的日报旁边存自动版时靠它判断要不要再出
 );
 """
 
@@ -337,6 +338,16 @@ CREATE TABLE IF NOT EXISTS feedback_images (
     created_at    TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_feedback_images ON feedback_images(feedback_id, position);
+
+-- 日报里贴的图。和反馈截图一样存库里
+CREATE TABLE IF NOT EXISTS report_images (
+    image_id      TEXT PRIMARY KEY,
+    author        TEXT NOT NULL,
+    mime          TEXT NOT NULL,        -- 按文件头认出来的，不是浏览器报的
+    data          TEXT NOT NULL,        -- base64
+    size          INTEGER NOT NULL,
+    created_at    TEXT NOT NULL
+);
 """
 
 
@@ -462,6 +473,8 @@ def init() -> None:
             conn.executescript(SCHEMA_CLOUD)
             conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_updates_source_event"
                          " ON updates(source_event_key) WHERE source_event_key IS NOT NULL")
+            # 线上的库在加这一列之前就建好了
+            conn.execute("ALTER TABLE report_history ADD COLUMN IF NOT EXISTS fingerprint TEXT")
             # Supabase 默认开着一个叫 Data API 的网页接口，能直接读这个库里的表。
             # 我们不用它——程序是直连数据库的。打开行级安全又不配任何放行规则，
             # 那个接口就一行都读不到；我们自己连的是建表的那个账号，不受影响。
@@ -495,6 +508,9 @@ def init() -> None:
         report_columns = {r["name"] for r in conn.execute("PRAGMA table_info(reports)").fetchall()}
         if "warnings" not in report_columns:
             conn.execute("ALTER TABLE reports ADD COLUMN warnings TEXT NOT NULL DEFAULT '[]'")
+        history_columns = {r["name"] for r in conn.execute("PRAGMA table_info(report_history)").fetchall()}
+        if "fingerprint" not in history_columns:
+            conn.execute("ALTER TABLE report_history ADD COLUMN fingerprint TEXT")
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_updates_source_event"
                      " ON updates(source_event_key) WHERE source_event_key IS NOT NULL")
 
