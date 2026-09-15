@@ -4,33 +4,45 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Fecho</title>
+  <script id="theme-boot">try{var s=localStorage.getItem('fecho-theme');document.documentElement.dataset.theme=s==='dark'||s==='light'?s:(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');}catch(_){document.documentElement.dataset.theme='light';}
+  document.addEventListener('click',function(e){var b=e.target.closest&&e.target.closest('#theme-toggle');if(!b)return;var n=document.documentElement.dataset.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=n;try{localStorage.setItem('fecho-theme',n);}catch(_){}});</script>
   <style>
     :root{--nav:#1b1938;--violet:#c9b4fa;--canvas:#f7f6f2;--ink:#292827;--muted:#73706d;
-      --line:#e5e2db;--soft:#f1f0eb;--danger:#9a3f3a;--danger-bg:#fbe9e7}
+      --line:#e5e2db;--soft:#f1f0eb;--danger:#9a3f3a;--danger-bg:#fbe9e7;
+      --surface:#fff;--primary:#1b1938;--primary-hover:#100e24;color-scheme:light}
+    /* 黑夜模式：和 Fecho 面板同一套，记在 fecho-theme */
+    :root[data-theme="dark"]{--canvas:#131217;--ink:#e9e7e3;--muted:#a19e99;--line:#34323b;--soft:#26252d;
+      --danger:#f1a39c;--danger-bg:#3b1e1c;--surface:#1b1a21;--primary:#6f5fc7;--primary-hover:#5f50b5;color-scheme:dark}
+    .corner{position:absolute;top:16px;right:16px;display:flex;gap:6px;align-items:center}
+    .theme-toggle{width:30px;height:30px;padding:0;border:1px solid var(--line);border-radius:9px;background:var(--soft);
+      color:var(--muted);display:grid;place-items:center;cursor:pointer}
+    .theme-toggle:hover{color:var(--ink)}
+    .theme-toggle .i-sun,:root[data-theme="dark"] .theme-toggle .i-moon{display:none}
+    :root[data-theme="dark"] .theme-toggle .i-sun{display:block}
     *{box-sizing:border-box}
     body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--canvas);color:var(--ink);
       font:15px/1.6 "Avenir Next","SF Pro Text","PingFang SC","Microsoft YaHei",sans-serif}
-    .card{position:relative;width:min(420px,92vw);background:#fff;border:1px solid var(--line);border-radius:16px;
+    .card{position:relative;width:min(420px,92vw);background:var(--surface);border:1px solid var(--line);border-radius:16px;
       padding:36px 34px;box-shadow:0 12px 32px rgba(27,25,56,.08)}
     .mark{width:40px;height:40px;border-radius:11px;background:var(--violet);color:var(--nav);
       display:grid;place-items:center;font-weight:700;font-size:20px;margin-bottom:18px}
     h1{font-size:22px;margin:0 0 6px;font-weight:650;letter-spacing:-.3px}
     p{margin:0 0 22px;color:var(--muted)}
-    a.btn{display:block;text-align:center;background:var(--nav);color:#fff;text-decoration:none;
+    a.btn{display:block;text-align:center;background:var(--primary);color:#fff;text-decoration:none;
       border-radius:10px;padding:13px 16px;font-weight:600}
-    a.btn:hover{background:#100e24}
+    a.btn:hover{background:var(--primary-hover)}
     .error{display:none;background:var(--danger-bg);color:var(--danger);border-radius:8px;
       padding:11px 13px;margin-bottom:18px;font-size:14px}
     .foot{margin-top:18px;font-size:12.5px;color:var(--muted)}
-    .lang-switch{position:absolute;top:16px;right:16px;display:flex;gap:2px;background:var(--soft);padding:3px;border-radius:9px}
+    .lang-switch{display:flex;gap:2px;background:var(--soft);padding:3px;border-radius:9px}
     .lang-switch button{font:inherit;border:0;background:transparent;padding:4px 9px;border-radius:7px;
       font-size:11px;font-weight:700;color:var(--muted);cursor:pointer}
-    .lang-switch button.active{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(25,22,18,.08)}
+    .lang-switch button.active{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(25,22,18,.08)}
   </style>
 </head>
 <body>
   <main class="card">
-    <div class="lang-switch" role="group" data-i18n-aria="lang_aria"><button data-lang="zh">中文</button><button data-lang="en">EN</button></div>
+    <div class="corner"><div class="lang-switch" role="group" data-i18n-aria="lang_aria"><button data-lang="zh">中文</button><button data-lang="en">EN</button></div><button class="theme-toggle" id="theme-toggle" type="button" data-i18n-aria="theme_aria"><svg class="i-moon" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M20.5 13.4A8.5 8.5 0 1 1 10.6 3.5a6.6 6.6 0 0 0 9.9 9.9z" fill="currentColor"/></svg><svg class="i-sun" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><circle cx="12" cy="12" r="4.2" fill="currentColor"/><path d="M12 2.5v2.3M12 19.2v2.3M2.5 12h2.3M19.2 12h2.3M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button></div>
     <div class="mark">f</div>
     <h1 data-i18n="heading"></h1>
     <p data-i18n="desc"></p>
@@ -43,14 +55,14 @@
   <script type="application/json" id="i18n">
   {
     "zh": {
-      "doc_title": "登录 · Fecho", "lang_aria": "界面语言", "heading": "登录 Fecho",
+      "doc_title": "登录 · Fecho", "lang_aria": "界面语言", "theme_aria": "切换白天/黑夜模式", "heading": "登录 Fecho",
       "desc": "用你的 Mobius 账号登录。只接受 @__DOMAIN__ 的邮箱。",
       "button": "用 Mobius 登录",
       "foot": "一次登录会同时连上 Mobius，之后服务器替你同步名下的 issue。",
       "guide": "第一次用？先看接入与验收指南 →"
     },
     "en": {
-      "doc_title": "Sign in · Fecho", "lang_aria": "Interface language", "heading": "Sign in to Fecho",
+      "doc_title": "Sign in · Fecho", "lang_aria": "Interface language", "theme_aria": "Switch light/dark mode", "heading": "Sign in to Fecho",
       "desc": "Sign in with your Mobius account. Only @__DOMAIN__ email addresses are accepted.",
       "button": "Sign in with Mobius",
       "foot": "Signing in also connects Mobius, so the server can keep your issues in sync.",

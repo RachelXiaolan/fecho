@@ -4,9 +4,22 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Fecho</title>
+  <script id="theme-boot">try{var s=localStorage.getItem('fecho-theme');document.documentElement.dataset.theme=s==='dark'||s==='light'?s:(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');}catch(_){document.documentElement.dataset.theme='light';}
+  document.addEventListener('click',function(e){var b=e.target.closest&&e.target.closest('#theme-toggle');if(!b)return;var n=document.documentElement.dataset.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=n;try{localStorage.setItem('fecho-theme',n);}catch(_){}});</script>
   <style>
     :root{--nav:#1b1938;--violet:#c9b4fa;--canvas:#f7f6f2;--ink:#292827;--muted:#73706d;
-      --line:#e5e2db;--soft:#f1f0eb;--success:#23634d;--success-bg:#e8f3ed;--danger:#9a3f3a}
+      --line:#e5e2db;--soft:#f1f0eb;--success:#23634d;--success-bg:#e8f3ed;--danger:#9a3f3a;
+      --surface:#fff;--surface-alt:#FBFAF7;--primary:#1b1938;--link:#5b4fb0;color-scheme:light}
+    /* 黑夜模式：和 Fecho 面板同一套，记在 fecho-theme */
+    :root[data-theme="dark"]{--canvas:#131217;--ink:#e9e7e3;--muted:#a19e99;--line:#34323b;--soft:#26252d;
+      --success:#7fd1ad;--success-bg:#173228;--danger:#f1a39c;--surface:#1b1a21;--surface-alt:#1f1e25;
+      --primary:#6f5fc7;--link:#b3a6f2;color-scheme:dark}
+    .corner{display:flex;gap:6px;align-items:center;flex:none}
+    .theme-toggle{width:30px;height:30px;padding:0;border:1px solid var(--line);border-radius:9px;background:var(--soft);
+      color:var(--muted);display:grid;place-items:center}
+    .theme-toggle:hover{color:var(--ink)}
+    .theme-toggle .i-sun,:root[data-theme="dark"] .theme-toggle .i-moon{display:none}
+    :root[data-theme="dark"] .theme-toggle .i-sun{display:block}
     *{box-sizing:border-box}
     body{margin:0;min-height:100vh;background:var(--canvas);color:var(--ink);
       font:15px/1.6 "Avenir Next","SF Pro Text","PingFang SC","Microsoft YaHei",sans-serif}
@@ -14,14 +27,14 @@
     .head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
     h1{font-size:24px;margin:0 0 4px;font-weight:650;letter-spacing:-.4px}
     .sub{color:var(--muted);margin:0 0 26px}
-    .step{background:#fff;border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin-bottom:14px}
+    .step{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin-bottom:14px}
     .step h2{font-size:16px;margin:0 0 4px;font-weight:650}
     .step p{margin:0 0 14px;color:var(--muted);font-size:14px}
     .num{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;
       background:var(--violet);color:var(--nav);font-size:12px;font-weight:700;margin-right:8px}
     button{font:inherit;border:0;border-radius:9px;padding:10px 16px;font-weight:600;cursor:pointer;
-      background:var(--nav);color:#fff}
-    button.ghost{background:#fff;color:var(--ink);border:1px solid var(--line)}
+      background:var(--primary);color:#fff}
+    button.ghost{background:var(--surface);color:var(--ink);border:1px solid var(--line)}
     button:disabled{opacity:.55;cursor:wait}
     .token{display:none;margin-top:14px}
     .token code{display:block;background:var(--soft);border:1px solid var(--line);border-radius:9px;
@@ -29,27 +42,27 @@
     .row{display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap}
     .ok{color:var(--success);font-size:13.5px}
     .err{color:var(--danger);font-size:13.5px}
-    select{font:inherit;border:1px solid var(--line);border-radius:9px;padding:9px 12px;background:#fff}
-    a{color:#5b4fb0}
-    .folders{border:1px solid var(--line);border-radius:9px;max-height:320px;overflow:auto;background:#fff}
+    select{font:inherit;border:1px solid var(--line);border-radius:9px;padding:9px 12px;background:var(--surface)}
+    a{color:var(--link)}
+    .folders{border:1px solid var(--line);border-radius:9px;max-height:320px;overflow:auto;background:var(--surface)}
     .folders label{display:flex;gap:10px;align-items:flex-start;padding:9px 12px;border-top:1px solid var(--line);
       font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all;cursor:pointer}
     .folders label:first-child{border-top:0}
-    .folders label:hover{background:#fbfaf7}
-    .folders input{margin-top:3px;accent-color:var(--nav)}
+    .folders label:hover{background:var(--surface-alt)}
+    .folders input{margin-top:3px;accent-color:var(--primary)}
     .folders .when{margin-left:auto;padding-left:10px;color:var(--muted);white-space:nowrap;font-family:inherit}
     .folders .hint{margin:0;padding:14px;color:var(--muted);font-size:13.5px}
     .foot{display:flex;justify-content:space-between;margin-top:22px;font-size:14px;gap:16px}
     .lang-switch{display:flex;gap:2px;background:var(--soft);padding:3px;border-radius:9px;flex:none}
     .lang-switch button{padding:4px 9px;border-radius:7px;font-size:11px;font-weight:700;background:transparent;color:var(--muted)}
-    .lang-switch button.active{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(25,22,18,.08)}
+    .lang-switch button.active{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(25,22,18,.08)}
   </style>
 </head>
 <body>
   <main>
     <div class="head">
       <div><h1 data-i18n="heading"></h1><p class="sub" id="who" data-i18n="loading"></p></div>
-      <div class="lang-switch" role="group" data-i18n-aria="lang_aria"><button data-lang="zh">中文</button><button data-lang="en">EN</button></div>
+      <div class="corner"><div class="lang-switch" role="group" data-i18n-aria="lang_aria"><button data-lang="zh">中文</button><button data-lang="en">EN</button></div><button class="theme-toggle" id="theme-toggle" type="button" data-i18n-aria="theme_aria"><svg class="i-moon" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M20.5 13.4A8.5 8.5 0 1 1 10.6 3.5a6.6 6.6 0 0 0 9.9 9.9z" fill="currentColor"/></svg><svg class="i-sun" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><circle cx="12" cy="12" r="4.2" fill="currentColor"/><path d="M12 2.5v2.3M12 19.2v2.3M2.5 12h2.3M19.2 12h2.3M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button></div>
     </div>
 
     <section class="step">
@@ -97,7 +110,7 @@
   <script type="application/json" id="i18n">
   {
     "zh": {
-      "doc_title": "完成接入 · Fecho", "lang_aria": "界面语言", "heading": "完成接入", "loading": "加载中…",
+      "doc_title": "完成接入 · Fecho", "lang_aria": "界面语言", "theme_aria": "切换白天/黑夜模式", "heading": "完成接入", "loading": "加载中…",
       "who": "{name}（{email}）", "mobius_connected": " · Mobius 已连接",
       "step1": "把 token 交给 agent",
       "step1_desc": "生成后复制，粘回给正在帮你安装的 agent。连续 7 天不用才会失效，天天在用就一直有效。",
@@ -114,7 +127,7 @@
       "open_dashboard": "打开 Dashboard →（以后在「设置」里改这些）", "logout": "退出登录", "guide": "接入与验收指南 ↗"
     },
     "en": {
-      "doc_title": "Finish setup · Fecho", "lang_aria": "Interface language", "heading": "Finish setup", "loading": "Loading…",
+      "doc_title": "Finish setup · Fecho", "lang_aria": "Interface language", "theme_aria": "Switch light/dark mode", "heading": "Finish setup", "loading": "Loading…",
       "who": "{name} ({email})", "mobius_connected": " · Mobius connected",
       "step1": "Give your agent a token",
       "step1_desc": "Generate one, copy it, and paste it back to the agent that's installing Fecho for you. It only expires after 7 days of not being used.",
