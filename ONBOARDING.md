@@ -31,7 +31,7 @@ Fecho 替你记下每天用 agent 做成了什么，每天到点自动出一份�
 | 账号 | 能登录 Mobius 的 `@feedmob.com` 邮箱 |
 | 电脑 | macOS、Windows 10/11 或 Linux，装有 Python 3.9 以上。Mac 和大部分 Linux 自带；Windows 没有的话 agent 会提醒你先装 |
 | agent | **Codex**（ChatGPT 桌面版里的就行）或 **Claude Code**。Hermes 暂时只能随手记，不能每晚扫描 |
-| Claude Code 用户 | 在「终端」里输入 `claude` 能正常对话。只在桌面版登录过不算，扫描要用命令行版 |
+| Claude Code 用户 | 在「终端」（Windows 上是 PowerShell）里输入 `claude` 能正常对话。只在桌面版登录过不算，扫描要用命令行版 |
 
 ---
 
@@ -49,7 +49,7 @@ Fecho 替你记下每天用 agent 做成了什么，每天到点自动出一份�
 
 3. **等 agent 装完，看它的汇报。** 它会逐个试着在后台叫醒你电脑上的 agent，每个一行：`✓` 表示以后每晚扫它的对话，`✗` 表示暂时不扫，后面跟着原因和修法。
 
-   > **最常见的 ✗：** Claude 的命令行版没登录。在终端输入 `claude` 登录（用 CC Switch 的，在 CC Switch 里给 Claude 选一个能用的线路），然后让 agent 把安装那条命令再跑一遍。
+   > **最常见的 ✗：** Claude 的命令行版没登录。在终端（Windows 上是 PowerShell）输入 `claude` 登录（用 CC Switch 的，在 CC Switch 里给 Claude 选一个能用的线路），然后让 agent 把安装那条命令再跑一遍。
 
 4. **勾选工作文件夹。** 回到 https://fecho.techmob.net/onboard ，第 3 步里列着你用 agent 干过活的文件夹。只勾工作的。**一个都不勾，就什么都不会扫。**
 
@@ -148,4 +148,4 @@ token 连续 7 天没用才会过期。回 onboard 页再生成一个交给 agen
 
 - 验收清单的截图（网页版左侧有进度）
 - 卡住的话：第几步、日期时间、页面或终端的截图
-- 终端里 `python3 ~/.fecho-cloud/fecho_local.py status` 的输出
+- 终端里 `python3 ~/.fecho-cloud/fecho_local.py status` 的输出（Windows 在 PowerShell 里运行 `py -3 "$HOME\.fecho-cloud\fecho_local.py" status`）

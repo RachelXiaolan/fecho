@@ -177,7 +177,7 @@
           <dt>账号</dt><dd>能登录 Mobius 的 <code>@feedmob.com</code> 邮箱</dd>
           <dt>电脑</dt><dd>macOS、Windows 10/11 或 Linux，装有 Python 3.9 以上。Mac 和大部分 Linux 自带；Windows 没有的话 agent 会提醒你先装</dd>
           <dt>agent</dt><dd><strong>Codex</strong>（ChatGPT 桌面版里的就行）或 <strong>Claude Code</strong>。Hermes 暂时只能随手记，不能每晚扫描</dd>
-          <dt>Claude Code 用户</dt><dd>在「终端」里输入 <code>claude</code> 能正常对话。只在桌面版登录过不算，扫描要用命令行版</dd>
+          <dt>Claude Code 用户</dt><dd>在「终端」（Windows 上是 PowerShell）里输入 <code>claude</code> 能正常对话。只在桌面版登录过不算，扫描要用命令行版</dd>
         </dl>
       </section>
 
@@ -197,7 +197,7 @@
           <li><div>
             <h3>等 agent 装完，看它的汇报</h3>
             <p>它会逐个试着在后台叫醒你电脑上的 agent，每个一行：<code>✓</code> 表示以后每晚扫它的对话，<code>✗</code> 表示暂时不扫，后面跟着原因和修法。</p>
-            <div class="note"><b>最常见的 ✗：</b>Claude 的命令行版没登录。在终端输入 <code>claude</code> 登录（用 CC Switch 的，在 CC Switch 里给 Claude 选一个能用的线路），然后让 agent 把安装那条命令再跑一遍。</div>
+            <div class="note"><b>最常见的 ✗：</b>Claude 的命令行版没登录。在终端（Windows 上是 PowerShell）输入 <code>claude</code> 登录（用 CC Switch 的，在 CC Switch 里给 Claude 选一个能用的线路），然后让 agent 把安装那条命令再跑一遍。</div>
           </div></li>
           <li><div>
             <h3>勾选工作文件夹</h3>
@@ -305,7 +305,7 @@
           <ul>
             <li>这页清单的截图（左侧有进度）</li>
             <li>卡住的话：第几步、日期时间、页面或终端的截图</li>
-            <li>终端里 <code>python3 ~/.fecho-cloud/fecho_local.py status</code> 的输出</li>
+            <li>终端里 <code>python3 ~/.fecho-cloud/fecho_local.py status</code> 的输出（Windows 在 PowerShell 里运行 <code>py -3 "$HOME\.fecho-cloud\fecho_local.py" status</code>）</li>
           </ul>
         </div>
       </section>
@@ -347,7 +347,7 @@
           function fallback(){
             var range = document.createRange(); range.selectNodeContents(pre);
             var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
-            btn.textContent = '已选中，按 ⌘C';
+            btn.textContent = '已选中，按 ' + (/Mac|iPhone|iPad/.test(navigator.platform) ? '⌘C' : 'Ctrl+C');
           }
           if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(pre.textContent).then(done, fallback);
