@@ -175,6 +175,14 @@ class TestSubmit(ScanCase):
         # refresh 而不是 regenerate：自动重出不覆盖人亲手改过的日报
         self.assertEqual(job, {"kind": "refresh", "date": "2030-01-10"})
 
+    def test_entrypoint_is_kept_for_display(self):
+        """Claude Code 桌面版和命令行共用一份记录，记下是哪个入口，网页上标出来。"""
+        cloudscan.submit(A, [dict(self.entry("桌面版做的"), entrypoint="claude-desktop"),
+                             dict(self.entry("乱填的入口"), entrypoint="<script>")])
+        metas = {u["content_md"]: u["meta"] for u in db.list_updates(author=A)}
+        self.assertEqual(metas["桌面版做的"]["entrypoint"], "claude-desktop")
+        self.assertNotIn("entrypoint", metas["乱填的入口"])
+
     def test_no_requeue_when_no_report_exists_yet(self):
         r = cloudscan.submit(A, [self.entry("正常时间扫到的")], date="2030-01-10")
         self.assertEqual(r["regenerate_queued"], [])
@@ -185,7 +193,15 @@ class TestAgents(ScanCase):
         self.assertEqual(cloudscan.agent_id("claude-code"), "claude-code")
         self.assertEqual(cloudscan.agent_id("Codex-MCP-Client"), "codex")
         self.assertEqual(cloudscan.agent_id("hermes"), "hermes")
+        self.assertEqual(cloudscan.agent_id("Cursor"), "cursor")
         self.assertIsNone(cloudscan.agent_id("some-random-client"))
+
+    def test_cursor_is_listed_but_cannot_be_scanned(self):
+        """Cursor 的对话本机读不了：列出来显示连接状态，但扫描开关打不开。"""
+        cursor = next(a for a in cloudscan.agents(A) if a["agent"] == "cursor")
+        self.assertFalse(cursor["scannable"])
+        with self.assertRaises(ValueError):
+            cloudscan.set_scan_enabled(A, "cursor", True)
 
     def test_unused_agents_are_not_scanned_by_default(self):
         """没用过的 agent 没有聊天记录可扫。"""

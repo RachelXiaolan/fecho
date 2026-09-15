@@ -176,7 +176,7 @@
         <dl class="needs">
           <dt>账号</dt><dd>能登录 Mobius 的 <code>@feedmob.com</code> 邮箱</dd>
           <dt>电脑</dt><dd>Mac。每晚的自动扫描用的是 macOS 自带的定时任务</dd>
-          <dt>agent</dt><dd><strong>Codex</strong>（ChatGPT 桌面版里的就行）或 <strong>Claude Code</strong>。Hermes 暂时只能随手记，不能每晚扫描</dd>
+          <dt>agent</dt><dd><strong>Codex</strong>（ChatGPT 桌面版里的就行）或 <strong>Claude Code</strong>（桌面版和命令行的 Code 对话都算）。Cursor、Hermes 暂时只能随手记，不能每晚扫描</dd>
           <dt>Claude Code 用户</dt><dd>在「终端」里输入 <code>claude</code> 能正常对话。只在桌面版登录过不算，扫描要用命令行版</dd>
         </dl>
       </section>
@@ -292,7 +292,8 @@
         <h2>已知问题</h2>
         <p class="sub">验收时碰到这些不用单独报，已经记着了。</p>
         <div class="known">
-          <p><b>Hermes 不能每晚扫描。</b>后台叫醒 Hermes 还没实测过，网页上它的开关是灰的。</p>
+          <p><b>Cursor、Hermes 不能每晚扫描。</b>Cursor 的对话本机读不了；后台叫醒 Hermes 还没实测过。网页上它们的开关是灰的，随手记照常能用。</p>
+          <p><b>Claude 桌面版里的普通聊天扫不到。</b>那些聊天存在 Anthropic 服务器上，本机没有记录；桌面版里 Code 标签页的对话能扫。</p>
           <p><b>只支持 Mac。</b>其他系统能随手记，但每晚扫描需要自己配定时任务。</p>
           <p><b>切到英文后，服务器返回的提示和日报正文仍是中文。</b>目前只翻译了界面。</p>
         </div>

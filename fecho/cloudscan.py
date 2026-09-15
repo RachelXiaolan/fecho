@@ -22,7 +22,11 @@ AGENTS: Dict[str, Dict[str, str]] = {
     "claude-code": {"label": "Claude Code", "transcripts": "~/.claude/projects/*/*.jsonl"},
     "codex": {"label": "Codex", "transcripts": "~/.codex/sessions/*/*/*/*.jsonl"},
     "hermes": {"label": "Hermes", "transcripts": "~/.hermes/sessions/**/*.jsonl"},
+    # Cursor 的对话存在 SQLite 里，本机脚本读不了，只能随手记
+    "cursor": {"label": "Cursor", "transcripts": ""},
 }
+# Claude Code 桌面版和命令行的聊天记录在同一个文件夹，每条带 entrypoint 标出从哪个入口聊的
+ENTRYPOINTS = {"claude-desktop", "cli"}
 CHECK_EVERY_MINUTES = 15
 SCAN_LEAD_MINUTES = accounts.SCAN_LEAD_MINUTES
 RETRY_AFTER_FAILURE = timedelta(minutes=30)
@@ -38,7 +42,8 @@ def _now_iso() -> str:
 def agent_id(client_name: Optional[str]) -> Optional[str]:
     """MCP 客户端报上来的名字 → 我们认的 agent。认不出来的不记。"""
     name = (client_name or "").lower()
-    for key, needle in (("claude-code", "claude"), ("codex", "codex"), ("hermes", "hermes")):
+    for key, needle in (("claude-code", "claude"), ("codex", "codex"), ("hermes", "hermes"),
+                        ("cursor", "cursor")):
         if needle in name:
             return key
     return None
@@ -276,6 +281,10 @@ def submit(author: str, entries: Iterable[Dict[str, Any]], date: Optional[str] =
         if not in_scope(e.get("project"), allowed):
             out_of_scope += 1
             continue
+        meta = {"source": "transcript", "ingestion_method": "transcript-scan",
+                "uploaded_by": "local-agent"}
+        if e.get("entrypoint") in ENTRYPOINTS:
+            meta["entrypoint"] = e["entrypoint"]
         try:
             kind = (e.get("kind") or "done").lower()
             # 和本机版扫描（scan.py）的调用保持一致：没带 issue 号不强制归自由任务，
@@ -293,8 +302,7 @@ def submit(author: str, entries: Iterable[Dict[str, Any]], date: Optional[str] =
                 project=e.get("project"),
                 source_event_key=e.get("source_event_key"),
                 unknown_issue_policy="freeform",   # 认不出的 issue 号先放自由任务等人复核
-                meta={"kind": kind, "source": "transcript",
-                      "ingestion_method": "transcript-scan", "uploaded_by": "local-agent"},
+                meta=dict(meta, kind=kind),
             )
         except ValueError as exc:
             rejected.append({"content": content[:60], "error": str(exc)[:120]})

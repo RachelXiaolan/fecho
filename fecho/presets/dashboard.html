@@ -436,6 +436,7 @@
     "agent_connected": "已接入 · 最近 {time}", "agent_not_connected": "还没接入",
     "agent_unsupported": "还不支持后台扫描", "agent_unsupported_title": "还不支持后台扫描（没实测过）",
     "agent_scanning": "每晚扫它的对话", "agent_not_scanning": "不扫它的对话", "agent_toggle_aria": "扫描 {name} 的对话",
+    "agent_note_claude": "含桌面版和命令行的 Code 对话；扫描用命令行 claude 的登录和配置", "entry_claude-desktop": "桌面版", "entry_cli": "命令行",
     "folders_heading": "工作文件夹", "folders_sub": "只有勾选的文件夹里的对话会被扫描；没勾的，对话连打开都不会打开。",
     "folders_count": "已勾选 {picked} / {total}", "folder_last_used": "最近 {date}",
     "folders_empty": "还没有上报的文件夹", "folders_empty_sub": "本机采集装好后，用 agent 干过活的文件夹会自动出现在这里。也可以在下面手动添加。",
@@ -558,6 +559,7 @@
     "agent_connected": "Connected · last seen {time}", "agent_not_connected": "Not connected",
     "agent_unsupported": "Background scanning not supported yet", "agent_unsupported_title": "Background scanning not supported yet (untested)",
     "agent_scanning": "Scanned nightly", "agent_not_scanning": "Not scanned", "agent_toggle_aria": "Scan {name} conversations",
+    "agent_note_claude": "Covers Code sessions from both the desktop app and the CLI; scanning uses the CLI's login and config", "entry_claude-desktop": "Desktop", "entry_cli": "CLI",
     "folders_heading": "Work folders", "folders_sub": "Only conversations in checked folders are scanned; unchecked folders are never even opened.",
     "folders_count": "{picked} of {total} selected", "folder_last_used": "Last used {date}",
     "folders_empty": "No folders reported yet", "folders_empty_sub": "Once local capture is installed, folders you've worked in with agents show up here. You can also add one below.",
@@ -695,7 +697,7 @@
       .map(([label,value,kind])=>`<div class="metric ${kind}"><strong>${value}</strong><span>${esc(t(label))}</span></div>`).join('');
     $('#today-tasks').innerHTML=visibleTasks.length?visibleTasks.map(task=>{
       const statuses=task.updates.map(u=>u.completion_status); const taskStatus=statuses.includes('blocked')?'blocked':statuses.includes('wip')?'wip':statuses.every(s=>s==='done')?'done':'unknown';
-      return `<details class="timeline" open><summary><span><span class="item-title">${issueLabel(task)}</span><span class="meta">${esc(t('n_updates',{n:task.updates.length}))}</span></span>${statusTag(taskStatus)}</summary><div class="timeline-body">${task.updates.map(u=>`<div class="progress-line"><div>${esc(u.content_md)}</div><div class="meta">${esc(u.source_agent)} · ${esc(u.ingestion_method)} · ${esc((u.created_at||'').slice(11,16))} ${statusTag(u.completion_status)}</div></div>`).join('')}</div></details>`;
+      return `<details class="timeline" open><summary><span><span class="item-title">${issueLabel(task)}</span><span class="meta">${esc(t('n_updates',{n:task.updates.length}))}</span></span>${statusTag(taskStatus)}</summary><div class="timeline-body">${task.updates.map(u=>`<div class="progress-line"><div>${esc(u.content_md)}</div><div class="meta">${esc(u.source_agent)}${(u.meta||{}).entrypoint?' · '+esc(t('entry_'+u.meta.entrypoint)):''} · ${esc(u.ingestion_method)} · ${esc((u.created_at||'').slice(11,16))} ${statusTag(u.completion_status)}</div></div>`).join('')}</div></details>`;
     }).join(''):empty(t('empty_filter'),t('empty_filter_sub'));
     const notices=[];
     if(d.review.items.length) notices.push(`<div class="item"><div class="item-title">${esc(t('notice_review',{n:d.review.items.length}))}</div><div class="meta">${esc(t('notice_review_sub'))}</div></div>`);
@@ -901,7 +903,7 @@
   window.addEventListener('focus',()=>loadDashboard({quiet:true}));
   setInterval(()=>{if(document.visibilityState==='visible')loadDashboard({quiet:true});},60000);
   // ---------- 云端版：设置与管理 ----------
-  const AGENT_BADGE={'claude-code':'CC','codex':'CX','hermes':'HM'};
+  const AGENT_BADGE={'claude-code':'CC','codex':'CX','hermes':'HM','cursor':'CU'};
   // 服务器存的是 UTC；给人看要换成北京时间，否则傍晚 6 点会显示成上午 10 点
   const stamp=value=>{
     if(!value) return '';
@@ -932,7 +934,7 @@
     select.value=me.daily_time;
     $('#daily-time-copy').textContent=t('daily_time_now',{time:me.daily_time, scan:scanAt(me.daily_time)});
     $('#nav-settings').textContent=state.settings.folders.some(f=>f.selected)?'✓':'!';
-    $('#agent-list').innerHTML=state.settings.agents.map(a=>`<div class="agent-card ${a.scan_enabled?'on':''}"><div class="agent-badge">${esc(AGENT_BADGE[a.agent]||a.agent.slice(0,2).toUpperCase())}</div><div><div class="item-title">${esc(a.label)}</div><div class="meta"><span><i class="dot ${a.connected?'live':''}"></i>${esc(a.connected?t('agent_connected',{time:stamp(a.last_seen)}):t('agent_not_connected'))}</span><span>${esc(t(!a.scannable?'agent_unsupported':a.scan_enabled?'agent_scanning':'agent_not_scanning'))}</span></div></div><label class="switch" ${a.scannable?'':`style="opacity:.45" title="${esc(t('agent_unsupported_title'))}"`}><input type="checkbox" data-agent-toggle="${esc(a.agent)}" ${a.scan_enabled?'checked':''} ${a.scannable?'':'disabled'} aria-label="${esc(t('agent_toggle_aria',{name:a.label}))}"><span></span></label></div>`).join('');
+    $('#agent-list').innerHTML=state.settings.agents.map(a=>`<div class="agent-card ${a.scan_enabled?'on':''}"><div class="agent-badge">${esc(AGENT_BADGE[a.agent]||a.agent.slice(0,2).toUpperCase())}</div><div><div class="item-title">${esc(a.label)}</div>${a.agent==='claude-code'?`<div class="meta" style="margin-top:2px">${esc(t('agent_note_claude'))}</div>`:''}<div class="meta"><span><i class="dot ${a.connected?'live':''}"></i>${esc(a.connected?t('agent_connected',{time:stamp(a.last_seen)}):t('agent_not_connected'))}</span><span>${esc(t(!a.scannable?'agent_unsupported':a.scan_enabled?'agent_scanning':'agent_not_scanning'))}</span></div></div><label class="switch" ${a.scannable?'':`style="opacity:.45" title="${esc(t('agent_unsupported_title'))}"`}><input type="checkbox" data-agent-toggle="${esc(a.agent)}" ${a.scan_enabled?'checked':''} ${a.scannable?'':'disabled'} aria-label="${esc(t('agent_toggle_aria',{name:a.label}))}"><span></span></label></div>`).join('');
     renderFolders();
     const req=me.admin_request;
     $('#admin-status').innerHTML=me.is_admin

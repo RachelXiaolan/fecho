@@ -262,7 +262,8 @@ def normalized_records(agent, path):
             if rec.get("type") not in ("user", "assistant"):
                 continue
             out.append({"timestamp": rec.get("timestamp"), "role": rec.get("type"),
-                        "cwd": rec.get("cwd") or "", "text": claude_text(rec)})
+                        "cwd": rec.get("cwd") or "", "text": claude_text(rec),
+                        "entrypoint": rec.get("entrypoint") or ""})
         return path.stem, out
 
     cwd, sid, out = "", path.stem, []
@@ -318,7 +319,8 @@ def collect(date, folders, agent, transcripts):
             if not body:
                 continue
             groups.setdefault((session_id, cwd), []).append(
-                {"at": when, "ts": rec["timestamp"], "role": rec["role"], "text": body})
+                {"at": when, "ts": rec["timestamp"], "role": rec["role"], "text": body,
+                 "entrypoint": rec.get("entrypoint") or ""})
     for rows in groups.values():
         rows.sort(key=lambda r: r["at"])
     return groups
@@ -527,9 +529,12 @@ def scan_day(cfg, due):
                     errors.append("%s/%s: %s" % (agent, Path(cwd).name, str(exc)[:160]))
                     log("%s 提炼失败 %s：%s" % (agent, cwd, str(exc)[:200]))
                     continue
-                entries = [{"content": it["content"], "kind": it["kind"], "date": date,
-                            "project": cwd, "agent": agent, "session_id": session_id,
-                            "source_event_key": event_key(agent, session_id, part, i)}
+                # Claude Code 桌面版和命令行共用一份记录，标一下这段是从哪个入口聊的
+                entrypoint = next((r["entrypoint"] for r in part if r.get("entrypoint")), "")
+                entries = [dict({"content": it["content"], "kind": it["kind"], "date": date,
+                                 "project": cwd, "agent": agent, "session_id": session_id,
+                                 "source_event_key": event_key(agent, session_id, part, i)},
+                                **({"entrypoint": entrypoint} if entrypoint else {}))
                            for i, it in enumerate(items)]
                 for start in range(0, len(entries), UPLOAD_BATCH):
                     r = api(cfg, "POST", "/api/scan/submit",

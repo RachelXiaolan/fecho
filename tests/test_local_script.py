@@ -75,6 +75,16 @@ class ScriptCase(unittest.TestCase):
         return self.mod.collect(date, list(folders), "claude-code", self.claude_glob)
 
 
+class TestEntrypoint(ScriptCase):
+    def test_claude_entrypoint_travels_with_the_rows(self):
+        """桌面版和命令行的记录在同一个文件夹，每行带 entrypoint，提交时要带上。"""
+        line = json.loads(claude_line("2030-01-10T02:00:00Z", "user", WORK, "把登录做完"))
+        line["entrypoint"] = "claude-desktop"
+        self.write_transcript([json.dumps(line, ensure_ascii=False)])
+        rows = next(iter(self.collect_claude().values()))
+        self.assertEqual(rows[0]["entrypoint"], "claude-desktop")
+
+
 class TestSameRulesAsServer(ScriptCase):
     """脚本里抄的那份规则一旦和服务器不一致，同一段对话本机和本机版会抽出不同的东西。"""
 
@@ -99,7 +109,8 @@ class TestSameRulesAsServer(ScriptCase):
     def test_transcript_locations_match_the_server(self):
         from fecho import cloudscan
         for agent, spec in cloudscan.AGENTS.items():
-            self.assertEqual(self.mod.TRANSCRIPTS[agent], spec["transcripts"])
+            if spec["transcripts"]:            # Cursor 这种读不了记录的，本机脚本不认
+                self.assertEqual(self.mod.TRANSCRIPTS[agent], spec["transcripts"])
 
     def test_runs_on_the_python_macs_ship_with(self):
         """同事电脑上是 macOS 自带的 Python 3.9。脚本只能用标准库、不能用 3.10+ 的语法。"""

@@ -52,6 +52,23 @@ url = "__URL__/mcp"
 Authorization = "Bearer <TOKEN>"
 ```
 
+### 你是 Cursor
+
+在 `~/.cursor/mcp.json` 的 `mcpServers` 里加一项（文件不存在就新建；已有 `fecho` 先告诉用户，同意后再替换）：
+
+```json
+{
+  "mcpServers": {
+    "fecho": {
+      "url": "__URL__/mcp",
+      "headers": {"Authorization": "Bearer <TOKEN>"}
+    }
+  }
+}
+```
+
+Cursor 的对话本机读不了，**只能随手记，不能每晚扫描**。第 3 步照样装（用户可能还用 Claude Code 或 Codex），第 4 步跳过。
+
 ### 你是 Hermes
 
 远程接入的写法**还没实测过**。请告诉用户这一点，并请用户联系 Fecho 管理员。
