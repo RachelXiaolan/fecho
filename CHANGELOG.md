@@ -3,6 +3,20 @@
 版本号写在 `pyproject.toml` 和 `fecho/__init__.py`，两处要一致。每个版本在 git 上打 `vX.Y.Z` 标签。
 按框架环节标注：①采集 ②归属 ③存储 ④整理 ⑤交付 ⑥登录·运行时。
 
+## 0.8.0 · 2026-09-16
+
+### ① 采集
+- 本机采集支持 Windows 10/11 和 Linux（之前只支持 Mac）：
+  - 定时任务按系统装：macOS 用 launchd，Linux 有 systemd 用 systemd 用户定时器、没有就用 cron，
+    Windows 用任务计划程序 `FechoCloudCheck`（用 pythonw，不弹窗口）
+  - 路径统一成正斜杠比较；Windows 盘符算绝对路径，盘符部分不分大小写。本机脚本和服务器用同一套规则
+  - 叫 agent 提炼时统一按 UTF-8 读写，Windows 上不弹黑框；桌面通知按系统用 osascript / PowerShell / notify-send
+- 安装说明按系统给命令（Windows 在 PowerShell 里跑）；网页上手动加文件夹接受 `C:\...` 这种路径
+- 接入指南写明支持 macOS、Windows、Linux，并标注 **Windows 和 Linux 还没在真机上完整验证过**
+
+### 升级注意
+- Mac 上的行为不变。Windows / Linux 同事装完或第二天没看到扫描结果，请在「反馈」里附上 `status` 的输出
+
 ## 0.7.0 · 2026-09-16
 
 ### ① 采集
