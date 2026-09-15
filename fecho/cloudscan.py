@@ -12,6 +12,7 @@
    晚到的结果（比如出日报时电脑没联网，事后补扫）会让那天的日报自动重新生成。
 """
 import json
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Optional
 
@@ -103,11 +104,27 @@ def set_scan_enabled(author: str, agent: str, enabled: bool) -> Dict[str, Any]:
 
 # ---------- 工作文件夹（白名单） ----------
 
+# 路径规则和本机脚本（presets/local/fecho_local.py）同一套，测试盯着两边一致：
+# - 统一成正斜杠：Windows 的 C:\\Users\\a 变成 C:/Users/a
+# - 绝对路径 = 以 / 开头（macOS、Linux），或以盘符开头（Windows）
+# - 带盘符的路径比较时不分大小写（Windows 文件夹本来就不分）
+_DRIVE = re.compile(r"^[A-Za-z]:(/|$)")
+
+
 def _norm_path(path: str) -> str:
-    path = (path or "").strip()
-    if len(path) > 1:
+    path = (path or "").strip().replace("\\", "/")
+    if len(path) > 1 and not re.fullmatch(r"[A-Za-z]:/", path):
         path = path.rstrip("/")
     return path
+
+
+def is_absolute(path: Optional[str]) -> bool:
+    path = _norm_path(path or "")
+    return path.startswith("/") or bool(_DRIVE.match(path))
+
+
+def _compare_key(path: str) -> str:
+    return path.lower() if _DRIVE.match(path) else path
 
 
 def report_folders(author: str, folders: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
@@ -120,7 +137,7 @@ def report_folders(author: str, folders: Iterable[Dict[str, Any]]) -> Dict[str, 
     with db.cursor() as conn:
         for item in folders:
             path = _norm_path(item.get("path") if isinstance(item, dict) else item)
-            if not path.startswith("/"):
+            if not is_absolute(path):
                 continue                       # 只收绝对路径，否则没法和聊天记录里的目录对上
             last_used = item.get("last_used") if isinstance(item, dict) else None
             conn.execute(
@@ -148,7 +165,7 @@ def selected_folders(author: str) -> List[str]:
 
 def set_selected(author: str, paths: Iterable[str]) -> List[str]:
     """把白名单设成这一组。清单里没有的路径（比如手动输入的）也会加进来。"""
-    want = {_norm_path(p) for p in paths if _norm_path(p).startswith("/")}
+    want = {_norm_path(p) for p in paths if is_absolute(p)}
     now = _now_iso()
     with db.cursor() as conn:
         conn.execute("UPDATE work_folders SET selected=0 WHERE author=?", (author,))
@@ -164,8 +181,13 @@ def in_scope(path: Optional[str], allowed: Iterable[str]) -> bool:
     path = _norm_path(path or "")
     if not path:
         return False
+    key = _compare_key(path)
     for folder in allowed:
-        if path == folder or path.startswith(folder.rstrip("/") + "/"):
+        folder = _norm_path(folder)
+        if not folder:
+            continue
+        fkey = _compare_key(folder)
+        if key == fkey or key.startswith(fkey.rstrip("/") + "/"):
             return True
     return False
 

@@ -29,9 +29,9 @@ Fecho 替你记下每天用 agent 做成了什么，每天到点自动出一份�
 | 条件 | 说明 |
 |---|---|
 | 账号 | 能登录 Mobius 的 `@feedmob.com` 邮箱 |
-| 电脑 | Mac。每晚的自动扫描用的是 macOS 自带的定时任务 |
+| 电脑 | macOS、Windows 10/11 或 Linux，装有 Python 3.9 以上。Mac 和大部分 Linux 自带；Windows 没有的话 agent 会提醒你先装 |
 | agent | **Codex**（ChatGPT 桌面版里的就行）或 **Claude Code**（桌面版和命令行的 Code 对话都算）。Cursor、Hermes 暂时只能随手记，不能每晚扫描 |
-| Claude Code 用户 | 在「终端」里输入 `claude` 能正常对话。只在桌面版登录过不算，扫描要用命令行版 |
+| Claude Code 用户 | 在「终端」（Windows 上是 PowerShell）里输入 `claude` 能正常对话。只在桌面版登录过不算，扫描要用命令行版 |
 
 ---
 
@@ -49,7 +49,7 @@ Fecho 替你记下每天用 agent 做成了什么，每天到点自动出一份�
 
 3. **等 agent 装完，看它的汇报。** 它会逐个试着在后台叫醒你电脑上的 agent，每个一行：`✓` 表示以后每晚扫它的对话，`✗` 表示暂时不扫，后面跟着原因和修法。
 
-   > **最常见的 ✗：** Claude 的命令行版没登录。在终端输入 `claude` 登录（用 CC Switch 的，在 CC Switch 里给 Claude 选一个能用的线路），然后让 agent 把安装那条命令再跑一遍。
+   > **最常见的 ✗：** Claude 的命令行版没登录。在终端（Windows 上是 PowerShell）输入 `claude` 登录（用 CC Switch 的，在 CC Switch 里给 Claude 选一个能用的线路），然后让 agent 把安装那条命令再跑一遍。
 
 4. **勾选工作文件夹。** 回到 https://fecho.techmob.net/onboard ，第 3 步里列着你用 agent 干过活的文件夹。只勾工作的。**一个都不勾，就什么都不会扫。**
 
@@ -67,7 +67,7 @@ Fecho 替你记下每天用 agent 做成了什么，每天到点自动出一份�
 - [ ] agent 调 `fecho_doctor` 显示你的邮箱（重启会话之后再问）
 - [ ] 设置 → Agent：你用的 agent 显示「已接入」，扫描开关和安装汇报一致
 - [ ] 设置 → 工作文件夹：至少勾了一个（左侧「设置」旁边是 ✓ 而不是 !）
-- [ ] 本机采集在跑：终端运行 `python3 ~/.fecho-cloud/fecho_local.py status`，看到「定时任务：已装」，服务器那一行没有报错
+- [ ] 本机采集在跑：终端运行 `python3 ~/.fecho-cloud/fecho_local.py status`（Windows 在 PowerShell 里运行 `py -3 "$HOME\.fecho-cloud\fecho_local.py" status`），看到「定时任务：已装」，服务器那一行没有报错
 - [ ] 随手记能进网页，来源是你用的 agent：让 agent 干完一件事后说「记一下」，刷新「今天」页能看到这一条
 
 ### 当晚，过了出日报时间
@@ -94,7 +94,7 @@ Fecho 替你记下每天用 agent 做成了什么，每天到点自动出一份�
 | 开工前接上昨天的进度 | 「用 fecho 看看昨天做到哪了」 |
 | 改出日报时间 | 「把 fecho 出日报时间改到 19:30」，或网页「设置」 |
 | 增减工作文件夹 | 网页「设置 → 工作文件夹」 |
-| 现在就扫一遍今天 | `python3 ~/.fecho-cloud/fecho_local.py check --date 今天日期` |
+| 现在就扫一遍今天 | `python3 ~/.fecho-cloud/fecho_local.py check --date 今天日期`；Windows：`py -3 "$HOME\.fecho-cloud\fecho_local.py" check --date 今天日期` |
 | 日报写得不对 | 网页「日报 → 修改」。改的写法会被学进你的写作偏好 |
 | 某条进展归错了任务 | 网页「复核」里改归属，确认后模型不会再覆盖 |
 | 需要看全员日志 | 网页「设置 → 管理员 → 申请 admin」，等 Rachel 审批 |
@@ -128,7 +128,7 @@ token 连续 7 天没用才会过期。回 onboard 页再生成一个交给 agen
 「设置 → 写作偏好」里直接删掉那一行，保存。下次出日报就不按它写了。
 
 **想卸载**
-终端运行 `python3 ~/.fecho-cloud/fecho_local.py uninstall` 停掉每晚扫描；再让 agent 移除名为 fecho 的 MCP 连接。
+终端运行 `python3 ~/.fecho-cloud/fecho_local.py uninstall`（Windows：`py -3 "$HOME\.fecho-cloud\fecho_local.py" uninstall`）停掉每晚扫描；再让 agent 移除名为 fecho 的 MCP 连接。
 
 ---
 
@@ -138,7 +138,7 @@ token 连续 7 天没用才会过期。回 onboard 页再生成一个交给 agen
 
 - **Cursor、Hermes 不能每晚扫描。** Cursor 的对话本机读不了；后台叫醒 Hermes 还没实测过。网页上它们的开关是灰的，随手记照常能用。
 - **Claude 桌面版里的普通聊天扫不到。** 那些聊天存在 Anthropic 服务器上，本机没有记录；桌面版里 Code 标签页的对话能扫。
-- **只支持 Mac。** 其他系统能随手记，但每晚扫描需要自己配定时任务。
+- **Windows 和 Linux 的每晚扫描还没在真机上完整验证过。** 装的时候或第二天没看到扫描结果，请在「反馈」里说一声，附上 status 的输出。
 - **切到英文后，服务器返回的提示和日报正文仍是中文。** 目前只翻译了界面。
 
 ---
@@ -149,4 +149,4 @@ token 连续 7 天没用才会过期。回 onboard 页再生成一个交给 agen
 
 - 验收清单的截图（网页版左侧有进度）
 - 卡住的话：第几步、日期时间、页面或终端的截图
-- 终端里 `python3 ~/.fecho-cloud/fecho_local.py status` 的输出
+- 终端里 `python3 ~/.fecho-cloud/fecho_local.py status` 的输出（Windows 在 PowerShell 里运行 `py -3 "$HOME\.fecho-cloud\fecho_local.py" status`）

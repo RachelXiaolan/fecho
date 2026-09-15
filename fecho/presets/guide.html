@@ -192,9 +192,9 @@
         <p class="sub">四个条件都满足再开始。</p>
         <dl class="needs">
           <dt>账号</dt><dd>能登录 Mobius 的 <code>@feedmob.com</code> 邮箱</dd>
-          <dt>电脑</dt><dd>Mac。每晚的自动扫描用的是 macOS 自带的定时任务</dd>
+          <dt>电脑</dt><dd>macOS、Windows 10/11 或 Linux，装有 Python 3.9 以上。Mac 和大部分 Linux 自带；Windows 没有的话 agent 会提醒你先装</dd>
           <dt>agent</dt><dd><strong>Codex</strong>（ChatGPT 桌面版里的就行）或 <strong>Claude Code</strong>（桌面版和命令行的 Code 对话都算）。Cursor、Hermes 暂时只能随手记，不能每晚扫描</dd>
-          <dt>Claude Code 用户</dt><dd>在「终端」里输入 <code>claude</code> 能正常对话。只在桌面版登录过不算，扫描要用命令行版</dd>
+          <dt>Claude Code 用户</dt><dd>在「终端」（Windows 上是 PowerShell）里输入 <code>claude</code> 能正常对话。只在桌面版登录过不算，扫描要用命令行版</dd>
         </dl>
       </section>
 
@@ -214,7 +214,7 @@
           <li><div>
             <h3>等 agent 装完，看它的汇报</h3>
             <p>它会逐个试着在后台叫醒你电脑上的 agent，每个一行：<code>✓</code> 表示以后每晚扫它的对话，<code>✗</code> 表示暂时不扫，后面跟着原因和修法。</p>
-            <div class="note"><b>最常见的 ✗：</b>Claude 的命令行版没登录。在终端输入 <code>claude</code> 登录（用 CC Switch 的，在 CC Switch 里给 Claude 选一个能用的线路），然后让 agent 把安装那条命令再跑一遍。</div>
+            <div class="note"><b>最常见的 ✗：</b>Claude 的命令行版没登录。在终端（Windows 上是 PowerShell）输入 <code>claude</code> 登录（用 CC Switch 的，在 CC Switch 里给 Claude 选一个能用的线路），然后让 agent 把安装那条命令再跑一遍。</div>
           </div></li>
           <li><div>
             <h3>勾选工作文件夹</h3>
@@ -238,7 +238,7 @@
             <li><label><input type="checkbox" id="c-doctor"><span><span class="what">agent 调 fecho_doctor 显示你的邮箱</span><span class="how">重启会话之后再问</span></span></label></li>
             <li><label><input type="checkbox" id="c-agent"><span><span class="what">设置 → Agent：你用的 agent 显示「已接入」，扫描开关和安装汇报一致</span><span class="how">左侧「设置」</span></span></label></li>
             <li><label><input type="checkbox" id="c-folders"><span><span class="what">设置 → 工作文件夹：至少勾了一个</span><span class="how">左侧「设置」旁边是 ✓ 而不是 !</span></span></label></li>
-            <li><label><input type="checkbox" id="c-status"><span><span class="what">本机采集在跑</span><span class="how">终端运行 <code>python3 ~/.fecho-cloud/fecho_local.py status</code>，看到「定时任务：已装」，服务器那一行没有报错</span></span></label></li>
+            <li><label><input type="checkbox" id="c-status"><span><span class="what">本机采集在跑</span><span class="how">终端运行 <code>python3 ~/.fecho-cloud/fecho_local.py status</code>（Windows 在 PowerShell 里运行 <code>py -3 "$HOME\.fecho-cloud\fecho_local.py" status</code>），看到「定时任务：已装」，服务器那一行没有报错</span></span></label></li>
             <li><label><input type="checkbox" id="c-log"><span><span class="what">随手记能进网页，来源是你用的 agent</span><span class="how">让 agent 干完一件事后说「记一下」，刷新「今天」页能看到这一条</span></span></label></li>
           </ul>
         </div>
@@ -272,7 +272,7 @@
           <div>开工前接上昨天的进度</div><div>「用 fecho 看看昨天做到哪了」</div>
           <div>改出日报时间</div><div>「把 fecho 出日报时间改到 19:30」，或网页「设置」</div>
           <div>增减工作文件夹</div><div>网页「设置 → 工作文件夹」</div>
-          <div>现在就扫一遍今天</div><div><code>python3 ~/.fecho-cloud/fecho_local.py check --date 今天日期</code></div>
+          <div>现在就扫一遍今天</div><div><code>python3 ~/.fecho-cloud/fecho_local.py check --date 今天日期</code><br>Windows：<code>py -3 "$HOME\.fecho-cloud\fecho_local.py" check --date 今天日期</code></div>
           <div>日报写得不对</div><div>网页「日报 → 修改」。改的写法会被学进你的写作偏好</div>
           <div>某条进展归错了任务</div><div>网页「复核」里改归属，确认后模型不会再覆盖</div>
           <div>需要看全员日志</div><div>网页「设置 → 管理员 → 申请 admin」，等 Rachel 审批</div>
@@ -302,7 +302,7 @@
         <details><summary>写作偏好学偏了</summary>
           <div><p>「设置 → 写作偏好」里直接删掉那一行，保存。下次出日报就不按它写了。</p></div></details>
         <details><summary>想卸载</summary>
-          <div><p>终端运行 <code>python3 ~/.fecho-cloud/fecho_local.py uninstall</code> 停掉每晚扫描；再让 agent 移除名为 fecho 的 MCP 连接。</p></div></details>
+          <div><p>终端运行 <code>python3 ~/.fecho-cloud/fecho_local.py uninstall</code>（Windows：<code>py -3 "$HOME\.fecho-cloud\fecho_local.py" uninstall</code>）停掉每晚扫描；再让 agent 移除名为 fecho 的 MCP 连接。</p></div></details>
       </section>
 
       <section id="known">
@@ -311,7 +311,7 @@
         <div class="known">
           <p><b>Cursor、Hermes 不能每晚扫描。</b>Cursor 的对话本机读不了；后台叫醒 Hermes 还没实测过。网页上它们的开关是灰的，随手记照常能用。</p>
           <p><b>Claude 桌面版里的普通聊天扫不到。</b>那些聊天存在 Anthropic 服务器上，本机没有记录；桌面版里 Code 标签页的对话能扫。</p>
-          <p><b>只支持 Mac。</b>其他系统能随手记，但每晚扫描需要自己配定时任务。</p>
+          <p><b>Windows 和 Linux 的每晚扫描还没在真机上完整验证过。</b>装的时候或第二天没看到扫描结果，请在「反馈」里说一声，附上 status 的输出。</p>
           <p><b>切到英文后，服务器返回的提示和日报正文仍是中文。</b>目前只翻译了界面。</p>
         </div>
       </section>
@@ -323,7 +323,7 @@
           <ul>
             <li>这页清单的截图（左侧有进度）</li>
             <li>卡住的话：第几步、日期时间、页面或终端的截图</li>
-            <li>终端里 <code>python3 ~/.fecho-cloud/fecho_local.py status</code> 的输出</li>
+            <li>终端里 <code>python3 ~/.fecho-cloud/fecho_local.py status</code> 的输出（Windows 在 PowerShell 里运行 <code>py -3 "$HOME\.fecho-cloud\fecho_local.py" status</code>）</li>
           </ul>
         </div>
       </section>
@@ -365,7 +365,7 @@
           function fallback(){
             var range = document.createRange(); range.selectNodeContents(pre);
             var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
-            btn.textContent = '已选中，按 ⌘C';
+            btn.textContent = '已选中，按 ' + (/Mac|iPhone|iPad/.test(navigator.platform) ? '⌘C' : 'Ctrl+C');
           }
           if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(pre.textContent).then(done, fallback);

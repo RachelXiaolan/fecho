@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Fecho 本机采集（云端版）。
 
-同事电脑上只跑这一个文件：不用 pip，只用 Python 自带的库（macOS 自带的 3.9 就够）。
+同事电脑上只跑这一个文件：不用 pip，只用 Python 自带的库（Python 3.9 就够）。
+macOS、Linux、Windows 都能跑。
 
     install   记下服务地址和 token，逐个试叫醒本机的 agent，上报用 agent 干过活的文件夹，
               装一个每 15 分钟跑一次的定时任务
@@ -12,6 +13,9 @@
 **每个 agent 只扫自己的对话**：Claude Code 的聊天记录交给 claude 命令提炼，Codex 的交给
 codex 命令提炼，互不交叉。提炼完各自上传，服务器再把一整天的进展整理成日报。
 
+定时任务：macOS 用 launchd；Linux 优先 systemd 用户定时器，没有就用 cron；
+Windows 用任务计划程序。
+
 隐私边界全在本机：
 - 只读服务器回给的白名单文件夹里的对话，别的文件夹连内容都不打开
 - 工具调用、工具输出、宿主注入的样板一律丢掉，只留人和 agent 说的话
@@ -19,8 +23,8 @@ codex 命令提炼，互不交叉。提炼完各自上传，服务器再把一�
 
 提炼用的是用户自己的 agent，不需要任何 LLM 密钥。
 
-这份文件由服务器分发（__URL__/local/fecho_local.py）。提示词和解析规则与服务器上的
-scan.py 保持一致，仓库里有测试盯着两边不走样。
+这份文件由服务器分发（__URL__/local/fecho_local.py）。提示词、解析规则、路径规则与服务器上的
+scan.py / cloudscan.py 保持一致，仓库里有测试盯着两边不走样。
 """
 import argparse
 import glob
@@ -38,14 +42,23 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+IS_MAC = sys.platform == "darwin"
+IS_WINDOWS = sys.platform.startswith("win")
+
 HOME = Path(os.environ.get("FECHO_LOCAL_HOME") or (Path.home() / ".fecho-cloud"))
 CONFIG = HOME / "config.json"
 LOG = HOME / "check.log"
 LOCK = HOME / "check.lock"
 DONE_DIR = HOME / "done"
 NOTIFIED = HOME / "notified.json"
-LABEL = "com.feedmob.fecho.cloud"
+
+# 定时任务
+LABEL = "com.feedmob.fecho.cloud"                                        # macOS launchd
 PLIST = Path.home() / "Library" / "LaunchAgents" / (LABEL + ".plist")
+SYSTEMD_UNIT = "fecho-cloud"                                             # Linux systemd
+SYSTEMD_DIR = Path(os.environ.get("XDG_CONFIG_HOME") or (Path.home() / ".config")) / "systemd" / "user"
+CRON_MARK = "# fecho-cloud"                                              # Linux cron
+WINDOWS_TASK = "FechoCloudCheck"                                         # Windows 任务计划程序
 
 # 中国没有夏令时，固定 +8 就是北京时间。不用 zoneinfo：有些机器上没有时区数据库。
 BEIJING = timezone(timedelta(hours=8))
@@ -57,21 +70,41 @@ AGENT_TIMEOUT = 600
 LOCK_STALE_SECONDS = 2 * 60 * 60
 
 # 每个 agent 的聊天记录在哪。装的时候用来判断「这台电脑上用过哪些 agent」；
-# 扫描时以服务器回给的为准。
+# 扫描时以服务器回给的为准。~ 在 Windows 上就是 C:\Users\<你>。
 TRANSCRIPTS = {
     "claude-code": "~/.claude/projects/*/*.jsonl",
     "codex": "~/.codex/sessions/*/*/*/*.jsonl",
     "hermes": "~/.hermes/sessions/**/*.jsonl",
 }
-# 能在后台叫醒来提炼的 agent，以及去哪找它的命令行。
-# 不在系统 PATH 上的也要找：ChatGPT 桌面版把 codex 命令行藏在 app 包里。
+
+
+def _npm_global(name):
+    """Windows 上 npm 全局装的命令行在 %APPDATA%\\npm 下，是个 .cmd。"""
+    appdata = os.environ.get("APPDATA")
+    return [os.path.join(appdata, "npm", name + ".cmd")] if appdata else []
+
+
+def _local_programs(*parts):
+    local = os.environ.get("LOCALAPPDATA")
+    return [os.path.join(local, "Programs", *parts)] if local else []
+
+
+# 能在后台叫醒来提炼的 agent，以及去哪找它的命令行。先找 PATH，再找这些常见位置。
+# 不在 PATH 上的也要找：ChatGPT 桌面版把 codex 命令行藏在 app 包里。
+# Windows 上桌面版 app 的位置没有实测过，只是常见安装位置，找不到就跳过。
 CLI = {
     "claude-code": {"name": "claude", "also": [
-        "~/.claude/local/claude", "/opt/homebrew/bin/claude", "/usr/local/bin/claude"]},
+        "~/.claude/local/claude", "/opt/homebrew/bin/claude", "/usr/local/bin/claude",
+        "~/.local/bin/claude", "/usr/bin/claude",
+        "~/.claude/local/claude.exe", "~/.local/bin/claude.exe",
+    ] + _npm_global("claude")},
     "codex": {"name": "codex", "also": [
         "/Applications/ChatGPT.app/Contents/Resources/codex",
         "/Applications/Codex.app/Contents/Resources/codex",
-        "/opt/homebrew/bin/codex", "/usr/local/bin/codex"]},
+        "/opt/homebrew/bin/codex", "/usr/local/bin/codex", "~/.local/bin/codex", "/usr/bin/codex",
+    ] + _npm_global("codex")
+      + _local_programs("ChatGPT", "resources", "codex.exe")
+      + _local_programs("Codex", "resources", "codex.exe")},
 }
 FIX_HINT = {
     "claude-code": "在终端里运行 claude，看它能不能正常对话。用 Claude 官方订阅的，进去后输入 /login 登录；"
@@ -140,24 +173,31 @@ def log(msg):
         f.write(line + "\n")
     # 定时任务把屏幕输出也导进了同一个日志文件，再 print 一遍每行就会出现两次。
     # 只有人在终端里手动跑的时候才打到屏幕上。
-    if sys.stdout.isatty():
+    # Windows 用 pythonw 跑定时任务时根本没有 stdout（是 None），不能直接调 isatty。
+    stream = sys.stdout
+    if stream is not None and hasattr(stream, "isatty") and stream.isatty():
         print(line, flush=True)
 
 
 def load_config():
     if not CONFIG.exists():
-        raise SystemExit("还没装：先运行 python3 %s install --url <服务地址> --token <token>"
+        raise SystemExit("还没装：先运行 install --url <服务地址> --token <token>（脚本在 %s）"
                          % Path(__file__).resolve())
-    cfg = json.loads(CONFIG.read_text(encoding="utf-8"))
-    return cfg
+    return json.loads(CONFIG.read_text(encoding="utf-8"))
 
 
 def save_json(path, data, mode=0o600):
     path.parent.mkdir(parents=True, exist_ok=True)
-    os.chmod(path.parent, 0o700)
+    try:
+        os.chmod(path.parent, 0o700)       # Windows 上 chmod 基本不起作用，也不报错
+    except OSError:
+        pass
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    os.chmod(tmp, mode)
+    try:
+        os.chmod(tmp, mode)
+    except OSError:
+        pass
     tmp.replace(path)
 
 
@@ -202,17 +242,51 @@ def beijing(ts):
     return when.astimezone(BEIJING)
 
 
+# ---------- 路径规则（和服务器 cloudscan.py 同一套） ----------
+
+_DRIVE = re.compile(r"^[A-Za-z]:(/|$)")
+
+
+def norm_path(path):
+    """统一成正斜杠、去掉末尾斜杠。Windows 的 C:\\Users\\a 变成 C:/Users/a。"""
+    path = (path or "").strip().replace("\\", "/")
+    if len(path) > 1 and not re.fullmatch(r"[A-Za-z]:/", path):
+        path = path.rstrip("/")
+    return path
+
+
+def is_absolute(path):
+    """以 / 开头（macOS、Linux），或以盘符开头（Windows 的 C:/）。"""
+    path = norm_path(path)
+    return path.startswith("/") or bool(_DRIVE.match(path))
+
+
+def _compare_key(path):
+    # Windows 的路径不分大小写，C:/Users 和 c:/users 是同一个文件夹
+    return path.lower() if _DRIVE.match(path) else path
+
+
 def in_scope(path, allowed):
     """这个目录在白名单里吗（等于某个白名单文件夹，或在它下面）。和服务器同一条规则。"""
-    path = (path or "").strip()
-    if len(path) > 1:
-        path = path.rstrip("/")
+    path = norm_path(path)
     if not path:
         return False
+    key = _compare_key(path)
     for folder in allowed:
-        if path == folder or path.startswith(folder.rstrip("/") + "/"):
+        folder = norm_path(folder)
+        if not folder:
+            continue
+        fkey = _compare_key(folder)
+        if key == fkey or key.startswith(fkey.rstrip("/") + "/"):
             return True
     return False
+
+
+def is_temp_path(path):
+    """临时目录里的对话不算干过活的文件夹。"""
+    p = norm_path(path).lower()
+    return (p.startswith(("/private/tmp", "/tmp/", "/var/folders/"))
+            or p == "/tmp" or "/appdata/local/temp" in p)
 
 
 # ---------- 读对话记录（和 scan.py 同一套规则） ----------
@@ -385,7 +459,7 @@ def find_cli(agent):
     spec = CLI.get(agent)
     if not spec:
         return None
-    found = shutil.which(spec["name"])
+    found = shutil.which(spec["name"])      # Windows 上会自动带上 .cmd / .exe
     if found:
         return found
     for candidate in spec["also"]:
@@ -393,6 +467,11 @@ def find_cli(agent):
         if os.path.isfile(path) and os.access(path, os.X_OK):
             return path
     return None
+
+
+def _no_window():
+    """Windows 上别给每次调用都弹一个黑色命令行窗口。"""
+    return getattr(subprocess, "CREATE_NO_WINDOW", 0) if IS_WINDOWS else 0
 
 
 def run_agent(cfg, agent, text):
@@ -404,13 +483,16 @@ def run_agent(cfg, agent, text):
     if cfg.get("path"):
         env["PATH"] = cfg["path"]        # 定时任务里的 PATH 很短，找不到 node 之类的
     prompt = PROMPT.replace("{issues}", NO_ISSUES) + text
+    # 一定按 UTF-8 传：Windows 中文系统默认是 GBK，中文提示词会报错或变乱码
+    common = {"input": prompt, "capture_output": True, "text": True, "encoding": "utf-8",
+              "errors": "replace", "timeout": AGENT_TIMEOUT, "cwd": str(HOME), "env": env,
+              "creationflags": _no_window()}
     if agent == "claude-code":
         # 不带工具、不加载 MCP、不留会话记录。
         # 不留记录很要紧，否则这次提炼本身会变成一段新对话，下次又被扫进来。
         args = [cli, "-p", "--output-format", "text", "--no-session-persistence",
                 "--strict-mcp-config", "--tools", ""]
-        r = subprocess.run(args, input=prompt, capture_output=True, text=True,
-                           timeout=AGENT_TIMEOUT, cwd=str(HOME), env=env)
+        r = subprocess.run(args, **common)
         if r.returncode:
             raise RuntimeError("claude 退出码 %d：%s" % (
                 r.returncode, (r.stderr or r.stdout).strip()[-300:]))
@@ -422,8 +504,7 @@ def run_agent(cfg, agent, text):
             out.unlink()
         args = [cli, "exec", "--skip-git-repo-check", "--ephemeral", "-s", "read-only",
                 "-o", str(out), "-"]
-        r = subprocess.run(args, input=prompt, capture_output=True, text=True,
-                           timeout=AGENT_TIMEOUT, cwd=str(HOME), env=env)
+        r = subprocess.run(args, **common)
         if r.returncode:
             raise RuntimeError("codex 退出码 %d：%s" % (
                 r.returncode, (r.stderr or r.stdout).strip()[-300:]))
@@ -442,7 +523,31 @@ def probe(cfg, agent):
         return False, str(exc)[:200]
 
 
-# ---------- check：定时任务每 15 分钟跑的 ----------
+# ---------- 系统通知 ----------
+
+_WINDOWS_BALLOON = (
+    "Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; "
+    "$n = New-Object System.Windows.Forms.NotifyIcon; "
+    "$n.Icon = [System.Drawing.SystemIcons]::Information; $n.Visible = $true; "
+    "$n.ShowBalloonTip(8000, 'Fecho', $env:FECHO_NOTIFY_TEXT, 'Info'); "
+    "Start-Sleep -Seconds 9; $n.Dispose()")
+
+
+def notify_command(text):
+    """弹一条系统通知要跑的命令。通知文字只走参数或环境变量，**不拼进命令本身**——
+    服务器传回来的文字里要是带了引号或命令，拼进去就会被当成命令执行。"""
+    if IS_MAC:
+        return (["osascript", "-e", "on run argv", "-e",
+                 'display notification (item 1 of argv) with title "Fecho"', "-e", "end run", text],
+                None)
+    if IS_WINDOWS:
+        env = dict(os.environ, FECHO_NOTIFY_TEXT=text)
+        return (["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", _WINDOWS_BALLOON],
+                env)
+    if shutil.which("notify-send"):
+        return (["notify-send", "Fecho", text], None)
+    return None, None
+
 
 def notify(notices):
     """服务器要提醒的事（比如日报没生成成功），用系统通知弹出来。同一条只弹一次。"""
@@ -455,13 +560,19 @@ def notify(notices):
     fresh = [n for n in notices if n not in seen]
     for text in fresh:
         log("通知：%s" % text)
-        if sys.platform == "darwin":
-            safe = text.replace("\\", "\\\\").replace('"', '\\"')
-            subprocess.run(["osascript", "-e", 'display notification "%s" with title "Fecho"' % safe],
-                           capture_output=True)
+        args, env = notify_command(text)
+        if not args:
+            continue
+        try:
+            subprocess.Popen(args, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             creationflags=_no_window())
+        except OSError:
+            pass                              # 弹不出来不要紧，日志里已经记着了
     if fresh:
         save_json(NOTIFIED, sorted(seen | set(fresh))[-50:])
 
+
+# ---------- check：定时任务每 15 分钟跑的 ----------
 
 def acquire_lock():
     HOME.mkdir(parents=True, exist_ok=True)
@@ -526,7 +637,7 @@ def scan_day(cfg, due):
                 try:
                     items = parse_entries(run_agent(cfg, agent, render(part)))
                 except Exception as exc:          # noqa: BLE001 一段失败不拖累别的段
-                    errors.append("%s/%s: %s" % (agent, Path(cwd).name, str(exc)[:160]))
+                    errors.append("%s/%s: %s" % (agent, Path(norm_path(cwd)).name, str(exc)[:160]))
                     log("%s 提炼失败 %s：%s" % (agent, cwd, str(exc)[:200]))
                     continue
                 # Claude Code 桌面版和命令行共用一份记录，标一下这段是从哪个入口聊的
@@ -549,6 +660,182 @@ def scan_day(cfg, due):
     log("扫完 %s：%d 段对话，新记 %d 条%s" % (
         date, pieces, uploaded, "；有失败，服务器会半小时后让我重试" if error else ""))
     return 1 if error else 0
+
+
+# ---------- 定时任务：macOS launchd / Linux systemd 或 cron / Windows 任务计划程序 ----------
+#
+# 每种都拆成「生成内容」（纯函数，好测）和「写进系统」两步。
+# 电脑合着错过扫描时间不用定时器操心：服务器的「该扫了吗」会让第二天早上先补昨天。
+
+def _systemd_user_available():
+    if not shutil.which("systemctl"):
+        return False
+    try:
+        r = subprocess.run(["systemctl", "--user", "show-environment"],
+                           capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return r.returncode == 0
+
+
+def schedule_kind():
+    """这台电脑用哪种定时任务。一个都没有就是 None。"""
+    if IS_MAC:
+        return "launchd"
+    if IS_WINDOWS:
+        return "schtasks"
+    if _systemd_user_available():
+        return "systemd"
+    if shutil.which("crontab"):
+        return "cron"
+    return None
+
+
+SCHEDULE_LABEL = {"launchd": "macOS launchd", "systemd": "systemd 用户定时器",
+                  "cron": "cron", "schtasks": "Windows 任务计划程序"}
+
+
+def launchd_plist(python, script):
+    return plistlib.dumps({
+        "Label": LABEL,
+        "ProgramArguments": [python, str(script), "check"],
+        "StartInterval": CHECK_EVERY_SECONDS,
+        "RunAtLoad": True,
+        "ProcessType": "Background",
+        "StandardOutPath": str(LOG),
+        "StandardErrorPath": str(LOG),
+    }, sort_keys=True)
+
+
+def systemd_units(python, script):
+    service = (
+        "[Unit]\n"
+        "Description=Fecho 本机采集：问服务器该不该扫，该扫就扫\n\n"
+        "[Service]\n"
+        "Type=oneshot\n"
+        'ExecStart="%s" "%s" check\n'
+        "StandardOutput=append:%s\n"
+        "StandardError=append:%s\n" % (python, script, LOG, LOG))
+    timer = (
+        "[Unit]\n"
+        "Description=每 15 分钟跑一次 Fecho 本机采集\n\n"
+        "[Timer]\n"
+        "OnCalendar=*:0/15\n"
+        # 合盖错过的那次，开机后补跑
+        "Persistent=true\n\n"
+        "[Install]\n"
+        "WantedBy=timers.target\n")
+    return {SYSTEMD_UNIT + ".service": service, SYSTEMD_UNIT + ".timer": timer}
+
+
+def cron_line(python, script):
+    return '*/15 * * * * "%s" "%s" check >> "%s" 2>&1 %s' % (python, script, LOG, CRON_MARK)
+
+
+def windows_python(python):
+    """定时任务用 pythonw.exe：不弹黑色命令行窗口。找不到就退回原来的。"""
+    # 按字符串切，不用 os.path：在别的系统上测这段时 os.path 不认 Windows 的反斜杠
+    folder, _, name = python.replace("/", "\\").rpartition("\\")
+    if folder and name.lower() == "python.exe":
+        candidate = folder + "\\pythonw.exe"
+        if os.path.exists(candidate):
+            return candidate
+    return python
+
+
+def schtasks_create_args(python, script):
+    return ["schtasks", "/Create", "/F", "/SC", "MINUTE", "/MO", "15", "/TN", WINDOWS_TASK,
+            "/TR", '"%s" "%s" check' % (windows_python(python), script)]
+
+
+def _run(args, **kw):
+    kw.setdefault("capture_output", True)
+    kw.setdefault("text", True)
+    return subprocess.run(args, **kw)
+
+
+def _crontab_lines():
+    r = _run(["crontab", "-l"])
+    if r.returncode:                      # 从来没有过 crontab 时会返回非 0
+        return []
+    return [line for line in (r.stdout or "").splitlines()]
+
+
+def _write_crontab(lines):
+    text = "\n".join(lines).rstrip("\n") + "\n"
+    r = _run(["crontab", "-"], input=text)
+    if r.returncode:
+        raise SystemExit("cron 定时任务没装上：%s" % (r.stderr or r.stdout))
+
+
+def install_schedule(script):
+    """装定时任务，返回装的是哪种。装不了就退出并说清楚怎么手动配。"""
+    python = sys.executable
+    kind = schedule_kind()
+    if kind == "launchd":
+        PLIST.parent.mkdir(parents=True, exist_ok=True)
+        PLIST.write_bytes(launchd_plist(python, script))
+        target = "gui/%d" % os.getuid()
+        _run(["launchctl", "bootout", "%s/%s" % (target, LABEL)])
+        r = _run(["launchctl", "bootstrap", target, str(PLIST)])
+        if r.returncode:
+            raise SystemExit("定时任务没装上：%s" % (r.stderr or r.stdout))
+    elif kind == "systemd":
+        SYSTEMD_DIR.mkdir(parents=True, exist_ok=True)
+        for name, content in systemd_units(python, script).items():
+            (SYSTEMD_DIR / name).write_text(content, encoding="utf-8")
+        _run(["systemctl", "--user", "daemon-reload"])
+        r = _run(["systemctl", "--user", "enable", "--now", SYSTEMD_UNIT + ".timer"])
+        if r.returncode:
+            raise SystemExit("systemd 定时器没装上：%s" % (r.stderr or r.stdout))
+    elif kind == "cron":
+        lines = [line for line in _crontab_lines() if CRON_MARK not in line]
+        _write_crontab(lines + [cron_line(python, script)])
+    elif kind == "schtasks":
+        r = _run(schtasks_create_args(python, script))
+        if r.returncode:
+            raise SystemExit("Windows 计划任务没装上：%s" % (r.stderr or r.stdout))
+        _run(["schtasks", "/Run", "/TN", WINDOWS_TASK])      # 装完先跑一次
+    else:
+        raise SystemExit(
+            "这台电脑上找不到能用的定时任务工具（systemd 或 cron）。请自己配一个每 15 分钟运行一次的任务：\n"
+            '  "%s" "%s" check' % (python, script))
+    return kind
+
+
+def uninstall_schedule():
+    kind = schedule_kind()
+    if kind == "launchd":
+        _run(["launchctl", "bootout", "gui/%d/%s" % (os.getuid(), LABEL)])
+        if PLIST.exists():
+            PLIST.unlink()
+    elif kind == "systemd":
+        _run(["systemctl", "--user", "disable", "--now", SYSTEMD_UNIT + ".timer"])
+        for name in systemd_units("python", "script"):
+            path = SYSTEMD_DIR / name
+            if path.exists():
+                path.unlink()
+        _run(["systemctl", "--user", "daemon-reload"])
+    elif kind == "cron":
+        lines = _crontab_lines()
+        if any(CRON_MARK in line for line in lines):
+            _write_crontab([line for line in lines if CRON_MARK not in line])
+    elif kind == "schtasks":
+        _run(["schtasks", "/Delete", "/F", "/TN", WINDOWS_TASK])
+    return kind
+
+
+def schedule_installed():
+    kind = schedule_kind()
+    if kind == "launchd":
+        return PLIST.exists()
+    if kind == "systemd":
+        return (SYSTEMD_DIR / (SYSTEMD_UNIT + ".timer")).exists()
+    if kind == "cron":
+        return any(CRON_MARK in line for line in _crontab_lines())
+    if kind == "schtasks":
+        return _run(["schtasks", "/Query", "/TN", WINDOWS_TASK]).returncode == 0
+    return False
 
 
 # ---------- install ----------
@@ -576,34 +863,12 @@ def work_folders():
                     path = json.loads('"%s"' % raw)
                 except ValueError:
                     continue
-                if not path.startswith("/") or path.startswith(("/private/tmp", "/tmp")):
+                if not is_absolute(path) or is_temp_path(path):
                     continue
+                path = norm_path(path)
                 if day > seen.get(path, ""):
                     seen[path] = day
     return [{"path": p, "last_used": d} for p, d in sorted(seen.items())]
-
-
-def install_launchd(script):
-    if sys.platform != "darwin":
-        print("这台不是 Mac，没装定时任务。请用 cron 每 15 分钟跑一次：")
-        print("  */15 * * * * %s %s check" % (sys.executable, script))
-        return
-    spec = {
-        "Label": LABEL,
-        "ProgramArguments": [sys.executable, str(script), "check"],
-        "StartInterval": CHECK_EVERY_SECONDS,
-        "RunAtLoad": True,
-        "ProcessType": "Background",
-        "StandardOutPath": str(LOG),
-        "StandardErrorPath": str(LOG),
-    }
-    PLIST.parent.mkdir(parents=True, exist_ok=True)
-    PLIST.write_bytes(plistlib.dumps(spec, sort_keys=True))
-    target = "gui/%d" % os.getuid()
-    subprocess.run(["launchctl", "bootout", "%s/%s" % (target, LABEL)], capture_output=True)
-    r = subprocess.run(["launchctl", "bootstrap", target, str(PLIST)], capture_output=True, text=True)
-    if r.returncode:
-        raise SystemExit("定时任务没装上：%s" % (r.stderr or r.stdout))
 
 
 def cmd_install(args):
@@ -642,7 +907,10 @@ def cmd_install(args):
         raise SystemExit("\n一个都叫不醒，没有装定时任务。按上面的提示修好后，重新运行这条 install。")
 
     HOME.mkdir(parents=True, exist_ok=True)
-    os.chmod(HOME, 0o700)
+    try:
+        os.chmod(HOME, 0o700)
+    except OSError:
+        pass
     script = HOME / "fecho_local.py"
     if Path(__file__).resolve() != script.resolve():
         shutil.copyfile(__file__, script)
@@ -653,7 +921,7 @@ def cmd_install(args):
         api(cfg, "POST", "/api/agents/%s" % agent, {"scan_enabled": ok})
     folders = work_folders()
     api(cfg, "POST", "/api/folders/report", {"folders": folders})
-    install_launchd(script)
+    kind = install_schedule(script)
 
     print("\n装好了。")
     print("- 会扫对话的 agent：%s" % "、".join(sorted(cfg["runners"])))
@@ -661,16 +929,14 @@ def cmd_install(args):
     if skipped:
         print("- 暂时不扫：%s。修好后重新运行这条 install 就会加上" % "、".join(skipped))
     print("- 上报了 %d 个用 agent 干过活的文件夹，请到 %s/onboard 勾选哪些算工作" % (len(folders), url))
-    print("- 每 15 分钟问一次服务器该不该扫；日志在 %s" % LOG)
+    print("- 定时任务（%s）每 15 分钟问一次服务器该不该扫；日志在 %s"
+          % (SCHEDULE_LABEL.get(kind, kind), LOG))
 
 
 def cmd_uninstall(_args):
-    if sys.platform == "darwin":
-        subprocess.run(["launchctl", "bootout", "gui/%d/%s" % (os.getuid(), LABEL)],
-                       capture_output=True)
-        if PLIST.exists():
-            PLIST.unlink()
-    print("定时任务已移除。配置留在 %s，不需要可以整个删掉。" % HOME)
+    kind = uninstall_schedule()
+    print("定时任务（%s）已移除。配置留在 %s，不需要可以整个删掉。"
+          % (SCHEDULE_LABEL.get(kind, "无"), HOME))
 
 
 def cmd_check(args):
@@ -690,7 +956,9 @@ def cmd_status(_args):
     print("token：%s…" % cfg["token"][:10])
     for agent, cli in sorted((cfg.get("runners") or {}).items()):
         print("扫 %s 的对话，用：%s" % (agent, cli))
-    print("定时任务：%s" % ("已装" if PLIST.exists() else "没装"))
+    kind = schedule_kind()
+    print("定时任务：%s（%s）" % ("已装" if schedule_installed() else "没装",
+                               SCHEDULE_LABEL.get(kind, "这台电脑上找不到定时任务工具")))
     try:
         due = api(cfg, "GET", "/api/scan/due")
         print("服务器说：%s（每天 %s 扫，白名单 %d 个文件夹）" % (
@@ -724,4 +992,11 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    # Windows 控制台默认不是 UTF-8，直接 print 中文可能报错
+    for stream in (sys.stdout, sys.stderr):
+        if stream is not None and hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except (OSError, ValueError):
+                pass
     sys.exit(main())
