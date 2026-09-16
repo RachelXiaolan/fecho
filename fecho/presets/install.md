@@ -100,6 +100,10 @@ Fecho 的接入是标准的 Streamable HTTP MCP，任何支持 MCP 的 agent 都
 **连上时报的名字很重要**：Fecho 按名字认 agent，名字里带 `grok` 的都算 Grok。
 名字认不出来时，随手记照样能存，但网页「设置 → Agent」里不会显示它已接入。
 
+**token 是谁的，记录就进谁的账号**：Fecho 按 token 认人，一个 token 对应一个人。
+几个人共用一个 bot 时，bot 里填的是谁的 token，大家记的东西就全进谁的日志。
+每人应该在自己那份配置里填自己的 token。
+
 Grok bot 不在用户电脑上跑，**只能随手记，不能每晚扫描**。第 3 步（本机采集）照样装，
 因为用户可能还用 Claude Code 或 Codex；第 4 步跳过。
 
