@@ -114,6 +114,9 @@ LLM_API_KEY = get("llm_api_key", "FECHO_LLM_API_KEY", "")
 LLM_MODEL = get("llm_model", "FECHO_LLM_MODEL", "")
 LLM_TIMEOUT = float(get("llm_timeout", "FECHO_LLM_TIMEOUT", 180))
 LLM_REASONING_EFFORT = get("llm_reasoning_effort", "FECHO_LLM_REASONING_EFFORT", "")
+# 一次调用最多给多少 token。推理模型的思维链也吃这个额度，任务多的日子要够用；
+# 端点接受的上限不一样，所以留成可配的。
+LLM_MAX_TOKENS = int(get("llm_max_tokens", "FECHO_LLM_MAX_TOKENS", 32000))
 
 # ---- Mobius ----
 MOBIUS_URL = get("mobius_url", "FECHO_MOBIUS_URL", "")

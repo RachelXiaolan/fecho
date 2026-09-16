@@ -638,13 +638,17 @@ def generate(author: str, date: str, force: bool = False,
     try:
         # 预算按任务数给。上一版固定 4000，28 条进展的日报被截断在半句话上，
         # 后两个任务只剩标题。宁可给多，llm.chat 那边本来就有截断重试。
-        budget = max(4000, 1200 * len(tasks) + 2000)
+        # 但要被上限封住：任务多的日子算出来能上五六万，端点未必接受。
+        budget = min(max(4000, 1200 * len(tasks) + 2000), llm.MAX_TOKEN_CEILING)
         raw = llm.chat(_daily_prompt(author, date, tasks, persona, style_md), max_tokens=budget)
         items, todos = _parse_daily(raw, len(tasks))
         if len(items) < len(tasks):
-            # 少解析出任务块，多半是被 max_tokens 截断了——翻倍再来一次。
+            # 少解析出任务块，多半是被 max_tokens 截断了——加大额度再来一次。
+            # 只能加不能减：以前写的是 min(budget*2, 上限)，首次预算超过上限时
+            # 反而把额度压小了（48 个任务：59600 → 16000），重试比第一次还弱，
+            # 结果推理把额度烧光、正文为空，整篇掉成兜底稿。
             raw = llm.chat(_daily_prompt(author, date, tasks, persona, style_md),
-                           max_tokens=min(budget * 2, llm.MAX_TOKEN_CEILING))
+                           max_tokens=max(budget, min(budget * 2, llm.MAX_TOKEN_CEILING)))
             items, todos = _parse_daily(raw, len(tasks))
         if not items:
             raise llm.LLMError("没解析出任何任务块，原样片段：%s" % raw[:200])

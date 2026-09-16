@@ -28,7 +28,7 @@ def strip_reasoning(text: str) -> str:
     return _THINK.sub("", text or "").strip()
 
 
-MAX_TOKEN_CEILING = 16000
+MAX_TOKEN_CEILING = config.LLM_MAX_TOKENS
 
 
 def chat(

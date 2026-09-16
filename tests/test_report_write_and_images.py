@@ -95,6 +95,49 @@ class TestAutomaticVersionGoesToHistory(WriteCase):
         self.assertIn(WRITTEN.strip(), [h["content_md"].strip() for h in self.history()])
 
 
+class TestDailyTokenBudget(CloudCase):
+    """任务多的日子，重试的额度不能比第一次还小。
+
+    真实事故：9/16 有 48 个任务，首次预算 1200*48+2000=59600，重试写的是
+    min(59600*2, 16000) → 16000，比第一次小了三倍多；推理把额度烧光、正文为空，
+    整篇日报掉成兜底稿。
+    """
+
+    def setUp(self):
+        super().setUp()
+        accounts.upsert_user(A, "Alice")
+        with db.cursor() as c:
+            for table in ("reports", "report_history", "jobs"):
+                c.execute("DELETE FROM %s" % table)
+        for i in range(15):                       # 15 个任务：足够越过原来的 16000 上限
+            store.record_progress(A, "第 %d 件事做完了" % i, date=DAY, freeform=True)
+
+    def budgets(self):
+        """跑一次 generate，记下日报那几次调用分别给了多大额度。"""
+        seen = []
+
+        def fake_chat(messages, **kw):
+            seen.append(kw.get("max_tokens"))
+            return "[1] done | 只解析得出一个任务块"      # 故意少于任务数，逼出重试
+
+        with mock.patch.object(digest, "verify_assignments",
+                               return_value={"changed": [], "error": None}), \
+             mock.patch.object(digest, "task_aliases", return_value={}), \
+             mock.patch.object(digest.llm, "chat", side_effect=fake_chat):
+            digest.generate(A, DAY, force=True)
+        return seen
+
+    def test_retry_never_gets_a_smaller_budget(self):
+        seen = self.budgets()
+        self.assertGreaterEqual(len(seen), 2, "应该重试过一次")
+        self.assertGreaterEqual(seen[1], seen[0], "重试的额度不能比第一次小")
+
+    def test_first_budget_is_capped_by_the_ceiling(self):
+        """端点不一定接受五六万的 max_tokens，首次预算也要被上限封住。"""
+        for value in self.budgets():
+            self.assertLessEqual(value, digest.llm.MAX_TOKEN_CEILING)
+
+
 class TestReportImages(CloudCase):
     def setUp(self):
         super().setUp()
