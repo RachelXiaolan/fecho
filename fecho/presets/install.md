@@ -119,7 +119,7 @@ New-Item -ItemType Directory -Force "$HOME\.fecho-cloud" | Out-Null; Invoke-WebR
 |---|---|
 | macOS | launchd |
 | Linux | systemd 用户定时器；没有 systemd 就用 cron |
-| Windows | 任务计划程序里的 `FechoCloudCheck`（用户登录时运行，不弹窗口） |
+| Windows | 任务计划程序里的 `FechoCloudCheck`（每 15 分钟跑一次，用 pythonw 不弹窗口；这个人登录着才跑） |
 
 试叫醒这一步每个 agent 会花掉一次很小的调用。输出里每个 agent 一行：
 
