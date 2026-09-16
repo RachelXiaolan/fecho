@@ -9,6 +9,8 @@ agent 自己），这里只认不会错的信号：
   1. explicit      —— 正文里写了 issue 号，或调用时直接指定
   2. project-bound —— 这个工作目录绑过 issue（人主动配的）
   3. same-session  —— 都没有时，跟着同一对话里刚才那个任务，标记为「猜的」
+     session-group —— 扫描来源关掉了上一条，但同一天同一场对话里、都没写 issue 号的
+                      条目归进同一个自由任务（只并自由任务，不往 issue 上塞）
   4. new-task      —— 新立一个自由任务
 
 写进库之后还会被 verify 那一步重判一次（见 digest.verify_assignments）——
@@ -138,6 +140,7 @@ def decide(
     explicit_task_id: Optional[str] = None,
     project: Optional[str] = None,
     allow_session_fallback: bool = True,
+    conversation_task_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """只认不会错的信号。语义归属由模型判，不在这里猜。
 
@@ -164,5 +167,13 @@ def decide(
             t["task_id"] == session_task_id for t in tasks):
         return {"method": "task-continue", "task_id": session_task_id, "score": None,
                 "via": "same-session", "confidence": "low"}
+
+    # 扫描来源：会话惯性关着，但同一天同一场对话里、都没写 issue 号的条目归到
+    # 同一个自由任务里。以前每条都新建，一场 Codex 对话被拆成 21 个任务。
+    # 只并自由任务、不往 issue 上塞，所以一条判错不会把一片进展带进某个 issue；
+    # 之后出日报前的重判照样能把某一条挪去对的 issue。
+    if conversation_task_id and any(t["task_id"] == conversation_task_id for t in tasks):
+        return {"method": "session-group", "task_id": conversation_task_id, "score": None,
+                "via": "same-conversation", "confidence": "medium"}
 
     return {"method": "new-task", "score": None}

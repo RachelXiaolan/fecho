@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     source        TEXT NOT NULL,        -- mobius / freeform
     issue_key     TEXT,                 -- AI-2541；freeform 为 null
     title         TEXT NOT NULL,
-    status        TEXT NOT NULL DEFAULT 'open',   -- open / done（本地状态，不回写 Mobius）
+    status        TEXT NOT NULL DEFAULT 'open',   -- open / done / merged / empty（自由任务被挪空后收起）；本地状态，不回写 Mobius
     first_seen    TEXT NOT NULL,        -- 第一次有进展的日期
     last_update   TEXT NOT NULL,        -- 最近一次进展时间
     meta          TEXT NOT NULL DEFAULT '{}'
@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS updates (
     source_agent  TEXT NOT NULL DEFAULT 'manual',
     ingestion_method TEXT NOT NULL DEFAULT 'direct', -- direct / transcript-scan
     session_id    TEXT,                 -- 哪个对话（审计用；任务与对话是多对多）
-    match_method  TEXT NOT NULL,        -- explicit / mobius-auto / task-continue / new-task
+    match_method  TEXT NOT NULL,        -- explicit / mobius-auto / task-continue / session-group / new-task
     match_score   REAL,
     assignment_source TEXT NOT NULL DEFAULT 'system', -- agent / project / session / model / human
     assignment_locked INTEGER NOT NULL DEFAULT 0,     -- 人工确认后模型不得覆盖

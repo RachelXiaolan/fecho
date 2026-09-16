@@ -220,6 +220,7 @@ _METHOD_LABEL = {
     "explicit-freeform": "你明确指定了自由任务",
     "mobius-auto": "自动配到 Mobius issue",
     "task-continue": "接着已有任务",
+    "session-group": "同一场对话归到一起",
     "new-task": "新立了自由任务",
 }
 

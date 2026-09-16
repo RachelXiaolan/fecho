@@ -775,7 +775,8 @@
       (!status || update.completion_status===status);
   }
   function statusTag(status){ const known=['done','wip','blocked','unknown'].includes(status); return `<span class="tag ${esc(status)}">${known?esc(t('status_'+status)):esc(status)}</span>`; }
-  function issueLabel(task){ return task.issue_key ? `${esc(task.issue_key)} · ${esc(task.title)}` : `${esc(task.title)} · ${esc(t('freeform'))}`; }
+  // 有模型起的短名就用短名：自由任务的标题是第一条进展的原文，当名字认不出是哪件事
+  function issueLabel(task){ const name=task.alias||task.title; return task.issue_key ? `${esc(task.issue_key)} · ${esc(name)}` : `${esc(name)} · ${esc(t('freeform'))}`; }
   function empty(title, copy){ return `<div class="empty"><strong>${esc(title)}</strong>${esc(copy)}</div>`; }
 
   function renderAll(){

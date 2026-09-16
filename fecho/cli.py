@@ -274,6 +274,71 @@ def cmd_dedupe(args) -> int:
     return 0
 
 
+def cmd_tidy_tasks(args) -> int:
+    """把拆碎的自由任务收拾一下。默认只看不改，加 --apply 才动手。
+
+    1. 空壳：一条有效进展都没有的自由任务，收起来（status=empty），不在列表里占位
+    2. 碎片：同一天、同一场对话里被拆成多个的自由任务，合成一个（留最早的那个）
+       合并不上锁——出日报前的重判照样能把某条挪去对的 issue
+       合并后清掉留下那个任务的旧短名，下次出日报时模型看着整组进展重新起名
+    """
+    from . import store
+
+    db.init()
+    sql = "SELECT task_id, author, title FROM tasks WHERE issue_key IS NULL AND status='open'"
+    params = []
+    if args.author:
+        sql += " AND author=?"
+        params.append(args.author)
+    with db.cursor() as conn:
+        tasks = [dict(r) for r in conn.execute(sql, params).fetchall()]
+        first = {}
+        for t in tasks:
+            row = conn.execute(
+                "SELECT date, session_id, created_at FROM updates WHERE task_id=? AND status='active'"
+                " ORDER BY created_at, update_id LIMIT 1", (t["task_id"],)).fetchone()
+            first[t["task_id"]] = dict(row) if row else None
+
+    empties = [t for t in tasks if first[t["task_id"]] is None]
+    groups = {}
+    for t in tasks:
+        f = first[t["task_id"]]
+        if f and f["session_id"]:
+            groups.setdefault((t["author"], f["date"], f["session_id"]), []).append(t)
+    merges = []
+    for key, members in groups.items():
+        if len(members) < 2:
+            continue
+        members.sort(key=lambda m: (first[m["task_id"]]["created_at"], m["task_id"]))
+        merges.append((key, members[0], members[1:]))
+
+    authors = sorted({t["author"] for t in tasks})
+    print("检查了 %d 个人的 %d 个自由任务：" % (len(authors), len(tasks)))
+    print("  空壳 %d 个 → 收起" % len(empties))
+    print("  碎片 %d 组，共 %d 个任务 → 合成 %d 个" % (
+        len(merges), sum(len(s) + 1 for _, _, s in merges), len(merges)))
+    for (author, date, session), keep, rest in sorted(merges, key=lambda m: -len(m[2]))[:10]:
+        print("    %s %s 会话 %s：%d 个合成 1 个，留「%s」" % (
+            author.split("@")[0], date, (session or "")[:18], len(rest) + 1, keep["title"][:30]))
+
+    if not args.apply:
+        print("\n这是演练，什么都没改。确认没问题加 --apply 再跑一次。")
+        return 0
+
+    with db.cursor() as conn:
+        for t in empties:
+            conn.execute("UPDATE tasks SET status='empty' WHERE task_id=? AND status='open'",
+                         (t["task_id"],))
+    for (author, _date, _session), keep, rest in merges:
+        for src in rest:
+            store.merge_tasks(src["task_id"], keep["task_id"], author, actor="system", lock=False)
+        with db.cursor() as conn:
+            conn.execute("DELETE FROM task_aliases WHERE author=? AND task_key=?",
+                         (author, "task:%s" % keep["task_id"]))
+    print("\n已完成：收起 %d 个空壳，合并 %d 组碎片。" % (len(empties), len(merges)))
+    return 0
+
+
 def cmd_hidden(args) -> int:
     """看被去重挡掉的进展，必要时捞回来。
 
@@ -508,6 +573,11 @@ def main() -> int:
     p = sub.add_parser("sync", help="刷新 Mobius issue 缓存")
     p.add_argument("--assignee")
     p.set_defaults(fn=cmd_sync)
+
+    p = sub.add_parser("tidy-tasks", help="收拾拆碎的自由任务：收起空壳、按对话合并碎片（默认只演练）")
+    p.add_argument("--author", help="只整理这个人的（邮箱）")
+    p.add_argument("--apply", action="store_true", help="真的动手；不加就只演练")
+    p.set_defaults(fn=cmd_tidy_tasks)
 
     p = sub.add_parser("scope", help="管工作范围：哪些目录能进工作日志（默认不扫）")
     p.add_argument("--work-prefix", help="这个前缀底下的项目默认都算工作，如放工作仓库的那个父目录")

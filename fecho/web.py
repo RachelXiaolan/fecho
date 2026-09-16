@@ -61,7 +61,7 @@ def review_queue(author: str, date: str) -> List[Dict[str, Any]]:
     最后是验证改过的（多半对了，但值得确认）。明确写了 issue 号又没被改过的
     不在这里——那种没什么可复核的。
     """
-    rank = {"task-continue": 0, "new-task": 1, "verified": 2,
+    rank = {"task-continue": 0, "new-task": 1, "session-group": 1, "verified": 2,
             "explicit": 3, "explicit-freeform": 3, "project-bound": 4}
     with db.cursor() as conn:
         rows = conn.execute(
@@ -84,7 +84,8 @@ def review_queue(author: str, date: str) -> List[Dict[str, Any]]:
                     "completion_status": r["completion_status"],
                     "content_kind": r["content_kind"],
                     "confidence": "low" if m == "task-continue" else
-                                  ("medium" if m in ("new-task", "verified") else "high")})
+                                  ("medium" if m in ("new-task", "session-group", "verified")
+                                   else "high")})
     out.sort(key=lambda x: x["rank"])
     return out
 
@@ -150,14 +151,34 @@ def health(author: str, days: int = 14) -> Dict[str, Any]:
             "freeform_pct": round(100.0 * free / total, 1) if total else 0.0}
 
 
+def with_aliases(author: str, tasks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """给任务带上模型起的短名。网页上优先显示短名：自由任务的标题就是第一条进展的原文，
+    像「已将 SSH 远程机器连接到 ChatGPT」这种，当任务名根本认不出是哪件事。"""
+    from . import digest
+
+    with db.cursor() as conn:
+        known = {r["task_key"]: r["alias"] for r in conn.execute(
+            "SELECT task_key, alias FROM task_aliases WHERE author=?", (author,)).fetchall()}
+    for task in tasks:
+        task["alias"] = known.get(digest.task_key(task))
+    return tasks
+
+
 def task_list(author: str) -> List[Dict[str, Any]]:
-    tasks = db.list_tasks(author=author)
+    # 被挪空收起来的自由任务（status=empty）不列出来：它们只是重判来回翻留下的空壳
+    tasks = [t for t in db.list_tasks(author=author) if t["status"] != "empty"]
+    with_aliases(author, tasks)
     for task in tasks:
         updates = db.list_updates(task_id=task["task_id"])
         task["updates"] = updates
         task["update_count"] = len(updates)
         task["last_progress"] = updates[-1]["content_md"] if updates else None
     return tasks
+
+
+def _day_with_aliases(author: str, day: Dict[str, Any]) -> Dict[str, Any]:
+    with_aliases(author, day.get("tasks") or [])
+    return day
 
 
 def report_payload(author: str, date: str) -> Dict[str, Any]:
@@ -192,7 +213,7 @@ def dashboard_payload(author: str, date: str) -> Dict[str, Any]:
     return {
         "date": date,
         "overview": overview(author, date),
-        "today": service.day(author, date),
+        "today": _day_with_aliases(author, service.day(author, date)),
         "review": {"items": review_queue(author, date)},
         "tasks": {"items": task_list(author)},
         "reports": report_payload(author, date),

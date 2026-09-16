@@ -59,6 +59,34 @@ def _session_last_task(session_id: Optional[str], author: str) -> Optional[str]:
     return row["task_id"] if row else None
 
 
+def _conversation_task(author: str, date: str, session_id: Optional[str]) -> Optional[str]:
+    """同一天、同一场对话里已经有的自由任务。没写 issue 号的条目归到这里，别每条都新建。"""
+    if not session_id:
+        return None
+    with db.cursor() as conn:
+        row = conn.execute(
+            "SELECT u.task_id FROM updates u JOIN tasks t ON t.task_id=u.task_id"
+            " WHERE u.author=? AND u.date=? AND u.session_id=? AND t.issue_key IS NULL"
+            " AND t.status='open' AND u.status='active'"
+            " ORDER BY u.created_at, u.update_id LIMIT 1",
+            (author, date, session_id),
+        ).fetchone()
+    return row["task_id"] if row else None
+
+
+def _mark_if_empty(conn: Any, task_id: str) -> None:
+    """自由任务上的进展全挪走了，就收起来（status=empty），不在任务列表里占位。
+
+    不删：留着能查到发生过什么；之后有进展挪回来会重新打开。
+    Mobius 任务不收——它对应的是一个真实的 issue，空着也该在。
+    """
+    left = conn.execute("SELECT 1 FROM updates WHERE task_id=? AND status='active' LIMIT 1",
+                        (task_id,)).fetchone()
+    if not left:
+        conn.execute("UPDATE tasks SET status='empty' WHERE task_id=? AND issue_key IS NULL"
+                     " AND status='open'", (task_id,))
+
+
 def _get_or_create_mobius_task(author: str, issue_key: str, title: Optional[str]) -> Dict[str, Any]:
     with db.cursor() as conn:
         row = conn.execute(
@@ -183,6 +211,8 @@ def record_progress(
                            note="同一 transcript 事件已处理，未重复写入。")
 
     tasks = db.list_tasks(author=author, status="open")
+    is_scan = ingestion_method == "transcript-scan"
+    conversation = _conversation_task(author, date, session_id) if is_scan else None
     if freeform:
         decision = {"method": "explicit-freeform", "score": 1.0,
                     "confidence": "high", "via": "caller"}
@@ -196,7 +226,9 @@ def record_progress(
             project=project,
             # 扫描是批量抽取，同一个 session 下的条目彼此没有对话上的先后关系，
             # 用会话惯性兜底只会把一条错误扩散成一片。
-            allow_session_fallback=ingestion_method != "transcript-scan",
+            allow_session_fallback=not is_scan,
+            # 但同一场对话里都没写 issue 号的，归到一个自由任务里，别拆碎
+            conversation_task_id=conversation,
         )
 
     if decision.get("task_id"):
@@ -207,9 +239,14 @@ def record_progress(
         key = (decision["issue_key"] or "").strip().upper()
         if (unknown_issue_policy == "freeform" and match.ISSUE_RE.fullmatch(key)
                 and not _issue_known(author, key)):
-            decision = {"method": "new-task", "score": None,
-                        "via": "unknown-issue-review"}
-            task = _create_freeform_task(author, content_md)
+            if conversation:
+                decision = {"method": "session-group", "task_id": conversation, "score": None,
+                            "via": "unknown-issue-review"}
+                task = db.get_task(conversation)
+            else:
+                decision = {"method": "new-task", "score": None,
+                            "via": "unknown-issue-review"}
+                task = _create_freeform_task(author, content_md)
         else:
             decision["issue_key"] = _validate_issue(author, key)
             task = _get_or_create_mobius_task(
@@ -280,7 +317,7 @@ def _assignment_source(method: str) -> str:
         return "agent"
     if method == "project-bound":
         return "project"
-    if method == "task-continue":
+    if method in ("task-continue", "session-group"):
         return "session"
     return "system"
 
@@ -312,8 +349,11 @@ def _result(task, update_id, verdict, decision, date, author, note=None) -> Dict
 def reassign(update_id: str, author: str, issue_key: Optional[str]) -> bool:
     """把一条进展挪到另一个 issue（或挪回自由任务）。交叉验证纠错用。
 
-    原来那个任务可能因此变空——不删，留着；它可能还挂着别的日期的进展，
-    而且留着比悄悄消失更容易看出发生过什么。
+    挪回自由任务时先复用：同一天同一场对话的那个 > 这条进展之前待过的那个 > 才新建。
+    以前每次都新建，而出日报前的重判会来回翻（这条算不算 AI-2541？），每翻一次就
+    多一个空壳——9/16 一天积了 97 个。
+
+    原来那个自由任务被挪空了就收起来（status=empty），不删，有进展挪回来会重新打开。
     """
     with db.cursor() as conn:
         row = conn.execute(
@@ -322,18 +362,31 @@ def reassign(update_id: str, author: str, issue_key: Optional[str]) -> bool:
     if row is None or row["assignment_locked"] or row["issue_key"] == issue_key:
         return False
 
+    meta = json.loads(row["meta"] or "{}") or {}
     if issue_key:
         issue_key = _validate_issue(author, issue_key)
         task = _get_or_create_mobius_task(author, issue_key, None)
     else:
-        task = _create_freeform_task(author, row["content_md"])
+        tid = _conversation_task(author, row["date"], row["session_id"]) or meta.get("freeform_task_id")
+        task = db.get_task(tid) if tid else None
+        if (not task or task["author"] != author or task.get("issue_key")
+                or task["status"] == "merged"):
+            task = _create_freeform_task(author, row["content_md"])
+
+    if row["issue_key"] is None:
+        # 从自由任务挪去 issue：记下原来那个，重判翻回来时回到同一个，不再新建
+        meta["freeform_task_id"] = row["task_id"]
 
     ts = now_iso()
     with db.cursor() as conn:
         conn.execute("UPDATE updates SET task_id=?, match_method=?, assignment_source=?,"
-                     " revision=revision+1 WHERE update_id=?",
-                     (task["task_id"], "verified", "model", update_id))
-        conn.execute("UPDATE tasks SET last_update=? WHERE task_id=?", (ts, task["task_id"]))
+                     " revision=revision+1, meta=? WHERE update_id=?",
+                     (task["task_id"], "verified", "model",
+                      json.dumps(meta, ensure_ascii=False), update_id))
+        # 挪回来的如果是之前收起的自由任务，重新打开
+        conn.execute("UPDATE tasks SET last_update=?, status=CASE WHEN status='empty'"
+                     " THEN 'open' ELSE status END WHERE task_id=?", (ts, task["task_id"]))
+        _mark_if_empty(conn, row["task_id"])
     return True
 
 
@@ -432,7 +485,12 @@ def close_task(task_id: str, author: str) -> Dict[str, Any]:
 
 
 def merge_tasks(source_task_id: str, target_task_id: str, author: str,
-                actor: str = "human") -> Dict[str, Any]:
+                actor: str = "human", lock: bool = True) -> Dict[str, Any]:
+    """把一个任务的进展全挪到另一个任务上，源任务标成 merged。
+
+    lock=True（人在网页上合的）：归属锁住，模型之后不能再改。
+    lock=False（系统整理碎片时合的）：不锁，出日报前的重判还能把某条挪去对的 issue。
+    """
     if source_task_id == target_task_id:
         raise ValueError("不能把任务合并到它自己")
     source, target = db.get_task(source_task_id), db.get_task(target_task_id)
@@ -448,9 +506,10 @@ def merge_tasks(source_task_id: str, target_task_id: str, author: str,
         updates = conn.execute("SELECT * FROM updates WHERE task_id=?", (source_task_id,)).fetchall()
         for row in updates:
             conn.execute(
-                "UPDATE updates SET task_id=?,match_method='human-merged',"
-                "assignment_source='human',assignment_locked=1,revision=revision+1"
-                " WHERE update_id=?", (target_task_id, row["update_id"]),
+                "UPDATE updates SET task_id=?,match_method=?,assignment_source=?,"
+                "assignment_locked=?,revision=revision+1 WHERE update_id=?",
+                (target_task_id, "human-merged" if lock else "system-merged",
+                 "human" if lock else "system", 1 if lock else 0, row["update_id"]),
             )
             conn.execute(
                 "INSERT INTO assignment_events (update_id,author,actor,from_task_id,to_task_id,"
