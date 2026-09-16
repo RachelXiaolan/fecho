@@ -201,12 +201,11 @@
     .report-paper pre.md-code code{background:none;padding:0;border:0;white-space:pre}
     .report-paper .md-img{position:relative;display:inline-block;max-width:100%;vertical-align:top;margin:4px 0}
     .report-paper .md-img img{display:block;max-width:100%;height:auto;border-radius:6px;cursor:zoom-in}
-    .report-paper .img-handle{display:none}
-    .md-preview .img-handle{display:block;position:absolute;right:-6px;bottom:-6px;width:14px;height:14px;border-radius:4px;
-      background:#6f5fc7;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.25);cursor:nwse-resize;touch-action:none}
-    .edit-split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:start}
-    .md-preview{border:1px solid var(--line);border-radius:10px;padding:16px 20px 16px 34px;min-height:440px;max-height:75vh;overflow:auto}
-    @media (max-width:1100px){.edit-split{grid-template-columns:1fr}}
+    .report-paper .fold-more{display:none;margin-left:6px;color:var(--faint);font-weight:400;letter-spacing:1px}
+    .report-paper .folded>.fold-more{display:inline}
+    .img-size:not([hidden]){display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted)}
+    .img-size input{min-height:0;padding:0;border:0;flex:1;max-width:320px;accent-color:#6f5fc7}
+    .img-size output{min-width:52px;font-variant-numeric:tabular-nums}
     .lightbox{position:fixed;inset:0;z-index:40;display:none;place-items:center;padding:24px;background:rgba(16,14,36,.86);cursor:zoom-out}
     .lightbox.show{display:grid}
     .lightbox img{max-width:100%;max-height:100%;border-radius:6px;box-shadow:0 10px 40px rgba(0,0,0,.4)}
@@ -247,7 +246,7 @@
     .report-edit{display:grid;gap:10px}
     .report-editor,.style-editor{display:block;width:100%;resize:vertical;
       font:13px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace}
-    .report-editor{min-height:440px;padding:14px 16px}
+    .report-editor{min-height:440px;padding:14px 16px;tab-size:4}
     .style-editor{min-height:170px;border:0;border-radius:0;padding:14px 18px}
     .viewas{display:none;align-items:center;justify-content:space-between;gap:16px;padding:12px 16px;
       border-radius:10px;background:var(--chip-bg);color:var(--viewas-ink);margin-bottom:16px}
@@ -488,9 +487,9 @@
     "cancel": "取消", "save": "保存", "no_voice": "尚未生成口播稿。",
     "write_report": "手动写日报", "write_hint": "还没生成日报，可以先自己写。保存后：到点自动生成的版本不会覆盖它，会放进「历史版本」；口播稿按你写的出。",
     "write_template": "# {date} 工作日志\n\n## Done\n\n- [x] \n\n## In Progress\n\n- [/] \n",
-    "img_insert": "插入图片", "img_alt": "图片", "img_uploading": "图片上传中…", "img_inserted": "图片已插入。在右边预览里拖图片右下角的小方块可以调大小",
-    "img_view": "查看大图", "preview_aria": "预览", "fold": "折叠或展开",
-    "md_hint": "支持 Obsidian 写法：- [ ] 待办、- [x] 完成、- [/] 等其他状态打勾不划掉；> [!note]- 可折叠提示框；表格、代码块；直接粘贴或拖入图片。",
+    "img_insert": "插入图片", "img_alt": "图片", "img_uploading": "图片上传中…", "img_inserted": "图片已插入。光标放在图片那一行，编辑框上方会出现宽度滑块",
+    "img_view": "查看大图", "img_width": "图片宽度", "fold": "折叠或展开",
+    "md_hint": "和 Obsidian 一样：回车自动接着写 - / 1. / - [ ]，空的一项再按回车退出列表；Tab / Shift+Tab 缩进；编号自动重排。- [x] 完成，- [/] 等其他状态打勾不划掉；> [!note]- 可折叠提示框；表格、代码块；直接粘贴或拖入图片。",
     "toast_write_saved": "已保存。之后自动生成的版本不会覆盖它，会放进历史版本",
     "version_label": "版本 {n} · {kind} · {by} · {time}", "by_human": "人工修改", "by_model": "模型生成",
     "no_history": "还没有历史版本。", "no_warnings": "本次生成没有警告。",
@@ -618,9 +617,9 @@
     "cancel": "Cancel", "save": "Save", "no_voice": "No voice script yet.",
     "write_report": "Write report", "write_hint": "No report yet — you can write your own. After saving, automatic versions won't replace it and go to History instead; the voice script follows what you wrote.",
     "write_template": "# {date} Work log\n\n## Done\n\n- [x] \n\n## In Progress\n\n- [/] \n",
-    "img_insert": "Insert image", "img_alt": "image", "img_uploading": "Uploading image…", "img_inserted": "Image inserted. Drag the small square at its bottom-right corner in the preview to resize",
-    "img_view": "View image", "preview_aria": "Preview", "fold": "Fold or unfold",
-    "md_hint": "Obsidian syntax works: - [ ] to-do, - [x] done, - [/] and other marks show checked without strikethrough; > [!note]- collapsible callouts; tables, code blocks; paste or drop images.",
+    "img_insert": "Insert image", "img_alt": "image", "img_uploading": "Uploading image…", "img_inserted": "Image inserted. Put the cursor on the image's line and a width slider appears above the editor",
+    "img_view": "View image", "img_width": "Image width", "fold": "Fold or unfold",
+    "md_hint": "Works like Obsidian: Enter continues - / 1. / - [ ], Enter on an empty item leaves the list; Tab / Shift+Tab indent; numbers renumber automatically. - [x] done, - [/] and other marks show checked without strikethrough; > [!note]- collapsible callouts; tables, code blocks; paste or drop images.",
     "toast_write_saved": "Saved. Automatic versions won't replace it; they go to History",
     "version_label": "Version {n} · {kind} · {by} · {time}", "by_human": "Edited by you", "by_model": "Generated",
     "no_history": "No earlier versions.", "no_warnings": "No notes for this run.",
@@ -840,7 +839,7 @@
     s=s.replace(MD_IMG,(_,alt,url)=>{
       const parts=alt.split('|'); let width='';
       if(parts.length>1&&/^\d+(x\d+)?$/.test(parts[parts.length-1].trim())) width=parts.pop().trim().split('x')[0];
-      return `<span class="md-img" data-img="${mdImages++}"><img src="${url}" alt="${parts.join('|')}"${width?` style="width:${width}px"`:''} loading="lazy"><span class="img-handle"></span></span>`;
+      return `<span class="md-img" data-img="${mdImages++}"><img src="${url}" alt="${parts.join('|')}"${width?` style="width:${width}px"`:''} loading="lazy"></span>`;
     });
     s=s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,'<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
     s=s.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
@@ -954,13 +953,16 @@
   }
 
   // 有子项的列表项、标题：左边加折叠箭头（悬停出现，和 Obsidian 一样）
+  // 折起来之后在后面显示「…」，提醒这里藏着东西
   function enhanceMd(root){
     if(!root) return;
     const button=`<button type="button" class="fold" aria-expanded="true" aria-label="${esc(t('fold'))}"></button>`;
+    const more='<span class="fold-more" aria-hidden="true">…</span>';
     root.querySelectorAll('li').forEach(li=>{
-      if(li.querySelector(':scope>ul,:scope>ol')&&!li.querySelector(':scope>.fold')){ li.classList.add('foldable'); li.insertAdjacentHTML('afterbegin',button); }
+      const child=li.querySelector(':scope>ul,:scope>ol');
+      if(child&&!li.querySelector(':scope>.fold')){ li.classList.add('foldable'); li.insertAdjacentHTML('afterbegin',button); child.insertAdjacentHTML('beforebegin',more); }
     });
-    root.querySelectorAll('.md-h').forEach(h=>{ if(!h.querySelector(':scope>.fold')) h.insertAdjacentHTML('afterbegin',button); });
+    root.querySelectorAll('.md-h').forEach(h=>{ if(!h.querySelector(':scope>.fold')){ h.insertAdjacentHTML('afterbegin',button); h.insertAdjacentHTML('beforeend',more); } });
   }
   // 折起一个标题 = 藏起它后面、直到下一个同级或更高级标题之前的内容。里面折着的小标题展开外层后仍保持折着
   function applyHeadingFolds(container){
@@ -972,24 +974,127 @@
       if(level!==null&&hide===null&&el.classList.contains('folded')) hide=level;
     }
   }
-  // 拖图片右下角改大小：改原文里第 index 张图的 |宽度。数图的规则和 md() 一致：跳过代码块和行内代码
-  function setImageWidth(src, index, width){
-    let n=0, fence=null;
-    return src.split('\n').map(line=>{
-      if(fence){ if(line.trim().startsWith(fence)) fence=null; return line; }
-      const f=line.match(FENCE); if(f){ fence=f[1]; return line; }
-      return line.split(/(`[^`]+`)/).map((part,k)=>k%2?part:part.replace(MD_IMG,(whole,alt,url)=>{
-        if(n++!==index) return whole;
-        const parts=alt.split('|');
-        if(parts.length>1&&/^\d+(x\d+)?$/.test(parts[parts.length-1].trim())) parts.pop();
-        return `![${parts.join('|')}|${width}](${url})`;
-      })).join('');
-    }).join('\n');
+  // ---- 看日报时记住折叠状态：按人、日期、标签页各记一份；内容变了就作废，不把折叠套到别的地方 ----
+  const FOLD_KEY='fecho-folds';
+  const foldKey=()=>cacheKey(state.data.date)+'|'+state.reportTab;
+  function hashText(s){ let h=0; for(let i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))|0; return String(h); }
+  function foldHosts(root){ return [...root.querySelectorAll('.fold')].map(button=>button.parentElement); }
+  function readFolds(){ try{ return JSON.parse(localStorage.getItem(FOLD_KEY)||'{}')||{}; }catch(_){ return {}; } }
+  function saveFolds(){
+    const root=$('#report-content'); if(!root||state.editing) return;
+    const folded=foldHosts(root).map((host,i)=>host.classList.contains('folded')?i:-1).filter(i=>i>=0);
+    const all=readFolds(), key=foldKey();
+    delete all[key];
+    if(folded.length) all[key]={sig:state.reportSig, folded};
+    const keys=Object.keys(all); keys.slice(0,Math.max(0,keys.length-60)).forEach(k=>delete all[k]);   // 只留最近 60 份
+    try{ localStorage.setItem(FOLD_KEY,JSON.stringify(all)); }catch(_){}
   }
-  function updatePreview(){
-    const editor=$('#report-editor'), preview=$('#report-preview');
-    if(!editor||!preview) return;
-    preview.innerHTML=md(editor.value); enhanceMd(preview);
+  function restoreFolds(root){
+    const saved=readFolds()[foldKey()];
+    if(!saved||saved.sig!==state.reportSig) return;
+    const hosts=foldHosts(root);
+    (saved.folded||[]).forEach(i=>{ const host=hosts[i]; if(!host) return; host.classList.add('folded'); host.querySelector(':scope>.fold').setAttribute('aria-expanded','false'); });
+    root.querySelectorAll('.md-doc,.callout-body').forEach(applyHeadingFolds);
+  }
+
+  // ---- 改日报的编辑框：和 Obsidian 一样，回车延续列表、Tab 缩进、编号自动重排 ----
+  // 这几个函数只算文字，不碰页面，方便单独测
+  const LIST_LINE=/^(\s*)(?:([-*+])|(\d+)([.)]))(\s+)(\[.\]\s+)?(.*)$/;
+  const INDENT='  ';
+  const indentWidth=s=>s.replace(/\t/g,'    ').length;
+  function lineBounds(value,pos){ const start=value.lastIndexOf('\n',pos-1)+1; let end=value.indexOf('\n',pos); if(end<0) end=value.length; return [start,end]; }
+  // 只重排光标所在的这一个列表（遇到空行就算另一个列表），每一层从这一层第一项的编号往下数
+  function renumberList(value, caret){
+    const lines=value.split('\n'), row=value.slice(0,caret).split('\n').length-1;
+    const inBlock=line=>line.trim()!==''&&(LIST_LINE.test(line)||/^\s/.test(line));
+    if(!inBlock(lines[row]||'')) return {value, caret};
+    let a=row, b=row;
+    while(a>0&&inBlock(lines[a-1])) a--;
+    while(b<lines.length-1&&inBlock(lines[b+1])) b++;
+    const col=caret-(value.lastIndexOf('\n',caret-1)+1), stack=[];
+    let shift=0;
+    for(let i=a;i<=b;i++){
+      const m=lines[i].match(LIST_LINE); if(!m) continue;
+      const ind=indentWidth(m[1]);
+      while(stack.length&&stack[stack.length-1].indent>ind) stack.pop();
+      let top=stack.length&&stack[stack.length-1].indent===ind?stack[stack.length-1]:null;
+      if(m[3]===undefined){ if(top) top.next=null; else stack.push({indent:ind,next:null}); continue; }
+      let num;
+      if(top&&top.next!==null) num=top.next;
+      else{ num=parseInt(m[3],10); if(top) stack.pop(); top={indent:ind,next:0}; stack.push(top); }
+      top.next=num+1;
+      if(String(num)!==m[3]){
+        const d=String(num).length-m[3].length;
+        if(i<row||(i===row&&col>m[1].length)) shift+=d;
+        lines[i]=m[1]+num+lines[i].slice(m[1].length+m[3].length);
+      }
+    }
+    return {value:lines.join('\n'), caret:caret+shift};
+  }
+  function listEnter(value, start, end){
+    const [ls,le]=lineBounds(value,start);
+    if(end>le) return null;                              // 选中了好几行：按普通回车
+    const line=value.slice(ls,le), m=line.match(LIST_LINE);
+    if(!m) return null;
+    if(start-ls<line.length-m[7].length) return null;    // 光标还在「- [ ] 」这些符号里：按普通回车
+    if(!m[7].trim()&&end===le){                          // 空的一项再按回车：有缩进往外提一层，没缩进就退出列表
+      const lead=m[1].match(/(\t| {1,2})$/);
+      const replaced=lead?line.slice(0,m[1].length-lead[0].length)+line.slice(m[1].length):'';
+      return renumberList(value.slice(0,ls)+replaced+value.slice(le), ls+replaced.length);
+    }
+    const marker=m[2]?m[2]:(parseInt(m[3],10)+1)+m[4];
+    const insert='\n'+m[1]+marker+m[5]+(m[6]?'[ ] ':'');   // 待办接着出一个没做的 [ ]
+    return renumberList(value.slice(0,start)+insert+value.slice(end), start+insert.length);
+  }
+  function listIndent(value, start, end, outdent){
+    const ls=lineBounds(value,start)[0];
+    const le=lineBounds(value, end>start&&value[end-1]==='\n'?end-1:end)[1];
+    const lines=value.slice(ls,le).split('\n');
+    if(!lines.some(line=>LIST_LINE.test(line))) return null;   // 不在列表里：Tab 照常跳到下一个按钮
+    let firstDelta=null, total=0;
+    const changed=lines.map(line=>{
+      let next=line;
+      if(outdent){ const lead=line.match(/^(\t| {1,2})/); if(lead) next=line.slice(lead[0].length); }
+      else if(line.trim()) next=INDENT+line;
+      // 挪到别的层级的编号项先当成 1.：接在同层上一项后面就会被重排成接着数，新开一层就从 1 开始
+      const m=next!==line&&next.match(LIST_LINE);
+      if(m&&m[3]!==undefined&&m[3]!=='1') next=m[1]+'1'+next.slice(m[1].length+m[3].length);
+      const d=next.length-line.length; if(firstDelta===null) firstDelta=d; total+=d;
+      return next;
+    });
+    const v=value.slice(0,ls)+changed.join('\n')+value.slice(le);
+    const s=Math.max(ls,start+firstDelta), e=Math.max(s,end+total);
+    const a=renumberList(v,s), b=renumberList(a.value, e+(a.value.length-v.length));
+    return {value:b.value, start:a.caret, end:Math.max(a.caret,b.caret)};
+  }
+  // 光标所在那一行的图片（光标压在哪张就是哪张，否则取这一行第一张）
+  function imageAtCaret(value, pos){
+    const [ls,le]=lineBounds(value,pos), line=value.slice(ls,le), re=new RegExp(MD_IMG.source,'g');
+    let m, hit=null;
+    while((m=re.exec(line))){ if(!hit) hit=m; if(pos-ls>=m.index&&pos-ls<=m.index+m[0].length){ hit=m; break; } }
+    if(!hit) return null;
+    const parts=hit[1].split('|');
+    const width=parts.length>1&&/^\d+(x\d+)?$/.test(parts[parts.length-1].trim())?parseInt(parts.pop(),10):null;
+    return {start:ls+hit.index, end:ls+hit.index+hit[0].length, alt:parts.join('|'), url:hit[2], width};
+  }
+  // 改动走浏览器自己的输入（execCommand），Cmd+Z 还能撤销；不支持的浏览器直接改值
+  function applyEditorEdit(editor, next, selStart, selEnd){
+    const old=editor.value;
+    if(next!==old){
+      let a=0; while(a<old.length&&a<next.length&&old[a]===next[a]) a++;
+      let b=0; while(b<old.length-a&&b<next.length-a&&old[old.length-1-b]===next[next.length-1-b]) b++;
+      const text=next.slice(a,next.length-b);
+      editor.focus(); editor.setSelectionRange(a,old.length-b);
+      let ok=false; try{ ok=document.execCommand(text?'insertText':'delete',false,text); }catch(_){}
+      if(!ok||editor.value!==next) editor.value=next;
+    }
+    editor.setSelectionRange(selStart,selEnd);
+  }
+  function syncImageSize(){
+    const editor=$('#report-editor'), row=$('#img-size'); if(!editor||!row) return;
+    const img=imageAtCaret(editor.value, editor.selectionStart);
+    row.hidden=!img; if(!img) return;
+    const width=img.width||480; $('#img-width').value=width; $('#img-width-value').textContent=width+'px';
   }
   function openLightbox(src, alt){
     let box=$('#lightbox');
@@ -1011,7 +1116,7 @@
         const r=await post('/api/reports/images',{data:dataUrl.split(',')[1]});
         const at=editor.selectionStart, before=editor.value.slice(0,at);
         editor.setRangeText((before&&!before.endsWith('\n')?'\n':'')+`![${t('img_alt')}|480](${r.url})\n`, at, editor.selectionEnd, 'end');
-        editor.focus(); updatePreview(); toast(t('img_inserted'));
+        editor.focus(); syncImageSize(); toast(t('img_inserted'));
       }catch(error){ toast(error.message,null,true); }
     }
   }
@@ -1032,7 +1137,7 @@
     const updates=(state.data.overview||{}).updates||0;
     const noDaily=updates ? t('no_daily_with_updates',{n:updates}) : t('no_daily_empty');
     if(state.reportTab==='daily') html=state.editing
-      ?`<div class="report-edit"><div class="button-row" style="justify-content:space-between;align-items:center"><p class="meta" style="margin:0;flex:1">${esc(t(report.daily?'edit_hint':'write_hint'))}</p><button class="btn small" type="button" id="insert-image">${esc(t('img_insert'))}</button></div><input type="file" id="report-image-file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden><div class="edit-split"><textarea id="report-editor" class="report-editor" aria-label="${esc(t('edit_aria'))}">${esc(report.daily||t('write_template',{date:state.data.date}))}</textarea><div class="md-preview" id="report-preview" aria-label="${esc(t('preview_aria'))}"></div></div><p class="meta" style="margin:0">${esc(t('md_hint'))}</p><div class="button-row"><button class="btn" id="cancel-edit">${esc(t('cancel'))}</button><button class="btn primary" id="save-edit">${esc(t('save'))}</button></div></div>`
+      ?`<div class="report-edit"><div class="button-row" style="justify-content:space-between;align-items:center"><p class="meta" style="margin:0;flex:1">${esc(t(report.daily?'edit_hint':'write_hint'))}</p><button class="btn small" type="button" id="insert-image">${esc(t('img_insert'))}</button></div><input type="file" id="report-image-file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden><div class="img-size" id="img-size" hidden><span>${esc(t('img_width'))}</span><input type="range" id="img-width" min="80" max="1200" step="10" aria-label="${esc(t('img_width'))}"><output id="img-width-value"></output></div><textarea id="report-editor" class="report-editor" aria-label="${esc(t('edit_aria'))}">${esc(report.daily||t('write_template',{date:state.data.date}))}</textarea><p class="meta" style="margin:0">${esc(t('md_hint'))}</p><div class="button-row"><button class="btn" id="cancel-edit">${esc(t('cancel'))}</button><button class="btn primary" id="save-edit">${esc(t('save'))}</button></div></div>`
       :(report.daily?md(report.daily):empty(noDaily));
     if(state.reportTab==='voice') html=report.voice?md(report.voice):empty(t('no_voice'));
     if(state.reportTab==='history') html=report.history.length
@@ -1044,8 +1149,9 @@
     // 内容没变就不重画：每分钟的自动刷新不能把人折起来的标题和列表又全展开
     if(state.reportHtml===html) return;
     state.reportHtml=html;
+    state.reportSig=hashText(html);
     $('#report-content').innerHTML=html;
-    if(state.editing&&state.reportTab==='daily') updatePreview(); else enhanceMd($('#report-content'));
+    if(!(state.editing&&state.reportTab==='daily')){ enhanceMd($('#report-content')); restoreFolds($('#report-content')); }
   }
 
   function renderSystem(){
@@ -1081,7 +1187,7 @@
 
   document.addEventListener('click', async event=>{
     const fold=event.target.closest('.report-paper .fold');
-    if(fold){ const host=fold.parentElement; host.classList.toggle('folded'); fold.setAttribute('aria-expanded',String(!host.classList.contains('folded'))); if(host.classList.contains('md-h')) applyHeadingFolds(host.parentElement); return; }
+    if(fold){ const host=fold.parentElement; host.classList.toggle('folded'); fold.setAttribute('aria-expanded',String(!host.classList.contains('folded'))); if(host.classList.contains('md-h')) applyHeadingFolds(host.parentElement); saveFolds(); return; }
     const zoom=event.target.closest('.report-paper .md-img img'); if(zoom){ openLightbox(zoom.currentSrc||zoom.src, zoom.alt); return; }
     if(event.target.closest('#lightbox')){ closeLightbox(); return; }
     if(event.target.closest('#insert-image')){ $('#report-image-file').click(); return; }
@@ -1344,9 +1450,39 @@
     finally{ button.disabled=false; }
   });
 
-  // 改日报：边写边预览；粘贴、拖入、按钮选图都会先传图再把地址写进原文
-  let previewTimer=null;
-  document.addEventListener('input',event=>{ if(event.target.id==='report-editor'){ clearTimeout(previewTimer); previewTimer=setTimeout(updatePreview,150); } });
+  // 改日报：和 Obsidian 一样，回车延续列表、Tab 缩进、编号自动重排；粘贴、拖入、按钮选图都会先传图再把地址写进原文
+  document.addEventListener('keydown',event=>{
+    if(event.key==='Escape') closeLightbox();
+    const editor=event.target; if(!editor||editor.id!=='report-editor') return;
+    if(event.isComposing||event.keyCode===229) return;       // 中文输入法正在选字：回车是确认候选词，不是换行
+    if(event.altKey||event.metaKey||event.ctrlKey) return;
+    let r=null;
+    if(event.key==='Enter'&&!event.shiftKey){ const x=listEnter(editor.value,editor.selectionStart,editor.selectionEnd); if(x) r={value:x.value,start:x.caret,end:x.caret}; }
+    else if(event.key==='Tab') r=listIndent(editor.value,editor.selectionStart,editor.selectionEnd,event.shiftKey);
+    if(!r) return;
+    event.preventDefault(); applyEditorEdit(editor,r.value,r.start,r.end); syncImageSize();
+  });
+  document.addEventListener('input',event=>{
+    if(event.target.id==='report-editor'){
+      const editor=event.target;
+      // 删掉一项、粘进来几行之后，把这一个列表的编号重排
+      if(/^(delete|insertFromPaste|insertFromDrop)/.test(event.inputType||'')){
+        const r=renumberList(editor.value,editor.selectionStart);
+        if(r.value!==editor.value) applyEditorEdit(editor,r.value,r.caret,r.caret);
+      }
+      syncImageSize(); return;
+    }
+    // 光标在图片那一行时，拖宽度滑块直接改原文里的 |宽度
+    if(event.target.id==='img-width'){
+      const editor=$('#report-editor'); if(!editor) return;
+      const img=imageAtCaret(editor.value,editor.selectionStart); if(!img) return;
+      const width=parseInt(event.target.value,10);
+      editor.setRangeText(`![${img.alt}|${width}](${img.url})`, img.start, img.end, 'start');
+      editor.setSelectionRange(img.start,img.start);
+      $('#img-width-value').textContent=width+'px';
+    }
+  });
+  ['keyup','mouseup'].forEach(type=>document.addEventListener(type,event=>{ if(event.target.id==='report-editor') syncImageSize(); }));
   document.addEventListener('paste',event=>{
     if(event.target.id!=='report-editor') return;
     const files=[...((event.clipboardData||{}).files||[])].filter(file=>file.type.startsWith('image/'));
@@ -1358,22 +1494,6 @@
     event.preventDefault(); uploadReportImages([...event.dataTransfer.files].filter(file=>file.type.startsWith('image/')));
   });
   document.addEventListener('change',event=>{ if(event.target.id!=='report-image-file') return; uploadReportImages([...event.target.files]); event.target.value=''; });
-  document.addEventListener('keydown',event=>{ if(event.key==='Escape') closeLightbox(); });
-  // 预览里拖图片右下角的小方块改大小，松手后把新宽度写回原文
-  document.addEventListener('pointerdown',event=>{
-    const handle=event.target.closest('.md-preview .img-handle'); if(!handle) return;
-    const wrap=handle.parentElement, img=wrap.querySelector('img'), preview=handle.closest('.md-preview');
-    const startX=event.clientX, startW=img.getBoundingClientRect().width, maxW=preview.clientWidth-40;
-    let moved=false;
-    event.preventDefault(); handle.setPointerCapture(event.pointerId);
-    const move=ev=>{ moved=true; img.style.width=Math.round(Math.max(60,Math.min(maxW,startW+ev.clientX-startX)))+'px'; };
-    const up=()=>{
-      handle.removeEventListener('pointermove',move); handle.removeEventListener('pointerup',up); handle.removeEventListener('pointercancel',up);
-      const editor=$('#report-editor');
-      if(moved&&editor) editor.value=setImageWidth(editor.value,+wrap.dataset.img,parseInt(img.style.width,10));
-    };
-    handle.addEventListener('pointermove',move); handle.addEventListener('pointerup',up); handle.addEventListener('pointercancel',up);
-  });
 
   applyStatic();
   switchView('today',{scroll:false});
