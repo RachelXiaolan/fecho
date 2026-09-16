@@ -25,6 +25,8 @@ AGENTS: Dict[str, Dict[str, str]] = {
     "hermes": {"label": "Hermes", "transcripts": "~/.hermes/sessions/**/*.jsonl"},
     # Cursor 的对话存在 SQLite 里，本机脚本读不了，只能随手记
     "cursor": {"label": "Cursor", "transcripts": ""},
+    # Grok bot 不在本机跑（没有命令行、本机没有它的聊天记录），只能随手记
+    "grok": {"label": "Grok", "transcripts": ""},
 }
 # Claude Code 桌面版和命令行的聊天记录在同一个文件夹，每条带 entrypoint 标出从哪个入口聊的
 ENTRYPOINTS = {"claude-desktop", "cli"}
@@ -43,8 +45,9 @@ def _now_iso() -> str:
 def agent_id(client_name: Optional[str]) -> Optional[str]:
     """MCP 客户端报上来的名字 → 我们认的 agent。认不出来的不记。"""
     name = (client_name or "").lower()
+    # 按名字里的关键词认：grok-bot、grok-cli、Grok 都算 grok
     for key, needle in (("claude-code", "claude"), ("codex", "codex"), ("hermes", "hermes"),
-                        ("cursor", "cursor")):
+                        ("cursor", "cursor"), ("grok", "grok")):
         if needle in name:
             return key
     return None

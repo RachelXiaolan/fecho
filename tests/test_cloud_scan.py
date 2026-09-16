@@ -194,14 +194,24 @@ class TestAgents(ScanCase):
         self.assertEqual(cloudscan.agent_id("Codex-MCP-Client"), "codex")
         self.assertEqual(cloudscan.agent_id("hermes"), "hermes")
         self.assertEqual(cloudscan.agent_id("Cursor"), "cursor")
+        self.assertEqual(cloudscan.agent_id("grok-bot"), "grok")
+        self.assertEqual(cloudscan.agent_id("Grok-CLI"), "grok")
         self.assertIsNone(cloudscan.agent_id("some-random-client"))
 
-    def test_cursor_is_listed_but_cannot_be_scanned(self):
-        """Cursor 的对话本机读不了：列出来显示连接状态，但扫描开关打不开。"""
-        cursor = next(a for a in cloudscan.agents(A) if a["agent"] == "cursor")
-        self.assertFalse(cursor["scannable"])
-        with self.assertRaises(ValueError):
-            cloudscan.set_scan_enabled(A, "cursor", True)
+    def test_cursor_and_grok_are_listed_but_cannot_be_scanned(self):
+        """Cursor 的对话本机读不了，Grok bot 不在本机跑：列出来显示连接状态，但扫描开关打不开。"""
+        for key in ("cursor", "grok"):
+            agent = next(a for a in cloudscan.agents(A) if a["agent"] == key)
+            self.assertFalse(agent["scannable"], key)
+            with self.assertRaises(ValueError):
+                cloudscan.set_scan_enabled(A, key, True)
+
+    def test_grok_connecting_lights_it_up_and_keeps_the_source(self):
+        """leo 的 grok-bot 连过一次但认不出来。认出来之后，网页上要显示「已接入」。"""
+        self.assertEqual(cloudscan.touch_agent(A, "grok-bot"), "grok")
+        grok = next(a for a in cloudscan.agents(A) if a["agent"] == "grok")
+        self.assertTrue(grok["connected"])
+        self.assertFalse(grok["scan_enabled"], "认出来不等于要扫它")
 
     def test_unused_agents_are_not_scanned_by_default(self):
         """没用过的 agent 没有聊天记录可扫。"""

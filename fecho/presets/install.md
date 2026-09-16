@@ -77,6 +77,32 @@ Authorization = "Bearer <TOKEN>"
 
 Cursor 的对话本机读不了，**只能随手记，不能每晚扫描**。第 3 步照样装（用户可能还用 Claude Code 或 Codex），第 4 步跳过。
 
+### 你是 Grok bot（或别的能连 MCP 的 agent）
+
+Fecho 的接入是标准的 Streamable HTTP MCP，任何支持 MCP 的 agent 都能接。把这两样填进它的 MCP 配置：
+
+- 地址：`__URL__/mcp`
+- 请求头：`Authorization: Bearer <TOKEN>`
+
+用 JSON 配置的（Cursor、大多数 bot）长这样：
+
+```json
+{
+  "mcpServers": {
+    "fecho": {
+      "url": "__URL__/mcp",
+      "headers": {"Authorization": "Bearer <TOKEN>"}
+    }
+  }
+}
+```
+
+**连上时报的名字很重要**：Fecho 按名字认 agent，名字里带 `grok` 的都算 Grok。
+名字认不出来时，随手记照样能存，但网页「设置 → Agent」里不会显示它已接入。
+
+Grok bot 不在用户电脑上跑，**只能随手记，不能每晚扫描**。第 3 步（本机采集）照样装，
+因为用户可能还用 Claude Code 或 Codex；第 4 步跳过。
+
 ### 你是 Hermes
 
 远程接入的写法**还没实测过**。请告诉用户这一点，并请用户联系 Fecho 管理员。

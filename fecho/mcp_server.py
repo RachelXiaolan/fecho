@@ -176,7 +176,7 @@ CLOUD_TOOLS = [
                 "issue": {"type": "string", "description": "判断属于哪个 issue，不确定就不填"},
                 "date": {"type": "string", "description": "这条发生在哪天（北京时间）"},
                 "project": {"type": "string", "description": "这段对话所在文件夹的绝对路径"},
-                "agent": {"type": "string", "description": "哪个 agent 的聊天记录：claude-code / codex / hermes"},
+                "agent": {"type": "string", "description": "哪个 agent 的聊天记录：claude-code / codex（只有这两个能在后台叫醒扫描）"},
                 "entrypoint": {"type": "string", "description": "Claude Code 的记录从哪个入口聊的：claude-desktop / cli，可不填"},
                 "session_id": {"type": "string"},
                 "source_event_key": {"type": "string", "description": "稳定的去重键，同一条每次扫都一样"}},

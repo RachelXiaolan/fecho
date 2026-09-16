@@ -30,7 +30,7 @@ Fecho 替你记下每天用 agent 做成了什么，每天到点自动出一份�
 |---|---|
 | 账号 | 能登录 Mobius 的 `@feedmob.com` 邮箱 |
 | 电脑 | macOS、Windows 10/11 或 Linux，装有 Python 3.9 以上。Mac 和大部分 Linux 自带；Windows 没有的话 agent 会提醒你先装 |
-| agent | **Codex**（ChatGPT 桌面版里的就行）或 **Claude Code**（桌面版和命令行的 Code 对话都算）。Cursor、Hermes 暂时只能随手记，不能每晚扫描 |
+| agent | **Codex**（ChatGPT 桌面版里的就行）或 **Claude Code**（桌面版和命令行的 Code 对话都算）。Cursor、Grok、Hermes 暂时只能随手记，不能每晚扫描 |
 | Claude Code 用户 | 在「终端」（Windows 上是 PowerShell）里输入 `claude` 能正常对话。只在桌面版登录过不算，扫描要用命令行版 |
 
 ---
@@ -136,7 +136,7 @@ token 连续 7 天没用才会过期。回 onboard 页再生成一个交给 agen
 
 验收时碰到这些不用单独报，已经记着了。
 
-- **Cursor、Hermes 不能每晚扫描。** Cursor 的对话本机读不了；后台叫醒 Hermes 还没实测过。网页上它们的开关是灰的，随手记照常能用。
+- **Cursor、Grok、Hermes 不能每晚扫描。** Cursor 的对话本机读不了；Grok bot 不在你电脑上跑；后台叫醒 Hermes 还没实测过。网页上它们的开关是灰的，随手记照常能用。
 - **Claude 桌面版里的普通聊天扫不到。** 那些聊天存在 Anthropic 服务器上，本机没有记录；桌面版里 Code 标签页的对话能扫。
 - **Windows 和 Linux 的每晚扫描还没在真机上完整验证过。** 装的时候或第二天没看到扫描结果，请在「反馈」里说一声，附上 status 的输出。
 - **切到英文后，服务器返回的提示和日报正文仍是中文。** 目前只翻译了界面。
