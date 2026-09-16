@@ -206,6 +206,11 @@
     .img-size:not([hidden]){display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted)}
     .img-size input{min-height:0;padding:0;border:0;flex:1;max-width:320px;accent-color:#6f5fc7}
     .img-size output{min-width:52px;font-variant-numeric:tabular-nums}
+    .edit-split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:start}
+    .edit-split.off{grid-template-columns:minmax(0,1fr)}
+    .edit-split.off .md-preview{display:none}
+    .md-preview{border:1px solid var(--line);border-radius:10px;padding:16px 20px 16px 34px;min-height:440px;max-height:75vh;overflow:auto}
+    @media (max-width:1100px){.edit-split{grid-template-columns:1fr}}
     .lightbox{position:fixed;inset:0;z-index:40;display:none;place-items:center;padding:24px;background:rgba(16,14,36,.86);cursor:zoom-out}
     .lightbox.show{display:grid}
     .lightbox img{max-width:100%;max-height:100%;border-radius:6px;box-shadow:0 10px 40px rgba(0,0,0,.4)}
@@ -489,6 +494,7 @@
     "write_template": "# {date} 工作日志\n\n## Done\n\n- [x] \n\n## In Progress\n\n- [/] \n",
     "img_insert": "插入图片", "img_alt": "图片", "img_uploading": "图片上传中…", "img_inserted": "图片已插入。光标放在图片那一行，编辑框上方会出现宽度滑块",
     "img_view": "查看大图", "img_width": "图片宽度", "fold": "折叠或展开",
+    "preview_show": "显示预览", "preview_hide": "关掉预览", "preview_aria": "预览",
     "md_hint": "和 Obsidian 一样：回车自动接着写 - / 1. / - [ ]，空的一项再按回车退出列表；Tab / Shift+Tab 缩进；编号自动重排。- [x] 完成，- [/] 等其他状态打勾不划掉；> [!note]- 可折叠提示框；表格、代码块；直接粘贴或拖入图片。",
     "toast_write_saved": "已保存。之后自动生成的版本不会覆盖它，会放进历史版本",
     "version_label": "版本 {n} · {kind} · {by} · {time}", "by_human": "人工修改", "by_model": "模型生成",
@@ -619,6 +625,7 @@
     "write_template": "# {date} Work log\n\n## Done\n\n- [x] \n\n## In Progress\n\n- [/] \n",
     "img_insert": "Insert image", "img_alt": "image", "img_uploading": "Uploading image…", "img_inserted": "Image inserted. Put the cursor on the image's line and a width slider appears above the editor",
     "img_view": "View image", "img_width": "Image width", "fold": "Fold or unfold",
+    "preview_show": "Show preview", "preview_hide": "Hide preview", "preview_aria": "Preview",
     "md_hint": "Works like Obsidian: Enter continues - / 1. / - [ ], Enter on an empty item leaves the list; Tab / Shift+Tab indent; numbers renumber automatically. - [x] done, - [/] and other marks show checked without strikethrough; > [!note]- collapsible callouts; tables, code blocks; paste or drop images.",
     "toast_write_saved": "Saved. Automatic versions won't replace it; they go to History",
     "version_label": "Version {n} · {kind} · {by} · {time}", "by_human": "Edited by you", "by_model": "Generated",
@@ -1090,6 +1097,15 @@
     }
     editor.setSelectionRange(selStart,selEnd);
   }
+  // 预览默认关着；开着的时候边写边更新。开关状态记在这台电脑的浏览器里
+  const PREVIEW_KEY='fecho-preview';
+  state.preview=(()=>{ try{ return localStorage.getItem(PREVIEW_KEY)==='1'; }catch(_){ return false; } })();
+  let previewTimer=null;
+  function updatePreview(){
+    const editor=$('#report-editor'), preview=$('#report-preview');
+    if(!editor||!preview||!state.preview) return;
+    preview.innerHTML=md(editor.value); enhanceMd(preview);
+  }
   function syncImageSize(){
     const editor=$('#report-editor'), row=$('#img-size'); if(!editor||!row) return;
     const img=imageAtCaret(editor.value, editor.selectionStart);
@@ -1137,7 +1153,7 @@
     const updates=(state.data.overview||{}).updates||0;
     const noDaily=updates ? t('no_daily_with_updates',{n:updates}) : t('no_daily_empty');
     if(state.reportTab==='daily') html=state.editing
-      ?`<div class="report-edit"><div class="button-row" style="justify-content:space-between;align-items:center"><p class="meta" style="margin:0;flex:1">${esc(t(report.daily?'edit_hint':'write_hint'))}</p><button class="btn small" type="button" id="insert-image">${esc(t('img_insert'))}</button></div><input type="file" id="report-image-file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden><div class="img-size" id="img-size" hidden><span>${esc(t('img_width'))}</span><input type="range" id="img-width" min="80" max="1200" step="10" aria-label="${esc(t('img_width'))}"><output id="img-width-value"></output></div><textarea id="report-editor" class="report-editor" aria-label="${esc(t('edit_aria'))}">${esc(report.daily||t('write_template',{date:state.data.date}))}</textarea><p class="meta" style="margin:0">${esc(t('md_hint'))}</p><div class="button-row"><button class="btn" id="cancel-edit">${esc(t('cancel'))}</button><button class="btn primary" id="save-edit">${esc(t('save'))}</button></div></div>`
+      ?`<div class="report-edit"><div class="button-row" style="justify-content:space-between;align-items:center"><p class="meta" style="margin:0;flex:1">${esc(t(report.daily?'edit_hint':'write_hint'))}</p><button class="btn small" type="button" id="toggle-preview">${esc(t(state.preview?'preview_hide':'preview_show'))}</button><button class="btn small" type="button" id="insert-image">${esc(t('img_insert'))}</button></div><input type="file" id="report-image-file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden><div class="img-size" id="img-size" hidden><span>${esc(t('img_width'))}</span><input type="range" id="img-width" min="80" max="1200" step="10" aria-label="${esc(t('img_width'))}"><output id="img-width-value"></output></div><div class="edit-split${state.preview?'':' off'}" id="edit-split"><textarea id="report-editor" class="report-editor" aria-label="${esc(t('edit_aria'))}">${esc(report.daily||t('write_template',{date:state.data.date}))}</textarea><div class="md-preview" id="report-preview" aria-label="${esc(t('preview_aria'))}"></div></div><p class="meta" style="margin:0">${esc(t('md_hint'))}</p><div class="button-row"><button class="btn" id="cancel-edit">${esc(t('cancel'))}</button><button class="btn primary" id="save-edit">${esc(t('save'))}</button></div></div>`
       :(report.daily?md(report.daily):empty(noDaily));
     if(state.reportTab==='voice') html=report.voice?md(report.voice):empty(t('no_voice'));
     if(state.reportTab==='history') html=report.history.length
@@ -1151,7 +1167,8 @@
     state.reportHtml=html;
     state.reportSig=hashText(html);
     $('#report-content').innerHTML=html;
-    if(!(state.editing&&state.reportTab==='daily')){ enhanceMd($('#report-content')); restoreFolds($('#report-content')); }
+    if(state.editing&&state.reportTab==='daily') updatePreview();
+    else { enhanceMd($('#report-content')); restoreFolds($('#report-content')); }
   }
 
   function renderSystem(){
@@ -1191,6 +1208,14 @@
     const zoom=event.target.closest('.report-paper .md-img img'); if(zoom){ openLightbox(zoom.currentSrc||zoom.src, zoom.alt); return; }
     if(event.target.closest('#lightbox')){ closeLightbox(); return; }
     if(event.target.closest('#insert-image')){ $('#report-image-file').click(); return; }
+    if(event.target.closest('#toggle-preview')){
+      state.preview=!state.preview;
+      try{ localStorage.setItem(PREVIEW_KEY, state.preview?'1':'0'); }catch(_){}
+      const split=$('#edit-split'); if(split) split.classList.toggle('off',!state.preview);
+      $('#toggle-preview').textContent=t(state.preview?'preview_hide':'preview_show');
+      updatePreview();
+      return;
+    }
     const langButton=event.target.closest('[data-lang]'); if(langButton){ if(langButton.dataset.lang!==lang) setLang(langButton.dataset.lang); return; }
     const nav=event.target.closest('[data-view]'); if(nav){switchView(nav.dataset.view);return;}
     const go=event.target.closest('[data-go]'); if(go){switchView(go.dataset.go);return;}
@@ -1470,7 +1495,9 @@
         const r=renumberList(editor.value,editor.selectionStart);
         if(r.value!==editor.value) applyEditorEdit(editor,r.value,r.caret,r.caret);
       }
-      syncImageSize(); return;
+      syncImageSize();
+      clearTimeout(previewTimer); previewTimer=setTimeout(updatePreview,150);
+      return;
     }
     // 光标在图片那一行时，拖宽度滑块直接改原文里的 |宽度
     if(event.target.id==='img-width'){
