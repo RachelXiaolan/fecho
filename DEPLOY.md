@@ -47,6 +47,7 @@
 
 漏了会怎样：线上一走到那张表或那一列就 500。0.8.1 上线后「保存日报」就是这么坏的——
 0.7.0 加了 `report_images` 表和 `report_history.fingerprint` 列，但没在线上跑建表。
+快速 API 的 `quick_api_keys` 表会在第一次签发或校验 key 时自动执行 `CREATE TABLE IF NOT EXISTS`，并在 Postgres 上开启 RLS，因此不再要求部署前手动建表；表里只保存 API key 哈希，不保存原文。上面的建表命令仍可作为上线前预热和权限检查。
 
 ---
 

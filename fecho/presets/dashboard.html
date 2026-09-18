@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Fecho</title>
+  <link rel="stylesheet" href="/vendor/vditor/dist/index.css">
   <script id="theme-boot">try{var s=localStorage.getItem('fecho-theme');document.documentElement.dataset.theme=s==='dark'||s==='light'?s:(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');}catch(_){document.documentElement.dataset.theme='light';}</script>
   <style>
     :root{
@@ -31,14 +32,28 @@
     button{cursor:pointer}
     button:disabled{cursor:wait;opacity:.55}
     a{color:inherit}
-    .shell{min-height:100vh;display:grid;grid-template-columns:232px minmax(0,1fr)}
+    .shell{min-height:100vh;display:grid;grid-template-columns:232px minmax(0,1fr);transition:grid-template-columns .2s ease}
     .sidebar{position:sticky;top:0;height:100vh;padding:26px 18px 20px;background:var(--nav);
-      color:var(--nav-text);display:flex;flex-direction:column}
-    .brand{display:flex;align-items:center;gap:11px;padding:0 10px 28px}
-    .brand-mark{width:32px;height:32px;border-radius:9px;background:var(--violet);color:var(--nav);
+      color:var(--nav-text);display:flex;flex-direction:column;overflow-x:hidden}
+    .brand-row{display:flex;align-items:flex-start;gap:8px;padding:0 0 28px}
+    .brand{display:flex;align-items:center;gap:11px;padding:0 10px;flex:1;min-width:0}
+    .brand-mark{width:32px;height:32px;flex:none;border-radius:9px;background:var(--violet);color:var(--nav);
       display:grid;place-items:center;font-size:17px;font-weight:700;letter-spacing:-1px}
     .brand-name{font-size:19px;font-variation-settings:"wght" 540;font-weight:600;letter-spacing:-.4px}
     .brand-copy{font-size:11px;color:#bcbac9;margin-top:-1px}
+    .sidebar-toggle{flex:none;width:34px;height:34px;padding:0;border:1px solid rgba(255,255,255,.15);border-radius:8px;
+      background:transparent;color:#bcbac9;display:grid;place-items:center}
+    .sidebar-toggle:hover{background:rgba(255,255,255,.08);color:#fff}
+    .sidebar-toggle svg{transition:transform .2s ease}
+    .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+    .shell.sidebar-collapsed{grid-template-columns:78px minmax(0,1fr)}
+    .shell.sidebar-collapsed .sidebar{padding-left:10px;padding-right:10px}
+    .shell.sidebar-collapsed .brand-row{display:grid;justify-items:center;gap:10px}
+    .shell.sidebar-collapsed .brand{flex:none;padding:0}
+    .shell.sidebar-collapsed .brand-name,.shell.sidebar-collapsed .brand-copy,.shell.sidebar-collapsed .nav-label,
+    .shell.sidebar-collapsed .nav button span:first-child,.shell.sidebar-collapsed .sidebar-foot span{display:none}
+    .shell.sidebar-collapsed .sidebar-toggle svg{transform:rotate(180deg)}
+    .shell.sidebar-collapsed .nav button{justify-content:center;min-height:44px;padding:10px 8px}
     .nav-label{padding:0 10px 8px;color:#77738f;font-size:10px;font-weight:700;
       letter-spacing:1.2px;text-transform:uppercase}
     .nav{display:grid;gap:4px}
@@ -53,6 +68,8 @@
     .connection{display:flex;gap:8px;align-items:center;color:#bcbac9;font-size:12px}
     .pulse{width:7px;height:7px;border-radius:50%;background:#7dd5ac;box-shadow:0 0 0 4px rgba(125,213,172,.1)}
     .workspace{min-width:0}
+    .workspace:has(.view[data-page="reports"].active){height:100vh;display:flex;flex-direction:column;overflow:hidden}
+    .workspace:has(.view[data-page="reports"].active) main{flex:1;min-height:0;width:100%;overflow:hidden}
     .topbar{min-height:86px;padding:19px 34px;border-bottom:1px solid var(--line);
       background:var(--topbar-bg);backdrop-filter:blur(12px);display:flex;
       align-items:center;justify-content:space-between;gap:24px;position:sticky;top:0;z-index:10}
@@ -65,8 +82,10 @@
       min-height:38px;padding:7px 10px;outline:none}
     input:focus,select:focus,textarea:focus{border-color:#7771a6;box-shadow:0 0 0 3px rgba(119,113,166,.1)}
     .toolbar select{max-width:142px}
-    main{max-width:1240px;margin:0 auto;padding:30px 34px 72px}
+    main{max-width:1240px;margin:0 auto;padding:8px 34px 24px}
     .view{display:none}.view.active{display:block;animation:enter .24s ease both}
+    .view[data-page="reports"].active{display:flex;flex-direction:column;height:100%;min-height:0;overflow:hidden}
+    .view[data-page="reports"].active .report-layout{flex:1;min-height:0}
     @keyframes enter{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
     .loading{display:none;padding:80px 20px;text-align:center;color:var(--muted)}
     .loading.show{display:block}
@@ -88,9 +107,10 @@
     .metric strong{display:block;font-size:27px;line-height:1;font-weight:600;letter-spacing:-.7px}
     .metric span{display:block;color:var(--muted);font-size:11px;margin-top:7px}
     .metric.attention strong{color:var(--warning)}
-    .section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin:28px 0 12px}
+    .section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin:16px 0 8px}
     .section-head h2{font-size:17px;line-height:1.2;margin:0;font-weight:600;letter-spacing:-.25px}
     .section-head p{margin:3px 0 0;color:var(--muted);font-size:12px}
+    .report-actions{margin:0 0 8px}
     .panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);overflow:hidden}
     .panel-pad{padding:20px}
     .item{padding:16px 18px;border-top:1px solid var(--line)}.item:first-child{border-top:0}
@@ -133,11 +153,18 @@
     .dirty{display:none;align-items:center;justify-content:space-between;gap:16px;padding:14px 16px;
       border-radius:10px;background:var(--warning-bg);color:var(--warning);margin-bottom:14px}
     .dirty.show{display:flex}
-    .report-layout{display:grid;grid-template-columns:190px minmax(0,1fr);min-height:520px}
+    .report-layout{display:grid;grid-template-columns:160px minmax(0,1fr);min-height:440px}
     .report-nav{padding:14px;border-right:1px solid var(--line);background:var(--surface-alt)}
     .report-nav button{width:100%;border:0;background:transparent;text-align:left;padding:9px 10px;border-radius:7px;font-size:12px}
     .report-nav button.active{background:var(--surface);box-shadow:var(--shadow);font-weight:600}
-    .report-paper{padding:30px 40px 36px;overflow:auto;font-size:14.5px;line-height:1.75;color:var(--ink)}
+    .quick-api-entry{position:relative;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+    .quick-api-row{display:flex;align-items:center;gap:4px}
+    .quick-api-row #quick-api-open{flex:1;min-width:0}
+    .quick-api-row #quick-api-help{width:28px;padding-left:0;padding-right:0;text-align:center;font-weight:700;color:var(--muted)}
+    .quick-api-help-text{position:fixed;top:auto;left:auto;z-index:50;width:230px;max-width:calc(100vw - 16px);box-sizing:border-box;margin:0;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--ink);color:var(--surface);font-size:11px;line-height:1.55;box-shadow:0 10px 28px rgba(20,18,32,.18)}
+    .quick-api-help-text::before{content:'';position:absolute;left:14px;top:-5px;width:9px;height:9px;background:var(--ink);border-left:1px solid var(--line);border-top:1px solid var(--line);transform:rotate(45deg)}
+    .report-paper{display:flex;flex-direction:column;min-height:0;padding:24px 8px 8px;overflow:auto;font-size:14.5px;line-height:1.75;color:var(--ink)}
+    .report-paper:not(:has(.report-edit)){padding-left:30px}
     /* 渲染后的日报：参照 Obsidian 阅读视图——正文用无衬线、标题分层、列表缩进清楚 */
     .report-paper>:first-child{margin-top:0}
     .report-paper h1{font-size:24px;line-height:1.3;font-weight:650;letter-spacing:-.4px;margin:0 0 20px}
@@ -237,8 +264,12 @@
     .fb-body{white-space:pre-wrap;margin-top:0}
     .fb-images{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
     .fb-images img{width:120px;height:90px;object-fit:cover;border-radius:6px;border:1px solid var(--line);display:block}
-    .guide-link{display:block;margin-top:14px;padding:10px 12px;border-radius:8px;color:#bcbac9;text-decoration:none;font-size:13px}
+    .guide-link{display:flex;align-items:center;gap:8px;margin-top:14px;padding:10px 12px;border-radius:8px;color:#bcbac9;text-decoration:none;font-size:13px}
     .guide-link:hover{background:rgba(255,255,255,.06);color:#fff}
+    .guide-icon{font-size:15px;line-height:1}
+    .shell.sidebar-collapsed .guide-link{justify-content:center;padding:10px 8px;font-size:0}
+    .shell.sidebar-collapsed .guide-text{display:none}
+    .shell.sidebar-collapsed .guide-link::before{content:'↗';font-size:16px}
     .topbar-actions{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;justify-content:flex-end}
     .lang-switch{display:flex;gap:2px;background:var(--surface-soft);padding:3px;border-radius:9px;align-self:center}
     .lang-switch button{border:0;background:transparent;padding:6px 10px;border-radius:7px;font-size:11px;font-weight:700;color:var(--muted)}
@@ -248,10 +279,21 @@
     .theme-toggle:hover{color:var(--ink)}
     .theme-toggle .i-sun,:root[data-theme="dark"] .theme-toggle .i-moon{display:none}
     :root[data-theme="dark"] .theme-toggle .i-sun{display:block}
-    .report-edit{display:grid;gap:10px}
-    .report-editor,.style-editor{display:block;width:100%;resize:vertical;
-      font:13px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace}
-    .report-editor{min-height:440px;padding:14px 16px;tab-size:4}
+    .report-edit{display:grid;grid-template-rows:minmax(0,1fr) auto;gap:6px;flex:1;min-height:0}
+    .report-editor{display:block;width:100%;height:100%}
+    .style-editor{display:block;width:100%;resize:vertical;font:13px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace}
+    .report-vditor{height:100%;min-height:0}
+    .report-vditor .vditor{height:100%!important;border:0;border-radius:0;background:var(--surface)}
+    .report-vditor .vditor-toolbar{display:none!important}
+    .report-vditor .vditor-content{height:100%;min-height:0;background:var(--surface)}
+    .report-vditor .vditor-ir{height:100%;min-height:0;overflow:auto;padding:0;background:var(--surface);color:var(--ink)}
+    #report-content:has(.report-edit){overflow:hidden}
+    .report-vditor .vditor-reset{color:var(--ink)}
+    .report-vditor .vditor-ir pre.vditor-reset,.report-vditor .vditor-ir pre.vditor-reset:focus{background:var(--surface)!important}
+    .report-vditor .vditor-reset>:first-child{margin-top:0}
+    .report-vditor .vditor-reset h1,.report-vditor .vditor-reset h2,.report-vditor .vditor-reset h3,
+    .report-vditor .vditor-reset h4,.report-vditor .vditor-reset h5,.report-vditor .vditor-reset h6{margin-top:12px;margin-bottom:8px}
+    .report-vditor .vditor-reset p{margin-bottom:8px}
     .style-editor{min-height:170px;border:0;border-radius:0;padding:14px 18px}
     .viewas{display:none;align-items:center;justify-content:space-between;gap:16px;padding:12px 16px;
       border-radius:10px;background:var(--chip-bg);color:var(--viewas-ink);margin-bottom:16px}
@@ -284,24 +326,38 @@
       background:var(--surface-alt);flex-wrap:wrap}
     .panel-foot input{flex:1;min-width:220px}
     @media(max-width:900px){
-      .shell{grid-template-columns:78px minmax(0,1fr)}.sidebar{padding:22px 10px}.brand{padding:0 8px 26px}.brand-copy,.brand-name,.nav-label,.nav button span:first-child,.sidebar-foot span{display:none}
-      .nav button{justify-content:center;min-height:44px}.topbar{padding:17px 22px;align-items:flex-start}.toolbar{max-width:480px}
-      main{padding:24px 22px 64px}.two-col,.report-layout{grid-template-columns:1fr}.report-nav{border-right:0;border-bottom:1px solid var(--line);display:flex;overflow:auto}.report-nav button{width:auto;white-space:nowrap}
+      .shell:not(.sidebar-expanded){grid-template-columns:78px minmax(0,1fr)}
+      .shell:not(.sidebar-expanded) .sidebar{padding:22px 10px}
+      .shell:not(.sidebar-expanded) .brand{padding:0 8px 26px}
+      .shell:not(.sidebar-expanded) .brand-copy,.shell:not(.sidebar-expanded) .brand-name,.shell:not(.sidebar-expanded) .nav-label,
+      .shell:not(.sidebar-expanded) .nav button span:first-child,.shell:not(.sidebar-expanded) .sidebar-foot span{display:none}
+      .shell:not(.sidebar-expanded) .nav button{justify-content:center;min-height:44px}
+      .shell.sidebar-expanded{grid-template-columns:232px minmax(0,1fr)}
+      .shell.sidebar-expanded .sidebar{padding:26px 18px 20px}
+      .shell.sidebar-expanded .brand{padding:0 10px}
+      .shell.sidebar-expanded .brand-copy,.shell.sidebar-expanded .brand-name,.shell.sidebar-expanded .nav-label,
+      .shell.sidebar-expanded .nav button span:first-child,.shell.sidebar-expanded .sidebar-foot span{display:block}
+      .shell.sidebar-expanded .nav button{justify-content:space-between;min-height:0}
+      .topbar{padding:17px 22px;align-items:flex-start}.toolbar{max-width:480px}
+      main{padding:24px 22px 64px}.two-col{grid-template-columns:1fr}.report-layout{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr);min-height:0}.report-nav{border-right:0;border-bottom:1px solid var(--line);display:flex;align-items:flex-start;min-height:0;overflow:auto}.report-nav button{width:auto;height:auto;flex:0 0 auto;white-space:nowrap}.quick-api-entry{margin:0 0 0 8px;padding:0 0 0 8px;border-top:0;border-left:1px solid var(--line);min-width:180px;flex:0 0 auto}
       .review-grid{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}
     }
     @media(max-width:640px){
       .shell{display:block}.sidebar{position:fixed;z-index:20;top:auto;bottom:0;width:100%;height:62px;padding:7px 8px;background:var(--nav-deep)}
-      .brand,.nav-label,.sidebar-foot{display:none}.nav{grid-auto-flow:column;grid-auto-columns:1fr;gap:2px}.nav button{padding:6px 3px;display:grid;place-items:center;gap:2px;font-size:10px}.nav button span:first-child{display:block}.nav .count{font-size:9px;min-width:18px;padding:0 4px}
+      .brand-row,.nav-label,.sidebar-foot,.sidebar-toggle{display:none}.nav{grid-auto-flow:column;grid-auto-columns:1fr;gap:2px}.nav button{padding:6px 3px;display:grid;place-items:center;gap:2px;font-size:10px}.nav button span:first-child{display:block}.nav .count{font-size:9px;min-width:18px;padding:0 4px}
       .topbar{position:static;display:block;padding:18px 16px}.toolbar{margin-top:15px;display:grid;grid-template-columns:1fr 1fr}.toolbar .field:first-child{grid-column:1/-1}.toolbar input,.toolbar select{width:100%;max-width:none}
       main{padding:20px 14px 92px}.hero{padding:23px 21px}.hero h2{font-size:25px}.hero .hero-action{position:static;margin-top:18px}.metrics{gap:8px}.metric{padding:14px}.metric strong{font-size:23px}
-      .two-col{display:block}.two-col>div+div{margin-top:18px}.task-row{grid-template-columns:1fr}.task-actions{justify-content:flex-start}.report-paper{padding:22px 18px}.toast{left:14px;right:14px;bottom:76px}
+      .two-col{display:block}.two-col>div+div{margin-top:18px}.task-row{grid-template-columns:1fr}.task-actions{justify-content:flex-start}.report-paper{padding:16px 8px 8px}.toast{left:14px;right:14px;bottom:76px}
     }
   </style>
 </head>
 <body>
 <div class="shell">
   <aside class="sidebar" data-i18n-aria="nav_aria">
-    <div class="brand"><div class="brand-mark">f°</div><div><div class="brand-name">fecho</div><div class="brand-copy">work, remembered</div></div></div>
+    <div class="brand-row">
+      <div class="brand"><div class="brand-mark">f°</div><div><div class="brand-name">fecho</div><div class="brand-copy">work, remembered</div></div></div>
+      <button class="sidebar-toggle" id="sidebar-toggle" type="button" data-i18n-aria="sidebar_collapse" aria-expanded="true"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="m14.5 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="sr-only" data-i18n="sidebar_collapse"></span></button>
+    </div>
     <div class="nav-label">Workspace</div>
     <nav class="nav">
       <button class="active" data-view="today"><span data-i18n="nav_today"></span><span class="count" id="nav-today">—</span></button>
@@ -313,7 +369,7 @@
       <button data-view="feedback" data-cloud-only hidden><span data-i18n="nav_feedback"></span><span class="count" id="nav-feedback">—</span></button>
       <button data-view="admin" data-admin-only hidden><span data-i18n="nav_admin"></span><span class="count" id="nav-admin">—</span></button>
     </nav>
-    <a class="guide-link" href="/guide" target="_blank" rel="noopener" data-i18n="nav_guide"></a>
+    <a class="guide-link" href="/guide" target="_blank" rel="noopener"><span class="guide-icon" aria-hidden="true">↗</span><span class="guide-text" data-i18n="nav_guide"></span></a>
     <div class="sidebar-foot"><div class="connection"><i class="pulse"></i><span id="connection-copy" data-i18n="connection_local"></span></div></div>
   </aside>
 
@@ -361,10 +417,10 @@
         <div class="panel" id="task-list"></div>
       </section>
 
-      <section class="view" data-page="reports" aria-labelledby="reports-heading">
-        <div class="section-head"><div><h2 id="reports-heading" data-i18n="reports_heading"></h2><p data-i18n="reports_sub"></p></div><div class="button-row"><button class="btn" id="edit-report" hidden data-i18n="edit"></button><button class="btn primary" id="regenerate" data-i18n="regenerate"></button></div></div>
+      <section class="view" data-page="reports" aria-labelledby="page-title">
+        <div class="report-actions button-row"><button class="btn" id="edit-report" hidden data-i18n="edit"></button><button class="btn primary" id="regenerate" data-i18n="regenerate"></button></div>
         <div id="report-dirty" class="dirty"><span id="report-dirty-copy"></span><button class="btn small" id="dirty-regenerate" data-i18n="regenerate_now"></button></div>
-        <div class="panel report-layout"><div class="report-nav" id="report-tabs"><button class="active" data-report-tab="daily" data-i18n="tab_daily"></button><button data-report-tab="voice" data-i18n="tab_voice"></button><button data-report-tab="history" data-i18n="tab_history"></button><button data-report-tab="warnings" data-i18n="tab_warnings"></button></div><div class="report-paper" id="report-content" data-i18n="not_generated"></div></div>
+        <div class="panel report-layout"><div class="report-nav" id="report-tabs"><button class="active" data-report-tab="daily" data-i18n="tab_daily"></button><button data-report-tab="voice" data-i18n="tab_voice"></button><button data-report-tab="history" data-i18n="tab_history"></button><button data-report-tab="warnings" data-i18n="tab_warnings"></button><div class="quick-api-entry"><div class="quick-api-row"><button id="quick-api-open" type="button"><span data-i18n="quick_api"></span></button><button id="quick-api-help" type="button" data-i18n-aria="quick_api_help_label">?</button></div><div id="quick-api-help-text" class="quick-api-help-text" data-i18n="quick_api_help" hidden></div></div></div><div class="report-paper" id="report-content" data-i18n="not_generated"></div></div>
       </section>
 
       <section class="view" data-page="system" aria-labelledby="system-heading">
@@ -437,7 +493,7 @@
     "fb_empty": "先写点内容或加一张图", "fb_too_many": "最多 {n} 张图", "fb_bad_type": "只支持 PNG、JPEG、WebP、GIF 图片",
     "fb_too_big": "图片加起来太大了，删掉一两张再提交",
     "fb_sent": "已提交，谢谢！", "fb_status_saved": "状态已更新",
-    "nav_guide": "接入指南 ↗",
+    "nav_guide": "接入指南", "sidebar_collapse": "收起侧边栏", "sidebar_expand": "展开侧边栏",
     "connection_local": "本地服务已连接", "lang_aria": "界面语言", "filters_aria": "全局筛选",
     "filter_date": "工作日期", "filter_agent": "Agent", "filter_source": "记录方式", "filter_status": "完成状态", "all": "全部",
     "retry": "重试", "viewas_exit": "回到我自己的", "viewas_copy": "正在查看 {name}（{author}）的日志 · 只读",
@@ -484,18 +540,17 @@
     "dirty_llm": "进展或归属已经变化，这份报告需要重新生成。",
     "dirty_human": "有新的进展或归属变化。这份日报是你写的，不会被自动覆盖——自动生成的新版本会放进「历史版本」；点「现在生成」会换成自动版（你的版本留在历史版本里）。",
     "tab_daily": "日报", "tab_voice": "口播稿", "tab_history": "历史版本", "tab_warnings": "生成提示",
+    "quick_api": "快速 API", "quick_api_help_label": "快速 API 说明", "quick_api_help": "给大模型使用的临时上传入口：上传 Markdown 日报和图片。每次点击都会生成并复制新凭据，旧 API key 立即失效。", "quick_api_copied": "已复制，发给大模型即可。",
     "not_generated": "尚未生成。",
     "no_daily_with_updates": "这天有 {n} 条记录，日报还没生成。到了每天出日报的时间会自动生成，也可以点「重新生成」。",
     "no_daily_empty": "这天还没有收到任何工作记录。agent 随手记的内容和每晚扫描到的内容上传后，会出现在这里。",
     "edit_aria": "修改日报",
-    "edit_hint": "保存后：旧版本进「历史版本」；口播稿按新日报重出；你的写作偏好在后台更新，以后出日报照着写。",
     "cancel": "取消", "save": "保存", "no_voice": "尚未生成口播稿。",
-    "write_report": "手动写日报", "write_hint": "还没生成日报，可以先自己写。保存后：到点自动生成的版本不会覆盖它，会放进「历史版本」；口播稿按你写的出。",
-    "write_template": "# {date} 工作日志\n\n## Done\n\n- [x] \n\n## In Progress\n\n- [/] \n",
+    "write_report": "手动写日报",
+    "write_template": "# {date} 工作日志\n\n## Done\n\n## In Progress\n",
     "img_insert": "插入图片", "img_alt": "图片", "img_uploading": "图片上传中…", "img_inserted": "图片已插入。光标放在图片那一行，编辑框上方会出现宽度滑块",
     "img_view": "查看大图", "img_width": "图片宽度", "fold": "折叠或展开",
     "preview_show": "显示预览", "preview_hide": "关掉预览", "preview_aria": "预览",
-    "md_hint": "和 Obsidian 一样：回车自动接着写 - / 1. / - [ ]，空的一项再按回车退出列表；Tab / Shift+Tab 缩进；编号自动重排。- [x] 完成，- [/] 等其他状态打勾不划掉；> [!note]- 可折叠提示框；表格、代码块；直接粘贴或拖入图片。",
     "toast_write_saved": "已保存。之后自动生成的版本不会覆盖它，会放进历史版本",
     "version_label": "版本 {n} · {kind} · {by} · {time}", "by_human": "人工修改", "by_model": "模型生成",
     "no_history": "还没有历史版本。", "no_warnings": "本次生成没有警告。",
@@ -568,7 +623,7 @@
     "fb_empty": "Write something or add an image first", "fb_too_many": "Up to {n} images", "fb_bad_type": "Only PNG, JPEG, WebP or GIF images",
     "fb_too_big": "The images are too large together; remove one or two and try again",
     "fb_sent": "Sent — thank you!", "fb_status_saved": "Status updated",
-    "nav_guide": "Setup guide ↗",
+    "nav_guide": "Setup guide", "sidebar_collapse": "Collapse sidebar", "sidebar_expand": "Expand sidebar",
     "connection_local": "Local service connected", "lang_aria": "Interface language", "filters_aria": "Filters",
     "filter_date": "Work date", "filter_agent": "Agent", "filter_source": "Captured via", "filter_status": "Status", "all": "All",
     "retry": "Retry", "viewas_exit": "Back to mine", "viewas_copy": "Viewing {name} ({author}) · read-only",
@@ -615,18 +670,17 @@
     "dirty_llm": "Progress or assignments changed; this report should be regenerated.",
     "dirty_human": "There are new updates or assignment changes. You wrote this report, so it won't be replaced automatically — new automatic versions go to History. \"Regenerate now\" switches to the automatic version (yours stays in History).",
     "tab_daily": "Daily report", "tab_voice": "Voice script", "tab_history": "History", "tab_warnings": "Notes",
+    "quick_api": "Quick API", "quick_api_help_label": "Quick API help", "quick_api_help": "A temporary upload entry for your LLM: upload Markdown reports and images. Each click creates and copies new credentials, immediately invalidating the old API key.", "quick_api_copied": "Copied. Send it to your LLM.",
     "not_generated": "Not generated yet.",
     "no_daily_with_updates": "There are {n} updates for this day but no report yet. It's generated automatically at your report time, or click Regenerate.",
     "no_daily_empty": "Nothing has been recorded for this day. Updates your agent logs and nightly scans will show up here once uploaded.",
     "edit_aria": "Edit report",
-    "edit_hint": "After saving: the old version goes to History, the voice script is rewritten from your version, and your writing style is updated in the background for future reports.",
     "cancel": "Cancel", "save": "Save", "no_voice": "No voice script yet.",
-    "write_report": "Write report", "write_hint": "No report yet — you can write your own. After saving, automatic versions won't replace it and go to History instead; the voice script follows what you wrote.",
-    "write_template": "# {date} Work log\n\n## Done\n\n- [x] \n\n## In Progress\n\n- [/] \n",
+    "write_report": "Write report",
+    "write_template": "# {date} Work log\n\n## Done\n\n## In Progress\n",
     "img_insert": "Insert image", "img_alt": "image", "img_uploading": "Uploading image…", "img_inserted": "Image inserted. Put the cursor on the image's line and a width slider appears above the editor",
     "img_view": "View image", "img_width": "Image width", "fold": "Fold or unfold",
     "preview_show": "Show preview", "preview_hide": "Hide preview", "preview_aria": "Preview",
-    "md_hint": "Works like Obsidian: Enter continues - / 1. / - [ ], Enter on an empty item leaves the list; Tab / Shift+Tab indent; numbers renumber automatically. - [x] done, - [/] and other marks show checked without strikethrough; > [!note]- collapsible callouts; tables, code blocks; paste or drop images.",
     "toast_write_saved": "Saved. Automatic versions won't replace it; they go to History",
     "version_label": "Version {n} · {kind} · {by} · {time}", "by_human": "Edited by you", "by_model": "Generated",
     "no_history": "No earlier versions.", "no_warnings": "No notes for this run.",
@@ -683,6 +737,7 @@
 }
 </script>
 
+<script src="/vendor/vditor/dist/index.min.js"></script>
 <script>
   const $ = (selector, root=document) => root.querySelector(selector);
   const $$ = (selector, root=document) => [...root.querySelectorAll(selector)];
@@ -707,6 +762,7 @@
     $$('[data-i18n-placeholder]').forEach(el=>{ el.placeholder=t(el.dataset.i18nPlaceholder); });
     $$('[data-i18n-aria]').forEach(el=>{ el.setAttribute('aria-label',t(el.dataset.i18nAria)); });
     $$('[data-lang]').forEach(b=>b.classList.toggle('active',b.dataset.lang===lang));
+    if(typeof updateSidebarToggle==='function') updateSidebarToggle();
   }
   function setLang(next){
     lang=next; try{ localStorage.setItem(LANG_KEY,next); }catch(_){}
@@ -716,6 +772,33 @@
     if(state.data){ hydrateFilters(); renderAll(); }
     if(state.me&&state.me.cloud){ renderSettings(); if(state.admin) renderAdmin(); if(state.style) showStyle(state.style); renderFeedbackDraft(); renderFeedbackMine(); if(state.feedback.all) renderFeedbackAll(); }
   }
+
+  const SIDEBAR_KEY='fecho-sidebar-collapsed';
+  const shell=$('.shell');
+  let sidebarCollapsed=(()=>{
+    try{
+      const saved=localStorage.getItem(SIDEBAR_KEY);
+      if(saved==='1') return true;
+      if(saved==='0') return false;
+    }catch(_){}
+    return window.matchMedia('(max-width:900px)').matches;
+  })();
+  function updateSidebarToggle(){
+    const toggle=$('#sidebar-toggle'); if(!toggle) return;
+    const key=sidebarCollapsed?'sidebar_expand':'sidebar_collapse';
+    toggle.setAttribute('aria-label',t(key));
+    toggle.setAttribute('title',t(key));
+    toggle.setAttribute('aria-expanded',String(!sidebarCollapsed));
+    const label=$('[data-i18n]',toggle); if(label) label.textContent=t(key);
+  }
+  function setSidebarCollapsed(collapsed,{persist=true}={}){
+    sidebarCollapsed=collapsed;
+    shell.classList.toggle('sidebar-collapsed',collapsed);
+    shell.classList.toggle('sidebar-expanded',!collapsed);
+    if(persist){ try{ localStorage.setItem(SIDEBAR_KEY,collapsed?'1':'0'); }catch(_){} }
+    updateSidebarToggle();
+  }
+  setSidebarCollapsed(sidebarCollapsed,{persist:false});
 
   async function request(path, options={}){
     const response = await fetch(path, options);
@@ -1098,20 +1181,59 @@
     }
     editor.setSelectionRange(selStart,selEnd);
   }
-  // 预览默认关着；开着的时候边写边更新。开关状态记在这台电脑的浏览器里
-  const PREVIEW_KEY='fecho-preview';
-  state.preview=(()=>{ try{ return localStorage.getItem(PREVIEW_KEY)==='1'; }catch(_){ return false; } })();
-  let previewTimer=null;
-  function updatePreview(){
-    const editor=$('#report-editor'), preview=$('#report-preview');
-    if(!editor||!preview||!state.preview) return;
-    preview.innerHTML=md(editor.value); enhanceMd(preview);
+  // Vditor 负责编辑区内的实时渲染，保存时仍取回 Markdown 原文。
+  let reportVditor=null, reportOriginalMarkdown='';
+  // Lute 会把 `> [!note]- 标题` 规范化成 `> [!note] - 标题`，保存前恢复 Fecho 的折叠标记，避免旧日报语义改变。
+  function restoreReportCustomSyntax(value, original){
+    const flags=[...String(original||'').matchAll(/^\s*>\s*\[!([^\]\s]+)\]([+-])(?=\s|$)/gm)].map(m=>({kind:m[1].toLowerCase(),sign:m[2]}));
+    if(!flags.length) return value;
+    let cursor=0;
+    return String(value||'').replace(/^(\s*>\s*\[!([^\]\s]+)\])\s+([+-])(\s*)/gm,(full,prefix,kind,sign,space)=>{
+      const found=flags.slice(cursor).findIndex(item=>item.kind===kind.toLowerCase());
+      if(found<0) return full;
+      const item=flags[cursor+found]; cursor+=found+1;
+      return `${prefix}${item.sign}${space}`;
+    });
   }
-  function syncImageSize(){
-    const editor=$('#report-editor'), row=$('#img-size'); if(!editor||!row) return;
-    const img=imageAtCaret(editor.value, editor.selectionStart);
-    row.hidden=!img; if(!img) return;
-    const width=img.width||480; $('#img-width').value=width; $('#img-width-value').textContent=width+'px';
+  function reportValue(){
+    return reportVditor ? restoreReportCustomSyntax(reportVditor.getValue(),reportOriginalMarkdown) : '';
+  }
+  function reportFocus(){ if(reportVditor) reportVditor.focus(); }
+  // 普通空段落按 Tab 不应变成 Markdown 代码块；列表和已有代码块仍交给 Vditor 处理。
+  function guardEmptyReportTab(event){
+    if(event.key!=='Tab'||event.shiftKey||event.ctrlKey||event.metaKey||event.altKey) return;
+    const target=event.target instanceof Element?event.target:null;
+    if(!target||!target.closest('.vditor-ir')) return;
+    const block=target.closest('p');
+    if(block&&!block.textContent.trim()&&!target.closest('li,pre')){ event.preventDefault(); event.stopPropagation(); }
+  }
+  function destroyReportEditor(){
+    const root=$('#report-editor');
+    if(root) root.removeEventListener('keydown',guardEmptyReportTab,true);
+    if(reportVditor){ reportVditor.destroy(); reportVditor=null; }
+    reportOriginalMarkdown='';
+  }
+  function initReportEditor(value){
+    const root=$('#report-editor');
+    if(!root||typeof Vditor==='undefined') return;
+    reportOriginalMarkdown=String(value||'');
+    root.addEventListener('keydown',guardEmptyReportTab,true);
+    reportVditor=new Vditor('report-editor',{
+      value,
+      mode:'ir',
+      lang:lang==='en'?'en_US':'zh_CN',
+      theme:document.documentElement.dataset.theme==='dark'?'dark':'classic',
+      cdn:'/vendor/vditor',
+      cache:{enable:false},
+      tab:'  ',
+      toolbar:[],
+      toolbarConfig:{hide:true},
+      upload:{
+        accept:'image/*',
+        handler:files=>uploadReportImages(files),
+      },
+      after:()=>reportFocus(),
+    });
   }
   function openLightbox(src, alt){
     let box=$('#lightbox');
@@ -1122,20 +1244,67 @@
   }
   function closeLightbox(){ const box=$('#lightbox'); if(box) box.classList.remove('show'); }
   async function uploadReportImages(files){
-    if(state.viewAs){ toast(t('toast_readonly'),null,true); return; }
+    if(state.viewAs){ toast(t('toast_readonly'),null,true); return null; }
     for(const file of files){
-      const editor=$('#report-editor'); if(!editor) return;
       try{
         if(!FB_TYPES.test(file.type)) throw new Error(t('fb_bad_type'));
         toast(t('img_uploading'));
         const blob=file.size<=FB_TARGET_BYTES?file:await shrinkImage(file);
         const dataUrl=await readAsDataURL(blob);
         const r=await post('/api/reports/images',{data:dataUrl.split(',')[1]});
-        const at=editor.selectionStart, before=editor.value.slice(0,at);
-        editor.setRangeText((before&&!before.endsWith('\n')?'\n':'')+`![${t('img_alt')}|480](${r.url})\n`, at, editor.selectionEnd, 'end');
-        editor.focus(); syncImageSize(); toast(t('img_inserted'));
+        if(reportVditor) reportVditor.insertValue(`![${t('img_alt')}|480](${r.url})\n`);
+        toast(t('img_inserted'));
       }catch(error){ toast(error.message,null,true); }
     }
+    return null;
+  }
+
+  function toggleQuickApiHelp(){
+    const help=$('#quick-api-help-text'), anchor=$('#quick-api-help');
+    if(!help||!anchor)return;
+    if(!help.hidden){ help.hidden=true; return; }
+    const anchorRect=anchor.getBoundingClientRect();
+    if(help.parentElement!==document.body)document.body.appendChild(help);
+    const width=Math.min(230,Math.max(160,innerWidth-16));
+    const left=Math.min(Math.max(8,anchorRect.left),Math.max(8,innerWidth-width-8));
+    help.style.width=`${width}px`; help.style.left=`${left}px`; help.style.top=`${anchorRect.bottom+8}px`; help.hidden=false;
+    const bubbleRect=help.getBoundingClientRect();
+    if(bubbleRect.bottom>innerHeight-8)help.style.top=`${Math.max(8,innerHeight-bubbleRect.height-8)}px`;
+  }
+
+  const quickApiText=data=>`Base URL: ${data.base_url}\nAPI Key: ${data.api_key}\nOpenAPI: ${data.openapi_url}\nAuthorization: Bearer ${data.api_key}`;
+  function copyTextFallback(text){
+    const area=document.createElement('textarea'); area.value=text; area.setAttribute('readonly','');
+    area.style.position='fixed'; area.style.opacity='0'; document.body.appendChild(area); area.focus(); area.select();
+    const copied=document.execCommand('copy'); area.remove();
+    if(!copied)throw new Error(t('err_operation'));
+  }
+  async function copyQuickApi(){
+    const help=$('#quick-api-help-text'); if(help)help.hidden=true;
+    if(state.viewAs){toast(t('toast_readonly'),null,true);return;}
+    const button=$('#quick-api-open'); if(button)button.disabled=true;
+    const dataPromise=post('/api/quick-api/credentials',{});
+    try{
+      let copied=false, data=null;
+      // ClipboardItem.write 必须在点击授权仍有效时调用；异步生成的内容作为 Promise 填入。
+      if(navigator.clipboard?.write&&window.ClipboardItem){
+        try{
+          const payload=dataPromise.then(data=>new Blob([quickApiText(data)],{type:'text/plain'}));
+          await navigator.clipboard.write([new ClipboardItem({'text/plain':payload})]);
+          copied=true;
+        }catch(_error){ /* 继续使用兼容性降级方案 */ }
+      }
+      if(!copied){
+        data=await dataPromise;
+        const text=quickApiText(data);
+        if(navigator.clipboard?.writeText){
+          try{ await navigator.clipboard.writeText(text); copied=true; }catch(_error){ /* 继续降级 */ }
+        }
+        if(!copied)copyTextFallback(text);
+      }
+      toast(t('quick_api_copied'));
+    }catch(error){ toast(error.message||t('err_operation'),null,true); }
+    finally{ if(button)button.disabled=false; }
   }
 
   function renderReports(){
@@ -1154,7 +1323,7 @@
     const updates=(state.data.overview||{}).updates||0;
     const noDaily=updates ? t('no_daily_with_updates',{n:updates}) : t('no_daily_empty');
     if(state.reportTab==='daily') html=state.editing
-      ?`<div class="report-edit"><div class="button-row" style="justify-content:space-between;align-items:center"><p class="meta" style="margin:0;flex:1">${esc(t(report.daily?'edit_hint':'write_hint'))}</p><button class="btn small" type="button" id="toggle-preview">${esc(t(state.preview?'preview_hide':'preview_show'))}</button><button class="btn small" type="button" id="insert-image">${esc(t('img_insert'))}</button></div><input type="file" id="report-image-file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden><div class="img-size" id="img-size" hidden><span>${esc(t('img_width'))}</span><input type="range" id="img-width" min="80" max="1200" step="10" aria-label="${esc(t('img_width'))}"><output id="img-width-value"></output></div><div class="edit-split${state.preview?'':' off'}" id="edit-split"><textarea id="report-editor" class="report-editor" aria-label="${esc(t('edit_aria'))}">${esc(report.daily||t('write_template',{date:state.data.date}))}</textarea><div class="md-preview" id="report-preview" aria-label="${esc(t('preview_aria'))}"></div></div><p class="meta" style="margin:0">${esc(t('md_hint'))}</p><div class="button-row"><button class="btn" id="cancel-edit">${esc(t('cancel'))}</button><button class="btn primary" id="save-edit">${esc(t('save'))}</button></div></div>`
+      ?`<div class="report-edit"><div class="report-vditor"><div id="report-editor" class="report-editor" aria-label="${esc(t('edit_aria'))}"></div></div><div class="button-row"><button class="btn" id="cancel-edit">${esc(t('cancel'))}</button><button class="btn primary" id="save-edit">${esc(t('save'))}</button></div></div>`
       :(report.daily?md(report.daily):empty(noDaily));
     if(state.reportTab==='voice') html=report.voice?md(report.voice):empty(t('no_voice'));
     if(state.reportTab==='history') html=report.history.length
@@ -1167,8 +1336,9 @@
     if(state.reportHtml===html) return;
     state.reportHtml=html;
     state.reportSig=hashText(html);
+    destroyReportEditor();
     $('#report-content').innerHTML=html;
-    if(state.editing&&state.reportTab==='daily') updatePreview();
+    if(state.editing&&state.reportTab==='daily') initReportEditor(report.daily||t('write_template',{date:state.data.date}));
     else { enhanceMd($('#report-content')); restoreFolds($('#report-content')); }
   }
 
@@ -1204,19 +1374,14 @@
   }
 
   document.addEventListener('click', async event=>{
+    const help=$('#quick-api-help-text');
+    if(help&&!event.target.closest('.quick-api-entry'))help.hidden=true;
     const fold=event.target.closest('.report-paper .fold');
     if(fold){ const host=fold.parentElement; host.classList.toggle('folded'); fold.setAttribute('aria-expanded',String(!host.classList.contains('folded'))); if(host.classList.contains('md-h')) applyHeadingFolds(host.parentElement); saveFolds(); return; }
     const zoom=event.target.closest('.report-paper .md-img img'); if(zoom){ openLightbox(zoom.currentSrc||zoom.src, zoom.alt); return; }
     if(event.target.closest('#lightbox')){ closeLightbox(); return; }
-    if(event.target.closest('#insert-image')){ $('#report-image-file').click(); return; }
-    if(event.target.closest('#toggle-preview')){
-      state.preview=!state.preview;
-      try{ localStorage.setItem(PREVIEW_KEY, state.preview?'1':'0'); }catch(_){}
-      const split=$('#edit-split'); if(split) split.classList.toggle('off',!state.preview);
-      $('#toggle-preview').textContent=t(state.preview?'preview_hide':'preview_show');
-      updatePreview();
-      return;
-    }
+    if(event.target.closest('#quick-api-open')){ copyQuickApi(); return; }
+    if(event.target.closest('#quick-api-help')){ toggleQuickApiHelp(); return; }
     const langButton=event.target.closest('[data-lang]'); if(langButton){ if(langButton.dataset.lang!==lang) setLang(langButton.dataset.lang); return; }
     const nav=event.target.closest('[data-view]'); if(nav){switchView(nav.dataset.view);return;}
     const go=event.target.closest('[data-go]'); if(go){switchView(go.dataset.go);return;}
@@ -1224,11 +1389,11 @@
     const decide=event.target.closest('[data-decide]');
     if(decide){ decide.disabled=true; try{ await post(`/api/admin/requests/${encodeURIComponent(decide.dataset.decide)}`,{approve:decide.dataset.approve==='1'}); toast(t(decide.dataset.approve==='1'?'toast_approved':'toast_denied')); await loadAdmin(); }catch(error){toast(error.message,null,true);} finally{decide.disabled=false;} return; }
     if(event.target.closest('#request-admin')){ try{ await post('/api/admin/request',{}); state.me=await request('/api/me'); renderSettings(); toast(t('toast_requested')); }catch(error){toast(error.message,null,true);} return; }
-    if(event.target.closest('#edit-report')){ if(state.viewAs){toast(t('toast_readonly'),null,true);return;} state.editing=true; state.reportTab='daily'; renderReports(); const editor=$('#report-editor'); if(editor) editor.focus(); return; }
+    if(event.target.closest('#edit-report')){ if(state.viewAs){toast(t('toast_readonly'),null,true);return;} state.editing=true; state.reportTab='daily'; renderReports(); reportFocus(); return; }
     if(event.target.closest('#cancel-edit')){ state.editing=false; renderReports(); return; }
     const saveEdit=event.target.closest('#save-edit');
     if(saveEdit){ saveEdit.disabled=true;
-      try{ const r=await post('/api/reports/daily',{date:state.data.date,content_md:$('#report-editor').value}); state.editing=false; state.data=r.dashboard; renderAll();
+      try{ const r=await post('/api/reports/daily',{date:state.data.date,content_md:reportValue()}); state.editing=false; state.data=r.dashboard; renderAll();
         toast(t(r.saved.status==='unchanged'?'toast_unchanged':r.saved.new?'toast_write_saved':'toast_edit_saved')); if(state.me&&state.me.cloud) loadStyle().catch(()=>{}); }
       catch(error){ saveEdit.disabled=false; toast(error.message,null,true); }
       return; }
@@ -1283,6 +1448,7 @@
     document.documentElement.dataset.theme=next; try{ localStorage.setItem(THEME_KEY,next); }catch(_){}
     themeTitle();
   });
+  $('#sidebar-toggle').addEventListener('click',()=>setSidebarCollapsed(!sidebarCollapsed));
   themeTitle();
   // ---------- 云端版：设置与管理 ----------
   const AGENT_BADGE={'claude-code':'CC','codex':'CX','hermes':'HM','cursor':'CU','grok':'GK'};
@@ -1476,52 +1642,7 @@
     finally{ button.disabled=false; }
   });
 
-  // 改日报：和 Obsidian 一样，回车延续列表、Tab 缩进、编号自动重排；粘贴、拖入、按钮选图都会先传图再把地址写进原文
-  document.addEventListener('keydown',event=>{
-    if(event.key==='Escape') closeLightbox();
-    const editor=event.target; if(!editor||editor.id!=='report-editor') return;
-    if(event.isComposing||event.keyCode===229) return;       // 中文输入法正在选字：回车是确认候选词，不是换行
-    if(event.altKey||event.metaKey||event.ctrlKey) return;
-    let r=null;
-    if(event.key==='Enter'&&!event.shiftKey){ const x=listEnter(editor.value,editor.selectionStart,editor.selectionEnd); if(x) r={value:x.value,start:x.caret,end:x.caret}; }
-    else if(event.key==='Tab') r=listIndent(editor.value,editor.selectionStart,editor.selectionEnd,event.shiftKey);
-    if(!r) return;
-    event.preventDefault(); applyEditorEdit(editor,r.value,r.start,r.end); syncImageSize();
-  });
-  document.addEventListener('input',event=>{
-    if(event.target.id==='report-editor'){
-      const editor=event.target;
-      // 删掉一项、粘进来几行之后，把这一个列表的编号重排
-      if(/^(delete|insertFromPaste|insertFromDrop)/.test(event.inputType||'')){
-        const r=renumberList(editor.value,editor.selectionStart);
-        if(r.value!==editor.value) applyEditorEdit(editor,r.value,r.caret,r.caret);
-      }
-      syncImageSize();
-      clearTimeout(previewTimer); previewTimer=setTimeout(updatePreview,150);
-      return;
-    }
-    // 光标在图片那一行时，拖宽度滑块直接改原文里的 |宽度
-    if(event.target.id==='img-width'){
-      const editor=$('#report-editor'); if(!editor) return;
-      const img=imageAtCaret(editor.value,editor.selectionStart); if(!img) return;
-      const width=parseInt(event.target.value,10);
-      editor.setRangeText(`![${img.alt}|${width}](${img.url})`, img.start, img.end, 'start');
-      editor.setSelectionRange(img.start,img.start);
-      $('#img-width-value').textContent=width+'px';
-    }
-  });
-  ['keyup','mouseup'].forEach(type=>document.addEventListener(type,event=>{ if(event.target.id==='report-editor') syncImageSize(); }));
-  document.addEventListener('paste',event=>{
-    if(event.target.id!=='report-editor') return;
-    const files=[...((event.clipboardData||{}).files||[])].filter(file=>file.type.startsWith('image/'));
-    if(files.length){ event.preventDefault(); uploadReportImages(files); }
-  });
-  document.addEventListener('dragover',event=>{ if(event.target.id==='report-editor'&&hasFiles(event)) event.preventDefault(); });
-  document.addEventListener('drop',event=>{
-    if(event.target.id!=='report-editor'||!hasFiles(event)) return;
-    event.preventDefault(); uploadReportImages([...event.dataTransfer.files].filter(file=>file.type.startsWith('image/')));
-  });
-  document.addEventListener('change',event=>{ if(event.target.id!=='report-image-file') return; uploadReportImages([...event.target.files]); event.target.value=''; });
+  document.addEventListener('keydown',event=>{ if(event.key==='Escape'){ closeLightbox(); const help=$('#quick-api-help-text'); if(help)help.hidden=true; } });
 
   applyStatic();
   switchView('today',{scroll:false});

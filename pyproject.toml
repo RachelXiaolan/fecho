@@ -49,4 +49,7 @@ packages = ["fecho"]
 
 [tool.setuptools.package-data]
 fecho = ["presets/*.md", "presets/personas/*.json", "presets/*.html", "presets/skill/*.md",
-         "presets/local/*.py"]
+         "presets/local/*.py", "presets/vendor/vditor/LICENSE",
+         "presets/vendor/vditor/dist/index.css", "presets/vendor/vditor/dist/index.min.js",
+         "presets/vendor/vditor/dist/js/i18n/*.js", "presets/vendor/vditor/dist/js/icons/*.js",
+         "presets/vendor/vditor/dist/js/lute/*.js"]

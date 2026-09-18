@@ -348,6 +348,14 @@ CREATE TABLE IF NOT EXISTS report_images (
     size          INTEGER NOT NULL,
     created_at    TEXT NOT NULL
 );
+
+-- 快速 API：只存当前 key 的哈希；重新生成时覆盖旧 key，原文永不落库
+CREATE TABLE IF NOT EXISTS quick_api_keys (
+    author        TEXT PRIMARY KEY,
+    token_hash    TEXT NOT NULL,
+    created_at    TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_quick_api_token_hash ON quick_api_keys(token_hash);
 """
 
 

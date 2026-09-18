@@ -20,7 +20,7 @@ import os
 import secrets
 from typing import Any, Dict, List, Optional
 
-from . import __version__, accounts, config, db, mcp_server, store
+from . import __version__, accounts, config, db, mcp_server, quick_api, store
 
 # 云端版的两个 cookie：登录后的会话、跳去 Mobius 登录路上的临时状态
 SESSION_COOKIE = "fecho_session"
@@ -234,8 +234,13 @@ def dashboard_payload(author: str, date: str) -> Dict[str, Any]:
 def build_app():
     from fastapi import Body, FastAPI, Header, HTTPException, Query, Request
     from fastapi.responses import HTMLResponse, JSONResponse
+    from fastapi.staticfiles import StaticFiles
+    from pathlib import Path
 
     app = FastAPI(title="fecho", docs_url=None, redoc_url=None)
+    app.mount("/vendor/vditor", StaticFiles(
+        directory=Path(__file__).resolve().parent / "presets" / "vendor" / "vditor"
+    ), name="vditor")
 
     @app.exception_handler(ValueError)
     async def value_error_handler(_request: Request, exc: ValueError):
@@ -284,6 +289,185 @@ def build_app():
             raise HTTPException(404, "本机版没有 admin 面板")
         if not accounts.is_admin(author):
             raise HTTPException(403, "需要 admin 权限")
+
+    def quick_identity(authorization: Optional[str], api_key: Optional[str]) -> str:
+        raw = quick_api.from_headers(authorization, api_key)
+        author = quick_api.resolve(raw or "")
+        if not author:
+            raise HTTPException(401, "快速 API key 无效或已被轮换")
+        return author
+
+    def public_base(request: Request) -> str:
+        if config.PUBLIC_URL:
+            return config.PUBLIC_URL.rstrip("/")
+        return str(request.base_url).rstrip("/")
+
+    def absolute_url(request: Request, path: str) -> str:
+        return public_base(request) + "/" + path.lstrip("/")
+
+    def quick_date(value: Optional[str]) -> str:
+        from datetime import datetime
+        date_ = value or store.today()
+        try:
+            datetime.strptime(date_, "%Y-%m-%d")
+        except (TypeError, ValueError):
+            raise ValueError("date 必须是 YYYY-MM-DD")
+        return date_
+
+    def quick_openapi_document(request: Request) -> Dict[str, Any]:
+        base = public_base(request)
+        bearer = [{"bearerAuth": []}, {"apiKeyAuth": []}]
+        return {
+            "openapi": "3.0.3",
+            "info": {
+                "title": "Fecho Quick API",
+                "version": "1.0.0",
+                "description": (
+                    "给大模型使用的临时上传接口。快速 API key 只在当前轮换版本有效；"
+                    "重新生成凭据后，旧 key 立即失效。"
+                ),
+            },
+            "servers": [{"url": base}],
+            "security": bearer,
+            "paths": {
+                "/api/quick-api/reports": {
+                    "post": {
+                        "operationId": "uploadDailyReport",
+                        "summary": "上传日报 Markdown",
+                        "description": "上传标准 Markdown 日报；JSON 请求可带 date，纯 Markdown 请求用 date 查询参数。",
+                        "security": bearer,
+                        "parameters": [{
+                            "name": "date", "in": "query", "required": False,
+                            "description": "日报日期，缺省为今天（YYYY-MM-DD）",
+                            "schema": {"type": "string", "format": "date"},
+                        }],
+                        "requestBody": {"required": True, "content": {
+                            "text/markdown": {"schema": {"type": "string"}},
+                            "application/json": {"schema": {
+                                "type": "object",
+                                "required": ["content_md"],
+                                "properties": {
+                                    "date": {"type": "string", "format": "date"},
+                                    "content_md": {"type": "string", "description": "标准 Markdown 原文"},
+                                },
+                            }},
+                        }},
+                        "responses": {
+                            "200": {"description": "日报已保存"},
+                            "401": {"description": "API key 无效或已轮换"},
+                        },
+                    },
+                },
+                "/api/quick-api/resources": {
+                    "post": {
+                        "operationId": "uploadReportResource",
+                        "summary": "上传图片资源",
+                        "description": "请求体直接放 PNG、JPEG、WebP 或 GIF 二进制，返回可写入 Markdown 的引用。",
+                        "security": bearer,
+                        "parameters": [
+                            {"name": "alt", "in": "query", "required": False,
+                             "schema": {"type": "string", "default": "图片"}},
+                            {"name": "width", "in": "query", "required": False,
+                             "schema": {"type": "integer", "minimum": 1, "maximum": 4000, "default": 480}},
+                        ],
+                        "requestBody": {"required": True, "content": {
+                            "image/png": {"schema": {"type": "string", "format": "binary"}},
+                            "image/jpeg": {"schema": {"type": "string", "format": "binary"}},
+                            "image/webp": {"schema": {"type": "string", "format": "binary"}},
+                            "image/gif": {"schema": {"type": "string", "format": "binary"}},
+                        }},
+                        "responses": {"200": {"description": "资源已保存并返回 Markdown 引用"}},
+                    },
+                },
+                "/api/reports/images/{image_id}": {
+                    "get": {
+                        "operationId": "getReportResource",
+                        "summary": "读取已上传图片",
+                        "security": bearer,
+                        "parameters": [{"name": "image_id", "in": "path", "required": True,
+                                        "schema": {"type": "string"}}],
+                        "responses": {"200": {"description": "图片文件"}},
+                    },
+                },
+            },
+            "components": {"securitySchemes": {
+                "bearerAuth": {"type": "http", "scheme": "bearer", "bearerFormat": "API key"},
+                "apiKeyAuth": {"type": "apiKey", "in": "header", "name": "X-API-Key"},
+            }},
+        }
+
+    # ---- 快速 API：给大模型上传日报和图片 ----
+    @app.get("/api/quick-api/openapi.json", include_in_schema=False)
+    @app.get("/api/quick-api/open.json", include_in_schema=False)
+    def quick_openapi(request: Request):
+        return quick_openapi_document(request)
+
+    @app.post("/api/quick-api/credentials", include_in_schema=False)
+    def quick_credentials(request: Request, authorization: Optional[str] = Header(None)):
+        me = guard(request, authorization)
+        raw = quick_api.issue(me)
+        base = public_base(request)
+        return {"ok": True, "base_url": base, "api_key": raw,
+                "openapi_url": base + "/api/quick-api/openapi.json"}
+
+    @app.post("/api/quick-api/reports", include_in_schema=False)
+    async def quick_report_upload(request: Request, date: Optional[str] = None,
+                                  authorization: Optional[str] = Header(None),
+                                  x_api_key: Optional[str] = Header(None, alias="X-API-Key")):
+        me = quick_identity(authorization, x_api_key)
+        media_type = (request.headers.get("content-type") or "").split(";", 1)[0].lower()
+        if media_type == "application/json":
+            try:
+                payload = await request.json()
+            except ValueError:
+                raise ValueError("JSON 请求体格式不正确")
+            if not isinstance(payload, dict):
+                raise ValueError("JSON 请求体必须是对象")
+            content = payload.get("content_md", payload.get("markdown"))
+            date = payload.get("date") or date
+        else:
+            raw = await request.body()
+            if len(raw) > 2_000_000:
+                raise HTTPException(413, "日报太大了，最多 2 MB")
+            try:
+                content = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                raise ValueError("日报必须是 UTF-8 Markdown")
+        if not isinstance(content, str):
+            raise ValueError("请提供 content_md Markdown 原文")
+        if len(content.encode("utf-8")) > 2_000_000:
+            raise HTTPException(413, "日报太大了，最多 2 MB")
+        date_ = quick_date(date)
+        from . import digest
+        saved = digest.save_human_edit(me, date_, content)
+        return {"ok": True, "date": date_, "saved": saved}
+
+    @app.post("/api/quick-api/resources", include_in_schema=False)
+    async def quick_resource_upload(request: Request, alt: str = Query("图片", max_length=100),
+                                   width: int = Query(480, ge=1, le=4000),
+                                   authorization: Optional[str] = Header(None),
+                                   x_api_key: Optional[str] = Header(None, alias="X-API-Key")):
+        import base64
+        from . import report_images
+        me = quick_identity(authorization, x_api_key)
+        media_type = (request.headers.get("content-type") or "").split(";", 1)[0].lower()
+        if media_type == "application/json":
+            try:
+                payload = await request.json()
+            except ValueError:
+                raise ValueError("JSON 请求体格式不正确")
+            if not isinstance(payload, dict):
+                raise ValueError("JSON 请求体必须是对象")
+            saved = report_images.save(me, payload.get("data"))
+        else:
+            raw = await request.body()
+            if len(raw) > report_images.MAX_IMAGE_BYTES:
+                raise HTTPException(413, "图片太大了（最多 2 MB）")
+            saved = report_images.save(me, base64.b64encode(raw).decode("ascii"))
+        url = absolute_url(request, saved["url"])
+        safe_alt = alt.replace("]", "\\]").replace("\n", " ").strip() or "图片"
+        return {"ok": True, "image_id": saved["image_id"], "url": url,
+                "markdown": "![%s|%d](%s)" % (safe_alt, width, url)}
 
     # ---- MCP over SSE ----
     # 老一档的 MCP 传输，但 ChatGPT 现在要的就是它，且 URL 必须以 /sse/ 结尾。
@@ -592,10 +776,15 @@ def build_app():
 
     @app.get("/api/reports/images/{image_id}")
     def api_report_image(image_id: str, request: Request,
-                         authorization: Optional[str] = Header(None)):
+                         authorization: Optional[str] = Header(None),
+                         x_api_key: Optional[str] = Header(None, alias="X-API-Key")):
         from fastapi.responses import Response
         from . import report_images
-        me = guard(request, authorization)
+        bearer = (authorization or "").removeprefix("Bearer ").strip()
+        if x_api_key or bearer.startswith(quick_api.TOKEN_PREFIX):
+            me = quick_identity(authorization, x_api_key)
+        else:
+            me = guard(request, authorization)
         found = report_images.image_for(image_id, me)
         if not found:
             raise HTTPException(404, "没有这张图")

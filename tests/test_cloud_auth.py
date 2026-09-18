@@ -23,8 +23,8 @@ def reset():
     db.require_disposable()   # 清表前确认连的是临时库
     db.init()
     with db.cursor() as c:
-        for t in ("updates", "tasks", "users", "api_tokens", "web_sessions", "admin_requests",
-                  "mobius_credentials", "jobs", "app_settings", "reports"):
+        for t in ("updates", "tasks", "users", "api_tokens", "web_sessions", "quick_api_keys",
+                  "admin_requests", "mobius_credentials", "jobs", "app_settings", "reports"):
             c.execute("DELETE FROM %s" % t)
 
 
