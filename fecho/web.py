@@ -20,7 +20,7 @@ import os
 import secrets
 from typing import Any, Dict, List, Optional
 
-from . import __version__, accounts, config, db, mcp_server, store
+from . import __version__, accounts, config, db, mcp_server, quick_api, store
 
 # 云端版的两个 cookie：登录后的会话、跳去 Mobius 登录路上的临时状态
 SESSION_COOKIE = "fecho_session"
@@ -317,6 +317,282 @@ def build_app():
             raise HTTPException(404, "本机版没有 admin 面板")
         if not accounts.is_admin(author):
             raise HTTPException(403, "需要 admin 权限")
+
+
+    # ---- 快速 API ----
+    # 给「能发 HTTP、能读 OpenAPI，但装不了 MCP」的 agent 用：grok bot 那种跑在服务器上的
+    # application、网页版 ChatGPT 的 Actions 之类。两条路，共用一把受限钥匙：
+    #   updates   交原料——一条条进展，进库、归属，到点跟别的进展一起整理成日报
+    #   reports   交成品——整篇写好的日报，等同于在网页上手写，自动版转入「历史版本」
+    def quick_identity(authorization: Optional[str], api_key: Optional[str]) -> str:
+        author = quick_api.resolve(quick_api.from_headers(authorization, api_key) or "")
+        if not author:
+            raise HTTPException(401, "快速 API key 无效或已被换掉。到网页上重新生成一把")
+        return author
+
+    def public_base(request: Request) -> str:
+        return (config.PUBLIC_URL or str(request.base_url)).rstrip("/")
+
+    def quick_date(value: Optional[str]) -> str:
+        from datetime import datetime
+        date_ = value or store.today()
+        try:
+            datetime.strptime(date_, "%Y-%m-%d")
+        except (TypeError, ValueError):
+            raise ValueError("date 必须是 YYYY-MM-DD")
+        return date_
+
+
+    # 给大模型自己读的接口清单。两条路的语义差别一定要写明白，不然它不知道该用哪个
+    def quick_openapi_document(request: Request) -> Dict[str, Any]:
+        auth = [{"bearerAuth": []}, {"apiKeyAuth": []}]
+        str_ = {"type": "string"}
+        return {
+            "openapi": "3.0.3",
+            "info": {
+                "title": "Fecho Quick API",
+                "version": __version__,
+                "description": (
+                    "把工作记录交到 Fecho。两条路，按你手上有什么选：\n\n"
+                    "- **有零散进展** → `POST /api/quick-api/updates`。一条条交上来，"
+                    "Fecho 会归属到任务，到点跟别的进展一起整理成日报。**追加，不会覆盖任何东西。**\n"
+                    "- **已经写好整篇日报** → `POST /api/quick-api/reports`。"
+                    "**会覆盖这一天显示的日报**，并把它标成「人写的」——"
+                    "之后自动生成的版本不再覆盖它，只进「历史版本」。\n\n"
+                    "拿不准就用 updates。\n\n"
+                    "**钥匙是谁的，记录就进谁的账号。**多人共用一个 bot 时，每人要填自己那把。"
+                    "重新生成凭据后旧钥匙立刻失效。"
+                ),
+            },
+            "servers": [{"url": public_base(request)}],
+            "security": auth,
+            "paths": {
+                "/api/quick-api/updates": {
+                    "post": {
+                        "operationId": "logProgress",
+                        "summary": "交一条或几条工作进展（推荐）",
+                        "description": (
+                            "记的是「做成了什么、进展到哪」，一句能让人看懂结果的话就够，"
+                            "不是对话内容。知道是哪个 issue 就填 issue，不确定就留空——"
+                            "**归错了当天日报会跟着错，归不上只是多一个自由任务**。\n\n"
+                            "重试安全：带上 event_key，同一个 key 重复交只记一次。"
+                        ),
+                        "security": auth,
+                        "requestBody": {"required": True, "content": {"application/json": {"schema": {
+                            "type": "object",
+                            "properties": {
+                                "date": dict(str_, format="date",
+                                             description="这批进展算哪天，缺省为今天"),
+                                "entries": {"type": "array", "items": {
+                                    "type": "object", "required": ["content"],
+                                    "properties": {
+                                        "content": dict(str_, description="做成了什么、进展到哪"),
+                                        "issue": dict(str_, description="确定是哪个 issue 就写，如 AI-2541；不确定留空"),
+                                        "date": dict(str_, format="date", description="这条发生在哪天"),
+                                        "completion_status": {"type": "string",
+                                                              "enum": ["done", "wip", "blocked", "unknown"]},
+                                        "kind": {"type": "string", "enum": ["progress", "pitfall", "decision"]},
+                                        "agent": dict(str_, description="哪个 agent 交的，会显示在「今天」页上"),
+                                        "event_key": dict(str_, description="去重用：同一个 key 重复交只记一次"),
+                                        "freeform": {"type": "boolean",
+                                                     "description": "明确不属于任何 issue"},
+                                    }}},
+                            },
+                        }}}},
+                        "responses": {"200": {"description": "已记下，返回每条归到了哪个任务"},
+                                      "401": {"description": "钥匙无效或已被换掉"}},
+                    },
+                },
+                "/api/quick-api/reports": {
+                    "post": {
+                        "operationId": "uploadDailyReport",
+                        "summary": "上传整篇写好的日报（会覆盖当天显示的那篇）",
+                        "description": (
+                            "标准 Markdown。JSON 请求可以带 date，直接发 Markdown 正文时用 date 查询参数。"
+                            "\n\n**注意：存完这一天的日报就算「人写的」**，到点自动生成的版本不再覆盖它，"
+                            "只会放进「历史版本」。想换回自动版要人去网页上点「重新生成」。"
+                        ),
+                        "security": auth,
+                        "parameters": [{"name": "date", "in": "query", "required": False,
+                                        "description": "日报日期，缺省为今天",
+                                        "schema": dict(str_, format="date")}],
+                        "requestBody": {"required": True, "content": {
+                            "text/markdown": {"schema": str_},
+                            "application/json": {"schema": {
+                                "type": "object", "required": ["content_md"],
+                                "properties": {"date": dict(str_, format="date"),
+                                               "content_md": dict(str_, description="标准 Markdown 原文")}}},
+                        }},
+                        "responses": {"200": {"description": "日报已保存"},
+                                      "401": {"description": "钥匙无效或已被换掉"},
+                                      "413": {"description": "超过 2 MB"}},
+                    },
+                },
+                "/api/quick-api/resources": {
+                    "post": {
+                        "operationId": "uploadImage",
+                        "summary": "上传图片，拿到能直接贴进正文的 Markdown",
+                        "description": ("请求体直接放 PNG / JPEG / WebP / GIF 二进制。"
+                                        "返回的 markdown 字段可以原样写进日报或进展正文。"),
+                        "security": auth,
+                        "parameters": [
+                            {"name": "alt", "in": "query", "required": False,
+                             "schema": dict(str_, default="图片")},
+                            {"name": "width", "in": "query", "required": False,
+                             "schema": {"type": "integer", "minimum": 1, "maximum": 4000, "default": 480}},
+                        ],
+                        "requestBody": {"required": True, "content": {
+                            m: {"schema": dict(str_, format="binary")}
+                            for m in ("image/png", "image/jpeg", "image/webp", "image/gif")}},
+                        "responses": {"200": {"description": "已保存，返回 url 和 markdown"},
+                                      "413": {"description": "超过 2 MB"}},
+                    },
+                },
+                "/api/reports/images/{image_id}": {
+                    "get": {
+                        "operationId": "getImage",
+                        "summary": "读回已上传的图片",
+                        "description": "只有图片的主人和 admin 能打开。",
+                        "security": auth,
+                        "parameters": [{"name": "image_id", "in": "path", "required": True,
+                                        "schema": str_}],
+                        "responses": {"200": {"description": "图片文件"}},
+                    },
+                },
+            },
+            "components": {"securitySchemes": {
+                "bearerAuth": {"type": "http", "scheme": "bearer", "bearerFormat": "API key"},
+                "apiKeyAuth": {"type": "apiKey", "in": "header", "name": "X-API-Key"},
+            }},
+        }
+
+    @app.get("/api/quick-api/openapi.json", include_in_schema=False)
+    @app.get("/api/quick-api/open.json", include_in_schema=False)
+    def quick_openapi(request: Request):
+        return quick_openapi_document(request)
+
+    @app.post("/api/quick-api/credentials", include_in_schema=False)
+    def quick_credentials(request: Request, authorization: Optional[str] = Header(None)):
+        """网页上点「快速 API」：签发一把新钥匙，上一把立刻失效。原文只在这个响应里出现一次。"""
+        me = guard(request, authorization)
+        raw = quick_api.issue(me)
+        base = public_base(request)
+        return {"ok": True, "base_url": base, "api_key": raw,
+                "openapi_url": base + "/api/quick-api/openapi.json"}
+
+    @app.post("/api/quick-api/updates", include_in_schema=False)
+    async def quick_update_upload(request: Request,
+                                  authorization: Optional[str] = Header(None),
+                                  x_api_key: Optional[str] = Header(None, alias="X-API-Key")):
+        """交原料：一条条进展，走和随手记完全一样的归属、去重规则。"""
+        me = quick_identity(authorization, x_api_key)
+        try:
+            payload = await request.json()
+        except ValueError:
+            raise ValueError("请求体要是 JSON")
+        if isinstance(payload, dict) and "entries" in payload:
+            entries, default_date = payload.get("entries"), payload.get("date")
+        elif isinstance(payload, dict):
+            entries, default_date = [payload], payload.get("date")   # 一条也能直接发对象
+        else:
+            raise ValueError("请求体要是对象，或者 {\"entries\": [...]}")
+        if not isinstance(entries, list) or not entries:
+            raise ValueError("entries 不能为空")
+        if len(entries) > 200:
+            raise HTTPException(413, "一次最多交 200 条")
+
+        saved, skipped = [], 0
+        for item in entries:
+            if not isinstance(item, dict):
+                raise ValueError("entries 里每一项都要是对象")
+            content = (item.get("content") or "").strip()
+            if not content:
+                raise ValueError("每条进展都要有 content")
+            if len(content) > 4000:
+                raise ValueError("单条进展最多 4000 字")
+            r = store.record_progress(
+                me, content,
+                date=quick_date(item.get("date") or default_date),
+                source_agent=(item.get("agent") or "quick-api"),
+                ingestion_method="quick-api",
+                completion_status=item.get("completion_status") or "unknown",
+                content_kind=item.get("kind") or "progress",
+                issue=item.get("issue") or None,
+                freeform=bool(item.get("freeform")),
+                # 模型调 HTTP 会超时重试，同一个 key 重复交只记一次
+                source_event_key=item.get("event_key") or None,
+                unknown_issue_policy="freeform",
+            )
+            # 同一个 event_key 交过了：record_progress 判成 duplicate，不会重复写
+            if r.get("verdict") == "duplicate":
+                skipped += 1
+            else:
+                saved.append({"update_id": r["update_id"], "task": r["task"]["title"],
+                              "issue": r["task"].get("issue_key")})
+        return {"ok": True, "saved": len(saved), "skipped_duplicates": skipped, "updates": saved}
+
+    @app.post("/api/quick-api/reports", include_in_schema=False)
+    async def quick_report_upload(request: Request, date: Optional[str] = None,
+                                  authorization: Optional[str] = Header(None),
+                                  x_api_key: Optional[str] = Header(None, alias="X-API-Key")):
+        """交成品：整篇 Markdown 日报。和在网页上手写是同一件事——存完就算「人写的」，
+        到点自动生成的版本不再覆盖它，只会进「历史版本」。"""
+        me = quick_identity(authorization, x_api_key)
+        media = (request.headers.get("content-type") or "").split(";", 1)[0].lower()
+        if media == "application/json":
+            try:
+                payload = await request.json()
+            except ValueError:
+                raise ValueError("JSON 请求体格式不正确")
+            if not isinstance(payload, dict):
+                raise ValueError("JSON 请求体必须是对象")
+            content = payload.get("content_md", payload.get("markdown"))
+            date = payload.get("date") or date
+        else:
+            raw = await request.body()
+            if len(raw) > 2_000_000:
+                raise HTTPException(413, "日报太大了，最多 2 MB")
+            try:
+                content = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                raise ValueError("日报必须是 UTF-8 Markdown")
+        if not isinstance(content, str):
+            raise ValueError("请提供 content_md Markdown 原文")
+        if len(content.encode("utf-8")) > 2_000_000:
+            raise HTTPException(413, "日报太大了，最多 2 MB")
+        date_ = quick_date(date)
+        from . import digest, service
+        saved = digest.save_human_edit(me, date_, content)
+        follow = service.after_human_edit(me, date_) if saved["status"] == "saved" else {}
+        return {"ok": True, "date": date_, "saved": saved, "follow_up": follow}
+
+    @app.post("/api/quick-api/resources", include_in_schema=False)
+    async def quick_resource_upload(request: Request, alt: str = Query("图片", max_length=100),
+                                    width: int = Query(480, ge=1, le=4000),
+                                    authorization: Optional[str] = Header(None),
+                                    x_api_key: Optional[str] = Header(None, alias="X-API-Key")):
+        """传图，返回一段能直接贴进日报或进展正文的 Markdown。"""
+        import base64
+        from . import report_images
+        me = quick_identity(authorization, x_api_key)
+        media = (request.headers.get("content-type") or "").split(";", 1)[0].lower()
+        if media == "application/json":
+            try:
+                payload = await request.json()
+            except ValueError:
+                raise ValueError("JSON 请求体格式不正确")
+            if not isinstance(payload, dict):
+                raise ValueError("JSON 请求体必须是对象")
+            saved = report_images.save(me, payload.get("data"))
+        else:
+            raw = await request.body()
+            if len(raw) > report_images.MAX_IMAGE_BYTES:
+                raise HTTPException(413, "图片太大了（最多 2 MB）")
+            saved = report_images.save(me, base64.b64encode(raw).decode("ascii"))
+        url = public_base(request) + "/" + saved["url"].lstrip("/")
+        safe_alt = alt.replace("]", "\\]").replace("\n", " ").strip() or "图片"
+        return {"ok": True, "image_id": saved["image_id"], "url": url,
+                "markdown": "![%s|%d](%s)" % (safe_alt, width, url)}
 
     # ---- MCP over SSE ----
     # 老一档的 MCP 传输，但 ChatGPT 现在要的就是它，且 URL 必须以 /sse/ 结尾。
@@ -625,10 +901,18 @@ def build_app():
 
     @app.get("/api/reports/images/{image_id}")
     def api_report_image(image_id: str, request: Request,
-                         authorization: Optional[str] = Header(None)):
+                         authorization: Optional[str] = Header(None),
+                         x_api_key: Optional[str] = Header(None, alias="X-API-Key")):
         from fastapi.responses import Response
         from . import report_images
-        me = guard(request, authorization)
+        # 快速 API 传上来的图，模型自己也要能读回去验一眼
+        bearer = (authorization or "").strip()
+        if bearer.lower().startswith("bearer "):
+            bearer = bearer[7:].strip()
+        if x_api_key or bearer.startswith(quick_api.TOKEN_PREFIX):
+            me = quick_identity(authorization, x_api_key)
+        else:
+            me = guard(request, authorization)
         found = report_images.image_for(image_id, me)
         if not found:
             raise HTTPException(404, "没有这张图")

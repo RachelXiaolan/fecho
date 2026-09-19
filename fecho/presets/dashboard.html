@@ -178,6 +178,17 @@
     .report-nav{padding:14px;border-right:1px solid var(--line);background:var(--surface-alt)}
     .report-nav button{width:100%;border:0;background:transparent;text-align:left;padding:9px 10px;border-radius:7px;font-size:12px}
     .report-nav button.active{background:var(--surface);box-shadow:var(--shadow);font-weight:600}
+    .quick-api-entry{position:relative;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+    .quick-api-row{display:flex;align-items:center;gap:4px}
+    .quick-api-row #quick-api-open{flex:1;min-width:0}
+    .quick-api-row #quick-api-help{width:26px;flex:none;padding:0;text-align:center;
+      font-weight:700;color:var(--muted)}
+    /* 气泡挂到 body 上定位，免得被左边这一列的 overflow 裁掉 */
+    .quick-api-help-text{position:fixed;z-index:50;width:250px;max-width:calc(100vw - 16px);
+      margin:0;padding:10px 12px;border:1px solid var(--line);border-radius:8px;
+      background:var(--ink);color:var(--surface);font-size:11.5px;line-height:1.6;
+      box-shadow:0 10px 28px rgba(20,18,32,.22)}
+    .quick-api-help-text b{color:var(--surface)}
     .report-paper{padding:26px 34px 30px;font-size:14.5px;line-height:1.75;color:var(--ink)}
     /* 改日报时编辑器自己铺满，内边距交给编辑器 */
     .report-paper:has(.report-edit){padding:0}
@@ -429,7 +440,7 @@
       <section class="view" data-page="reports" aria-labelledby="reports-heading">
         <div class="section-head"><div><h2 id="reports-heading" data-i18n="reports_heading"></h2></div><div class="button-row"><button class="btn" id="edit-report" hidden data-i18n="edit"></button><button class="btn primary" id="regenerate" data-i18n="regenerate"></button></div></div>
         <div id="report-dirty" class="dirty"><span id="report-dirty-copy"></span><button class="btn small" id="dirty-regenerate" data-i18n="regenerate_now"></button></div>
-        <div class="panel report-layout"><div class="report-nav" id="report-tabs"><button class="active" data-report-tab="daily" data-i18n="tab_daily"></button><button data-report-tab="voice" data-i18n="tab_voice"></button><button data-report-tab="history" data-i18n="tab_history"></button><button data-report-tab="warnings" data-i18n="tab_warnings"></button></div><div class="report-paper" id="report-content" data-i18n="not_generated"></div></div>
+        <div class="panel report-layout"><div class="report-nav" id="report-tabs"><button class="active" data-report-tab="daily" data-i18n="tab_daily"></button><button data-report-tab="voice" data-i18n="tab_voice"></button><button data-report-tab="history" data-i18n="tab_history"></button><button data-report-tab="warnings" data-i18n="tab_warnings"></button><div class="quick-api-entry"><div class="quick-api-row"><button id="quick-api-open" type="button"><span data-i18n="quick_api"></span></button><button id="quick-api-help" type="button" data-i18n-aria="quick_api_help_label">?</button></div><div id="quick-api-help-text" class="quick-api-help-text" hidden></div></div></div><div class="report-paper" id="report-content" data-i18n="not_generated"></div></div>
       </section>
 
       <section class="view" data-page="system" aria-labelledby="system-heading">
@@ -549,6 +560,9 @@
     "dirty_llm": "进展或归属已经变化，这份报告需要重新生成。",
     "dirty_human": "有新的进展或归属变化。这份日报是你写的，不会被自动覆盖——自动生成的新版本会放进「历史版本」；点「现在生成」会换成自动版（你的版本留在历史版本里）。",
     "tab_daily": "日报", "tab_voice": "口播稿", "tab_history": "历史版本", "tab_warnings": "生成提示",
+    "quick_api": "快速 API", "quick_api_help_label": "快速 API 说明",
+    "quick_api_help": "给你的 agent 发一把钥匙，它就能自己把记录交上来——不用装 MCP，能发 HTTP 就行。<b>点一下生成并复制</b>，粘给大模型即可；它会自己读接口说明。两条路：交零散进展（到点一起整理成日报），或者交整篇写好的日报（会覆盖当天那篇）。<b>钥匙是谁的，记录就进谁的账号；重新生成后旧钥匙立刻失效。</b>",
+    "quick_api_copied": "已复制。粘给你的大模型就能用了",
     "not_generated": "尚未生成。",
     "no_daily_with_updates": "这天有 {n} 条记录，日报还没生成。到了每天出日报的时间会自动生成，也可以点「重新生成」。",
     "no_daily_empty": "这天还没有收到任何工作记录。agent 随手记的内容和每晚扫描到的内容上传后，会出现在这里。",
@@ -682,6 +696,9 @@
     "dirty_llm": "Progress or assignments changed; this report should be regenerated.",
     "dirty_human": "There are new updates or assignment changes. You wrote this report, so it won't be replaced automatically — new automatic versions go to History. \"Regenerate now\" switches to the automatic version (yours stays in History).",
     "tab_daily": "Daily report", "tab_voice": "Voice script", "tab_history": "History", "tab_warnings": "Notes",
+    "quick_api": "Quick API", "quick_api_help_label": "About Quick API",
+    "quick_api_help": "Hand your agent a key and it can post its own records — no MCP needed, anything that speaks HTTP works. <b>One click generates and copies it</b>; paste it to your LLM and it reads the API spec itself. Two roads: post individual updates (folded into the daily report at report time), or upload a finished report (replaces that day\u2019s). <b>Records land in the account the key belongs to; regenerating invalidates the old key at once.</b>",
+    "quick_api_copied": "Copied. Paste it to your LLM",
     "not_generated": "Not generated yet.",
     "no_daily_with_updates": "There are {n} updates for this day but no report yet. It's generated automatically at your report time, or click Regenerate.",
     "no_daily_empty": "Nothing has been recorded for this day. Updates your agent logs and nightly scans will show up here once uploaded.",
@@ -1110,6 +1127,61 @@
     }
   }
 
+
+  // ---------- 快速 API：签发一把钥匙并复制 ----------
+  function toggleQuickApiHelp(){
+    const help=$('#quick-api-help-text'), anchor=$('#quick-api-help');
+    if(!help||!anchor) return;
+    if(!help.hidden){ help.hidden=true; return; }
+    help.innerHTML=t('quick_api_help');                 // 文案里有 <b>，不转义
+    if(help.parentElement!==document.body) document.body.appendChild(help);
+    const box=anchor.getBoundingClientRect();
+    const width=Math.min(250,Math.max(180,innerWidth-16));
+    help.style.width=width+'px';
+    help.style.left=Math.min(Math.max(8,box.left),Math.max(8,innerWidth-width-8))+'px';
+    help.style.top=(box.bottom+8)+'px';
+    help.hidden=false;
+    const shown=help.getBoundingClientRect();           // 贴着屏幕底就往上翻
+    if(shown.bottom>innerHeight-8) help.style.top=Math.max(8,innerHeight-shown.height-8)+'px';
+  }
+  const quickApiText=d=>`Base URL: ${d.base_url}\nAPI Key: ${d.api_key}\nOpenAPI: ${d.openapi_url}\nAuthorization: Bearer ${d.api_key}`;
+  function copyTextFallback(text){
+    const area=document.createElement('textarea');
+    area.value=text; area.setAttribute('readonly','');
+    area.style.position='fixed'; area.style.opacity='0';
+    document.body.appendChild(area); area.focus(); area.select();
+    const ok=document.execCommand('copy'); area.remove();
+    if(!ok) throw new Error(t('err_operation'));
+  }
+  async function copyQuickApi(){
+    const help=$('#quick-api-help-text'); if(help) help.hidden=true;
+    if(state.viewAs){ toast(t('toast_readonly'),null,true); return; }
+    const button=$('#quick-api-open'); if(button) button.disabled=true;
+    const pending=post('/api/quick-api/credentials',{});
+    try{
+      let copied=false;
+      // 剪贴板的授权只在点击那一刻有效。所以先把一个 Promise 交给 ClipboardItem，
+      // 等请求回来它自己填进去——先 await 再写就已经过期了
+      if(navigator.clipboard&&navigator.clipboard.write&&window.ClipboardItem){
+        try{
+          const blob=pending.then(d=>new Blob([quickApiText(d)],{type:'text/plain'}));
+          await navigator.clipboard.write([new ClipboardItem({'text/plain':blob})]);
+          copied=true;
+        }catch(_){}
+      }
+      if(!copied){
+        const text=quickApiText(await pending);
+        if(navigator.clipboard&&navigator.clipboard.writeText){
+          try{ await navigator.clipboard.writeText(text); copied=true; }catch(_){}
+        }
+        if(!copied) copyTextFallback(text);
+      }
+      await pending;                                     // 请求失败要报出来，不能假装复制成功
+      toast(t('quick_api_copied'));
+    }catch(error){ toast(error.message||t('err_operation'),null,true); }
+    finally{ if(button) button.disabled=false; }
+  }
+
   function renderReports(){
     const report=state.data.reports; $('#report-dirty').classList.toggle('show',report.dirty);
     $('#report-dirty-copy').textContent=report.generator==='human' ? t('dirty_human') : t('dirty_llm');
@@ -1181,6 +1253,10 @@
   }
 
   document.addEventListener('click', async event=>{
+    const help=$('#quick-api-help-text');
+    if(help&&!event.target.closest('.quick-api-entry')) help.hidden=true;
+    if(event.target.closest('#quick-api-open')){ copyQuickApi(); return; }
+    if(event.target.closest('#quick-api-help')){ toggleQuickApiHelp(); return; }
     const fold=event.target.closest('.report-paper .fold');
     if(fold){ const host=fold.parentElement; host.classList.toggle('folded'); fold.setAttribute('aria-expanded',String(!host.classList.contains('folded'))); if(host.classList.contains('md-h')) applyHeadingFolds(host.parentElement); saveFolds(); return; }
     const zoom=event.target.closest('.report-paper .md-img img'); if(zoom){ openLightbox(zoom.currentSrc||zoom.src, zoom.alt); return; }
@@ -1449,7 +1525,11 @@
   });
 
   // 改日报的键盘行为（回车续写列表、Tab 缩进、编号重排）和贴图都在编辑器里做，见 editor/entry.js
-  document.addEventListener('keydown',event=>{ if(event.key==='Escape') closeLightbox(); });
+  document.addEventListener('keydown',event=>{
+    if(event.key!=='Escape') return;
+    closeLightbox();
+    const help=$('#quick-api-help-text'); if(help) help.hidden=true;
+  });
   document.addEventListener('change',event=>{ if(event.target.id!=='report-image-file') return; uploadReportImages([...event.target.files]); event.target.value=''; });
 
   // 页面放大缩小 + 侧边栏收起：都记在这台电脑的浏览器里，下次进来还是上次那样

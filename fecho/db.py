@@ -348,6 +348,14 @@ CREATE TABLE IF NOT EXISTS report_images (
     size          INTEGER NOT NULL,
     created_at    TEXT NOT NULL
 );
+
+-- 快速 API 的钥匙：只存 sha256，原文永不落库。一个人同时只有一把，重新签发直接覆盖
+CREATE TABLE IF NOT EXISTS quick_api_keys (
+    author        TEXT PRIMARY KEY,
+    token_hash    TEXT NOT NULL,
+    created_at    TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_quick_api_token_hash ON quick_api_keys(token_hash);
 """
 
 
