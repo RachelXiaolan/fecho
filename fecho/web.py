@@ -24,6 +24,7 @@ from . import __version__, accounts, config, db, mcp_server, store
 
 # 云端版的两个 cookie：登录后的会话、跳去 Mobius 登录路上的临时状态
 SESSION_COOKIE = "fecho_session"
+_EDITOR_TAG = ""   # 编辑器产物的缓存键，算一次就记住
 OAUTH_COOKIE = "fecho_oauth"
 
 TOKEN = os.getenv("FECHO_WEB_TOKEN") or config.get("web_token", "FECHO_WEB_TOKEN", "")
@@ -230,6 +231,30 @@ def dashboard_payload(author: str, date: str) -> Dict[str, Any]:
 
 
 # ---------- FastAPI ----------
+
+def _editor_tag() -> str:
+    """编辑器产物的缓存键。
+
+    产物的文件名是固定的，不挂个会变的东西，浏览器就一直用缓存里的旧编辑器——
+    改完代码看不到效果，同事升级了也还在跑老版本。用内容算：
+    重新构建过就必定变，没变就让浏览器接着用缓存。
+    """
+    global _EDITOR_TAG
+    if _EDITOR_TAG:
+        return _EDITOR_TAG
+    from pathlib import Path
+
+    bundle = Path(__file__).resolve().parent / "presets" / "vendor" / "cm6" / "editor.min.js"
+    tag = __version__
+    try:
+        import hashlib
+
+        tag += "-" + hashlib.sha256(bundle.read_bytes()).hexdigest()[:8]
+    except OSError:
+        pass          # 产物不在就只用版本号，不值得为这个把页面弄挂
+    _EDITOR_TAG = tag
+    return tag
+
 
 def build_app():
     from pathlib import Path
@@ -921,10 +946,8 @@ def build_app():
         if config.CLOUD and not _signed_in(request):
             return RedirectResponse("/login", status_code=302)
         html = (Path(__file__).resolve().parent / "presets" / "dashboard.html").read_text(encoding="utf-8")
-        # 编辑器产物的文件名不变，浏览器会一直吃缓存里的旧版本。挂上版本号，
-        # 升级之后必定重新取——不然同事升级了也还在用旧编辑器
         return html.replace("/vendor/cm6/editor.min.js",
-                            "/vendor/cm6/editor.min.js?v=" + __version__)
+                            "/vendor/cm6/editor.min.js?v=" + _editor_tag())
 
     return app
 

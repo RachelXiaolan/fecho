@@ -88,12 +88,12 @@
     .icon-btn{width:34px;height:34px;padding:0;border:1px solid var(--line);border-radius:9px;flex:none;
       background:var(--surface-soft);color:var(--muted);display:grid;place-items:center}
     .icon-btn:hover{color:var(--ink)}
-    .zoom{display:flex;align-items:center;gap:2px;background:var(--surface-soft);padding:3px;border-radius:9px;align-self:center}
-    .zoom button{border:0;background:transparent;width:26px;height:26px;border-radius:7px;color:var(--muted);
-      font-size:15px;line-height:1;display:grid;place-items:center}
-    .zoom button:hover{background:var(--surface);color:var(--ink)}
-    .zoom output{min-width:46px;text-align:center;font-size:11px;font-weight:700;color:var(--muted);
-      font-variant-numeric:tabular-nums;cursor:pointer}
+    /* 缩放没有按钮了（Ctrl/⌘ + 滚轮），所以缩的时候闪一下当前倍数，不然没反馈 */
+    .zoom-badge{position:fixed;left:50%;top:22px;transform:translateX(-50%);z-index:60;
+      padding:6px 14px;border-radius:99px;background:var(--ink);color:var(--surface);
+      font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;pointer-events:none;
+      opacity:0;transition:opacity .15s}
+    .zoom-badge.show{opacity:.92}
     .topbar{min-height:86px;padding:19px 34px;border-bottom:1px solid var(--line);
       background:var(--topbar-bg);backdrop-filter:blur(12px);display:flex;
       align-items:center;justify-content:space-between;gap:24px;position:sticky;top:0;z-index:10}
@@ -393,7 +393,6 @@
           <div class="field"><label for="status-filter" data-i18n="filter_status"></label><select id="status-filter"><option value=""></option></select></div>
           <button class="btn" id="reload-day" type="button" data-i18n="reload"></button>
         </div>
-        <div class="zoom" role="group" data-i18n-aria="zoom_aria"><button type="button" data-zoom="out" data-i18n-aria="zoom_out">−</button><output id="zoom-level" data-i18n-aria="zoom_reset">100%</output><button type="button" data-zoom="in" data-i18n-aria="zoom_in">+</button></div>
         <div class="lang-switch" role="group" data-i18n-aria="lang_aria"><button data-lang="zh">中文</button><button data-lang="en">EN</button></div>
         <button class="theme-toggle" id="theme-toggle" type="button" data-i18n-aria="theme_aria"><svg class="i-moon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M20.5 13.4A8.5 8.5 0 1 1 10.6 3.5a6.6 6.6 0 0 0 9.9 9.9z" fill="currentColor"/></svg><svg class="i-sun" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="12" cy="12" r="4.2" fill="currentColor"/><path d="M12 2.5v2.3M12 19.2v2.3M2.5 12h2.3M19.2 12h2.3M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
       </div>
@@ -560,7 +559,7 @@
     "write_template": "# {date} 工作日志\n\n## Done\n\n- [x] \n\n## In Progress\n\n- [/] \n",
     "img_insert": "插入图片", "img_alt": "图片", "img_uploading": "图片上传中…", "img_inserted": "图片已插入。拖图片右下角的方块改大小",
     "img_view": "查看大图", "img_width": "图片宽度", "fold": "折叠或展开",
-    "zoom_aria": "页面缩放", "zoom_in": "放大", "zoom_out": "缩小", "zoom_reset": "点一下恢复原始大小",
+    "zoom_hint": "按住 ⌘ / Ctrl 滚动可以缩放页面，⌘0 / Ctrl+0 恢复",
     "sidebar_collapse": "收起侧边栏", "sidebar_expand": "展开侧边栏",
     "md_hint": "## 标题 · - 列表 · 1. 编号 · - [ ] 待办 · - [x] 完成（划掉） · - [a] 完成（不划掉） · **粗** · *斜* · `代码` · > 引用 · | 表格 |",
     "md_hint_more": "光标移到哪一行才露出那一行的原文。回车接着写下一项，空的一项再回车退出列表；Tab 缩进；点方框直接打勾；表格直接改、拖边线调宽窄；图片拖右下角改大小；粘贴或拖入图片直接上传。",
@@ -693,7 +692,7 @@
     "write_template": "# {date} Work log\n\n## Done\n\n- [x] \n\n## In Progress\n\n- [/] \n",
     "img_insert": "Insert image", "img_alt": "image", "img_uploading": "Uploading image…", "img_inserted": "Image inserted. Drag the square at its bottom-right corner to resize",
     "img_view": "View image", "img_width": "Image width", "fold": "Fold or unfold",
-    "zoom_aria": "Page zoom", "zoom_in": "Zoom in", "zoom_out": "Zoom out", "zoom_reset": "Click to reset to 100%",
+    "zoom_hint": "Hold ⌘ / Ctrl and scroll to zoom; ⌘0 / Ctrl+0 resets",
     "sidebar_collapse": "Collapse sidebar", "sidebar_expand": "Expand sidebar",
     "md_hint": "## heading · - list · 1. numbered · - [ ] todo · - [x] done (struck) · - [a] done (not struck) · **bold** · *italic* · `code` · > quote · | table |",
     "md_hint_more": "Only the line your cursor is on shows its Markdown. Enter continues the list, Enter on an empty item leaves it; Tab indents; click a box to tick it; edit tables in place and drag their borders; drag an image's corner to resize; paste or drop images to upload.",
@@ -1187,9 +1186,6 @@
     const zoom=event.target.closest('.report-paper .md-img img'); if(zoom){ openLightbox(zoom.currentSrc||zoom.src, zoom.alt); return; }
     if(event.target.closest('#lightbox')){ closeLightbox(); return; }
     if(event.target.closest('#insert-image')){ $('#report-image-file').click(); return; }
-    const zoomBtn=event.target.closest('[data-zoom]');
-    if(zoomBtn){ stepZoom(zoomBtn.dataset.zoom==='in'?1:-1); return; }
-    if(event.target.closest('#zoom-level')){ applyZoom(1); return; }          // 点百分比恢复 100%
     if(event.target.closest('#sidebar-toggle')){
       applySidebar(!$('.shell').classList.contains('sidebar-collapsed')); return;
     }
@@ -1463,14 +1459,43 @@
     root.style.zoom=value===1?'':String(value);
     // 缩放后 100vh 这类单位会跟着放大，侧边栏和大图遮罩靠这个变量换算回来
     root.style.setProperty('--zoom',String(value));
-    const out=$('#zoom-level'); if(out) out.textContent=Math.round(value*100)+'%';
     try{ localStorage.setItem(ZOOM_KEY,String(value)); }catch(_){}
   }
-  function stepZoom(delta){
-    const now=parseFloat(document.documentElement.style.getPropertyValue('--zoom'))||1;
-    let i=ZOOM_STEPS.indexOf(now); if(i<0) i=ZOOM_STEPS.indexOf(1);
-    applyZoom(ZOOM_STEPS[Math.max(0,Math.min(ZOOM_STEPS.length-1,i+delta))]);
+  // 没有按钮了，缩的时候闪一下倍数，不然不知道自己缩到哪了
+  let zoomBadgeTimer=null;
+  function flashZoom(value){
+    let badge=$('#zoom-badge');
+    if(!badge){ badge=document.createElement('div'); badge.id='zoom-badge'; badge.className='zoom-badge'; document.body.appendChild(badge); }
+    badge.textContent=Math.round(value*100)+'%';
+    badge.classList.add('show');
+    clearTimeout(zoomBadgeTimer);
+    zoomBadgeTimer=setTimeout(()=>badge.classList.remove('show'),900);
   }
+  function currentZoom(){
+    return parseFloat(document.documentElement.style.getPropertyValue('--zoom'))||1;
+  }
+  function stepZoom(delta){
+    const now=currentZoom();
+    let i=ZOOM_STEPS.indexOf(now); if(i<0) i=ZOOM_STEPS.indexOf(1);
+    const next=ZOOM_STEPS[Math.max(0,Math.min(ZOOM_STEPS.length-1,i+delta))];
+    if(next===now) return;
+    applyZoom(next); flashZoom(next);
+  }
+  // 按住 ⌘（Mac）或 Ctrl 滚动缩放。要拦掉浏览器自己的缩放就必须 passive:false，
+  // 否则 preventDefault 不生效
+  document.addEventListener('wheel',event=>{
+    if(!event.ctrlKey&&!event.metaKey) return;
+    event.preventDefault();
+    if(Math.abs(event.deltaY)<1) return;
+    stepZoom(event.deltaY<0?1:-1);
+  },{passive:false});
+  // ⌘0 / Ctrl+0 恢复原始大小——按钮没了，这是唯一的归位方式
+  document.addEventListener('keydown',event=>{
+    if(!(event.metaKey||event.ctrlKey)) return;
+    if(event.key!=='0'&&event.code!=='Digit0') return;
+    event.preventDefault();
+    if(currentZoom()!==1){ applyZoom(1); flashZoom(1); }
+  });
   // 收起 / 展开都记在这台电脑上。窄屏没存过就默认收着——那一档本来就放不下宽侧边栏
   function applySidebar(collapsed,{persist=true}={}){
     const shell=$('.shell'); if(!shell) return;
