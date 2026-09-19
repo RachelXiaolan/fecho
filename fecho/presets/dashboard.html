@@ -184,11 +184,18 @@
     .quick-api-row #quick-api-help{width:26px;flex:none;padding:0;text-align:center;
       font-weight:700;color:var(--muted)}
     /* 气泡挂到 body 上定位，免得被左边这一列的 overflow 裁掉 */
-    .quick-api-help-text{position:fixed;z-index:50;width:250px;max-width:calc(100vw - 16px);
-      margin:0;padding:10px 12px;border:1px solid var(--line);border-radius:8px;
-      background:var(--ink);color:var(--surface);font-size:11.5px;line-height:1.6;
+    .quick-api-help-text{position:fixed;z-index:50;width:330px;max-width:calc(100vw - 16px);
+      margin:0;padding:13px 15px;border:1px solid var(--line);border-radius:10px;
+      background:var(--ink);color:var(--surface);font-size:11.5px;line-height:1.65;
       box-shadow:0 10px 28px rgba(20,18,32,.22)}
     .quick-api-help-text b{color:var(--surface)}
+    .quick-api-help-text h4{margin:0 0 6px;font-size:11.5px}
+    .quick-api-help-text ol{margin:0 0 10px;padding-left:17px}
+    .quick-api-help-text li{margin-bottom:3px}
+    .quick-api-help-text p{margin:0 0 9px}
+    .quick-api-help-text p:last-child{margin-bottom:0}
+    .quick-api-help-text .qa-note{padding-top:9px;border-top:1px solid rgba(255,255,255,.16);
+      color:var(--faint)}
     .report-paper{padding:26px 34px 30px;font-size:14.5px;line-height:1.75;color:var(--ink)}
     /* 改日报时编辑器自己铺满，内边距交给编辑器 */
     .report-paper:has(.report-edit){padding:0}
@@ -337,12 +344,20 @@
     .switch input:checked+span{background:var(--nav)}
     .switch input:checked+span:before{transform:translateX(18px)}
     .switch input:focus-visible+span{box-shadow:0 0 0 3px rgba(119,113,166,.3)}
-    .folder{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;
+    .folder{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:12px;align-items:center;
       padding:11px 18px;border-top:1px solid var(--line);cursor:pointer}
     .folder:first-child{border-top:0}
     .folder:hover{background:var(--surface-alt)}
     .folder input{width:16px;height:16px;min-height:0;accent-color:var(--nav)}
     .folder-path{font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}
+    .folder-drop{border:0;background:transparent;color:var(--faint);width:24px;height:24px;
+      border-radius:6px;font-size:15px;line-height:1;padding:0;opacity:0;flex:none}
+    .folder:hover .folder-drop,.folder-drop:focus-visible{opacity:1}
+    .folder-drop:hover{background:var(--danger-bg);color:var(--danger)}
+    .folder.gone{opacity:.55}
+    .folder.gone .folder-path{text-decoration:line-through}
+    .folders-gone{padding:12px 18px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+    .folders-gone button{border:0;background:transparent;color:var(--link);padding:0 2px;font-size:12px}
     .panel-foot{display:flex;gap:10px;align-items:center;padding:12px 18px;border-top:1px solid var(--line);
       background:var(--surface-alt);flex-wrap:wrap}
     .panel-foot input{flex:1;min-width:220px}
@@ -457,7 +472,7 @@
         <div class="panel" id="agent-list"></div>
 
         <div class="section-head"><div><h2 data-i18n="folders_heading"></h2><p data-i18n="folders_sub"></p></div><span class="tag" id="folder-count">—</span></div>
-        <div class="panel"><div id="folder-list"></div><div class="panel-foot"><input id="folder-add" data-i18n-placeholder="folder_add_placeholder" data-i18n-aria="folder_add_aria"><button class="btn small" id="folder-add-btn" data-i18n="add"></button><button class="btn primary" id="save-folders" data-i18n="save_selection"></button></div></div>
+        <div class="panel"><div id="folder-list"></div><div id="folders-gone" class="folders-gone" hidden></div><div class="panel-foot"><input id="folder-add" data-i18n-placeholder="folder_add_placeholder" data-i18n-aria="folder_add_aria"><button class="btn small" id="folder-add-btn" data-i18n="add"></button><button class="btn primary" id="save-folders" data-i18n="save_selection"></button></div></div>
 
         <div class="section-head"><div><h2 data-i18n="style_heading"></h2><p data-i18n="style_sub"></p></div><span class="tag" id="style-updated">—</span></div>
         <div class="panel"><textarea id="style-editor" class="style-editor" data-i18n-aria="style_aria" data-i18n-placeholder="style_placeholder"></textarea><div class="panel-foot"><span class="meta" style="margin:0;flex:1" data-i18n="style_hint"></span><button class="btn small" id="clear-style" data-i18n="clear"></button><button class="btn primary" id="save-style" data-i18n="save"></button></div></div>
@@ -561,7 +576,7 @@
     "dirty_human": "有新的进展或归属变化。这份日报是你写的，不会被自动覆盖——自动生成的新版本会放进「历史版本」；点「现在生成」会换成自动版（你的版本留在历史版本里）。",
     "tab_daily": "日报", "tab_voice": "口播稿", "tab_history": "历史版本", "tab_warnings": "生成提示",
     "quick_api": "快速 API", "quick_api_help_label": "快速 API 说明",
-    "quick_api_help": "给你的 agent 发一把钥匙，它就能自己把记录交上来——不用装 MCP，能发 HTTP 就行。<b>点一下生成并复制</b>，粘给大模型即可；它会自己读接口说明。两条路：交零散进展（到点一起整理成日报），或者交整篇写好的日报（会覆盖当天那篇）。<b>钥匙是谁的，记录就进谁的账号；重新生成后旧钥匙立刻失效。</b>",
+    "quick_api_help": "<h4>这是什么</h4><p>给你的 agent 发一把钥匙，它就能自己把工作记录交上来。<b>不用装 MCP，能发 HTTP 就行</b>——服务器上的 bot、网页版 ChatGPT 的 Actions 都能用。</p><h4>怎么用</h4><ol><li>点「快速 API」，钥匙已经复制好了</li><li>把复制到的四行粘给你的大模型</li><li>它自己会读接口说明，你不用教它怎么调</li></ol><h4>它能交两种东西</h4><p><b>零散进展</b>——干完一件事交一条，到点和别的进展一起整理成日报，不会覆盖任何东西。<br><b>整篇日报</b>——你自己写好的，<b>会顶掉当天那篇</b>，之后自动生成的版本只进「历史版本」。<br>拿不准就交零散进展。</p><p class=\"qa-note\"><b>钥匙是谁的，记录就进谁的账号。</b>几个人共用一个 bot 时，每人要填自己那把。再点一次「快速 API」会换一把新的，旧的立刻失效——贴错地方了就这么废掉它。</p>",
     "quick_api_copied": "已复制。粘给你的大模型就能用了",
     "not_generated": "尚未生成。",
     "no_daily_with_updates": "这天有 {n} 条记录，日报还没生成。到了每天出日报的时间会自动生成，也可以点「重新生成」。",
@@ -600,6 +615,10 @@
     "agent_note_claude": "含桌面版和命令行的 Code 对话；扫描用命令行 claude 的登录和配置", "entry_claude-desktop": "桌面版", "entry_cli": "命令行",
     "folders_heading": "工作文件夹", "folders_sub": "只有勾选的文件夹里的对话会被扫描；没勾的，对话连打开都不会打开。",
     "folders_count": "已勾选 {picked} / {total}", "folder_last_used": "最近 {date}",
+    "folder_drop": "从清单里移除", "folder_restore": "放回清单",
+    "folders_dropped": "已移除 {n} 个（本机再上报也不会回来）", "show": "显示", "hide": "收起",
+    "toast_folder_dropped": "已移除。本机下次上报不会再把它加回来",
+    "toast_folder_restored": "已放回清单",
     "folders_empty": "还没有上报的文件夹", "folders_empty_sub": "本机采集装好后，用 agent 干过活的文件夹会自动出现在这里。也可以在下面手动添加。",
     "folder_add_placeholder": "手动加一个文件夹的完整路径，比如 /Users/you/work 或 C:\\Users\\you\\work", "folder_add_aria": "手动添加文件夹",
     "add": "添加", "save_selection": "保存勾选",
@@ -697,7 +716,7 @@
     "dirty_human": "There are new updates or assignment changes. You wrote this report, so it won't be replaced automatically — new automatic versions go to History. \"Regenerate now\" switches to the automatic version (yours stays in History).",
     "tab_daily": "Daily report", "tab_voice": "Voice script", "tab_history": "History", "tab_warnings": "Notes",
     "quick_api": "Quick API", "quick_api_help_label": "About Quick API",
-    "quick_api_help": "Hand your agent a key and it can post its own records — no MCP needed, anything that speaks HTTP works. <b>One click generates and copies it</b>; paste it to your LLM and it reads the API spec itself. Two roads: post individual updates (folded into the daily report at report time), or upload a finished report (replaces that day\u2019s). <b>Records land in the account the key belongs to; regenerating invalidates the old key at once.</b>",
+    "quick_api_help": "<h4>What this is</h4><p>Hand your agent a key and it can post its own work records. <b>No MCP needed — anything that speaks HTTP works</b>: a bot on a server, ChatGPT Actions, and so on.</p><h4>How to use it</h4><ol><li>Click Quick API — the key is already copied</li><li>Paste those four lines to your LLM</li><li>It reads the API spec itself; you don\u2019t have to explain the calls</li></ol><h4>Two things it can post</h4><p><b>Individual updates</b> — one per thing you finish; folded into the daily report at report time, never overwrites anything.<br><b>A finished report</b> — <b>replaces that day\u2019s report</b>; later automatic versions go to History instead.<br>When in doubt, post updates.</p><p class=\"qa-note\"><b>Records land in the account the key belongs to.</b> If several people share one bot, each needs their own key. Clicking Quick API again issues a new key and kills the old one immediately \u2014 that\u2019s how you revoke one you pasted somewhere wrong.</p>",
     "quick_api_copied": "Copied. Paste it to your LLM",
     "not_generated": "Not generated yet.",
     "no_daily_with_updates": "There are {n} updates for this day but no report yet. It's generated automatically at your report time, or click Regenerate.",
@@ -736,6 +755,10 @@
     "agent_note_claude": "Covers Code sessions from both the desktop app and the CLI; scanning uses the CLI's login and config", "entry_claude-desktop": "Desktop", "entry_cli": "CLI",
     "folders_heading": "Work folders", "folders_sub": "Only conversations in checked folders are scanned; unchecked folders are never even opened.",
     "folders_count": "{picked} of {total} selected", "folder_last_used": "Last used {date}",
+    "folder_drop": "Remove from the list", "folder_restore": "Put back",
+    "folders_dropped": "{n} removed (local capture won't bring them back)", "show": "Show", "hide": "Hide",
+    "toast_folder_dropped": "Removed. Local capture won't add it back",
+    "toast_folder_restored": "Back in the list",
     "folders_empty": "No folders reported yet", "folders_empty_sub": "Once local capture is installed, folders you've worked in with agents show up here. You can also add one below.",
     "folder_add_placeholder": "Add a folder by its full path, e.g. /Users/you/work or C:\\Users\\you\\work", "folder_add_aria": "Add a folder",
     "add": "Add", "save_selection": "Save selection",
@@ -1255,6 +1278,13 @@
   document.addEventListener('click', async event=>{
     const help=$('#quick-api-help-text');
     if(help&&!event.target.closest('.quick-api-entry')) help.hidden=true;
+    const drop=event.target.closest('[data-drop]');
+    if(drop){ event.preventDefault(); dropFolder(drop.dataset.drop,false); return; }
+    const back=event.target.closest('[data-restore]');
+    if(back){ event.preventDefault(); dropFolder(back.dataset.restore,true); return; }
+    if(event.target.closest('#folders-gone-toggle')){
+      state.settings.showDropped=!state.settings.showDropped; renderDroppedFolders(); return;
+    }
     if(event.target.closest('#quick-api-open')){ copyQuickApi(); return; }
     if(event.target.closest('#quick-api-help')){ toggleQuickApiHelp(); return; }
     const fold=event.target.closest('.report-paper .fold');
@@ -1353,8 +1383,10 @@
     try{ await loadSettings(); renderFeedbackDraft(); await loadFeedback(); if(state.me.is_admin){ await loadAdmin(); await loadAdminFeedback(); } }catch(error){ toast(error.message,null,true); }
   }
   async function loadSettings(){
-    const [agents,folders]=await Promise.all([request('/api/agents'),request('/api/folders')]);
+    const [agents,folders,dropped]=await Promise.all([
+      request('/api/agents'), request('/api/folders'), request('/api/folders/dismissed')]);
     state.settings.agents=agents.items; state.settings.folders=folders.items;
+    state.settings.dropped=dropped.items;
     renderSettings();
     loadStyle().catch(error=>toast(error.message,null,true));
   }
@@ -1375,9 +1407,30 @@
   function renderFolders(){
     const items=state.settings.folders, picked=items.filter(f=>f.selected).length;
     $('#folder-count').textContent=t('folders_count',{picked, total:items.length});
-    $('#folder-list').innerHTML=items.length
-      ?items.map(f=>`<label class="folder"><input type="checkbox" data-folder="${esc(f.path)}" ${f.selected?'checked':''}><span class="folder-path">${esc(f.path)}</span><span class="meta" style="margin:0">${f.last_used?esc(t('folder_last_used',{date:f.last_used})):''}</span></label>`).join('')
+    const row=f=>`<label class="folder"><input type="checkbox" data-folder="${esc(f.path)}" ${f.selected?'checked':''}><span class="folder-path">${esc(f.path)}</span><span class="meta" style="margin:0">${f.last_used?esc(t('folder_last_used',{date:f.last_used})):''}</span><button type="button" class="folder-drop" data-drop="${esc(f.path)}" title="${esc(t('folder_drop'))}" aria-label="${esc(t('folder_drop'))}">×</button></label>`;
+    $('#folder-list').innerHTML=items.length?items.map(row).join('')
       :empty(t('folders_empty'),t('folders_empty_sub'));
+    renderDroppedFolders();
+  }
+  // 移除掉的单独一块，默认收着——列表本来就长，别再添乱
+  function renderDroppedFolders(){
+    const box=$('#folders-gone'), gone=state.settings.dropped||[];
+    if(!box) return;
+    if(!gone.length){ box.hidden=true; box.innerHTML=''; return; }
+    box.hidden=false;
+    box.innerHTML=state.settings.showDropped
+      ?`${esc(t('folders_dropped',{n:gone.length}))} <button type="button" id="folders-gone-toggle">${esc(t('hide'))}</button>`
+        +gone.map(f=>`<label class="folder gone"><span></span><span class="folder-path">${esc(f.path)}</span><span></span><button type="button" class="folder-drop" style="opacity:1" data-restore="${esc(f.path)}" title="${esc(t('folder_restore'))}" aria-label="${esc(t('folder_restore'))}">↩</button></label>`).join('')
+      :`${esc(t('folders_dropped',{n:gone.length}))} <button type="button" id="folders-gone-toggle">${esc(t('show'))}</button>`;
+  }
+  async function dropFolder(path, restore){
+    try{
+      await post('/api/folders/dismiss',{paths:[path], restore:!!restore});
+      const [list,gone]=await Promise.all([request('/api/folders'),request('/api/folders/dismissed')]);
+      state.settings.folders=list.items; state.settings.dropped=gone.items;
+      renderFolders();
+      toast(t(restore?'toast_folder_restored':'toast_folder_dropped'));
+    }catch(error){ toast(error.message,null,true); }
   }
   async function loadAdmin(){
     const [reqs,users]=await Promise.all([request('/api/admin/requests'),request('/api/admin/users')]);

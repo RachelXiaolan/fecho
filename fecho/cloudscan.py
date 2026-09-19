@@ -134,6 +134,7 @@ def report_folders(author: str, folders: Iterable[Dict[str, Any]]) -> Dict[str, 
     """agent 上报「用 agent 干过活的文件夹」。只有路径，没有内容。
 
     已有的保留勾选状态，只更新最近使用时间；新出现的默认不勾——白名单只能由人主动加。
+    **不碰 dismissed**：人手动移除过的文件夹，第二天再上报也不会又冒出来。
     """
     now = _now_iso()
     n = 0
@@ -153,17 +154,40 @@ def report_folders(author: str, folders: Iterable[Dict[str, Any]]) -> Dict[str, 
     return {"reported": n, "folders": folders_of(author)}
 
 
-def folders_of(author: str) -> List[Dict[str, Any]]:
+def folders_of(author: str, dismissed: bool = False) -> List[Dict[str, Any]]:
+    """清单。默认只给没被移除的；`dismissed=True` 反过来，只给移除掉的那些。"""
     with db.cursor() as conn:
         rows = conn.execute(
-            "SELECT path, selected, last_used FROM work_folders WHERE author=?"
-            " ORDER BY selected DESC, last_used DESC, path", (author,)).fetchall()
+            "SELECT path, selected, last_used FROM work_folders"
+            " WHERE author=? AND dismissed=?"
+            " ORDER BY selected DESC, last_used DESC, path",
+            (author, 1 if dismissed else 0)).fetchall()
     return [{"path": r["path"], "selected": bool(r["selected"]), "last_used": r["last_used"]}
             for r in rows]
 
 
 def selected_folders(author: str) -> List[str]:
     return [f["path"] for f in folders_of(author) if f["selected"]]
+
+
+def dismiss(author: str, paths: Iterable[str], restore: bool = False) -> Dict[str, Any]:
+    """把文件夹从清单里移除（或者恢复回来）。
+
+    只是标一下，不删行——本机每晚都会重新上报所有用过 agent 的文件夹，
+    真删了第二天原样回来。移除的同时取消勾选：看不见的文件夹不该还在扫。
+    """
+    want = {_norm_path(p) for p in paths if is_absolute(p)}
+    if not want:
+        return {"dismissed": 0, "items": folders_of(author)}
+    n = 0
+    with db.cursor() as conn:
+        for path in want:
+            cur = conn.execute(
+                "UPDATE work_folders SET dismissed=?, selected=CASE WHEN ? THEN selected ELSE 0 END"
+                " WHERE author=? AND path=?",
+                (0 if restore else 1, 1 if restore else 0, author, path))
+            n += cur.rowcount if getattr(cur, "rowcount", 0) and cur.rowcount > 0 else 0
+    return {"dismissed": n, "items": folders_of(author)}
 
 
 def set_selected(author: str, paths: Iterable[str]) -> List[str]:
@@ -175,7 +199,9 @@ def set_selected(author: str, paths: Iterable[str]) -> List[str]:
         for path in want:
             conn.execute(
                 "INSERT INTO work_folders (author, path, selected, reported_at) VALUES (?,?,1,?)"
-                " ON CONFLICT (author, path) DO UPDATE SET selected=1", (author, path, now))
+                # 手动把移除过的路径又加回来，就当是恢复它
+                " ON CONFLICT (author, path) DO UPDATE SET selected=1, dismissed=0",
+                (author, path, now))
     return selected_folders(author)
 
 

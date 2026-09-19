@@ -252,6 +252,9 @@ CREATE TABLE IF NOT EXISTS work_folders (
     author        TEXT NOT NULL,
     path          TEXT NOT NULL,
     selected      INTEGER NOT NULL DEFAULT 0,
+    -- 人把它从清单里移除了。本机每晚都会重新上报所有用过 agent 的文件夹，
+    -- 不记一笔的话删了第二天又回来。上报只更新时间，不碰这一列
+    dismissed     INTEGER NOT NULL DEFAULT 0,
     last_used     TEXT,                 -- 最近一次在这里用 agent 的时间
     reported_at   TEXT NOT NULL,
     PRIMARY KEY (author, path)
@@ -483,6 +486,8 @@ def init() -> None:
                          " ON updates(source_event_key) WHERE source_event_key IS NOT NULL")
             # 线上的库在加这一列之前就建好了
             conn.execute("ALTER TABLE report_history ADD COLUMN IF NOT EXISTS fingerprint TEXT")
+            conn.execute("ALTER TABLE work_folders ADD COLUMN IF NOT EXISTS"
+                         " dismissed INTEGER NOT NULL DEFAULT 0")
             # Supabase 默认开着一个叫 Data API 的网页接口，能直接读这个库里的表。
             # 我们不用它——程序是直连数据库的。打开行级安全又不配任何放行规则，
             # 那个接口就一行都读不到；我们自己连的是建表的那个账号，不受影响。
@@ -519,6 +524,9 @@ def init() -> None:
         history_columns = {r["name"] for r in conn.execute("PRAGMA table_info(report_history)").fetchall()}
         if "fingerprint" not in history_columns:
             conn.execute("ALTER TABLE report_history ADD COLUMN fingerprint TEXT")
+        folder_columns = {r["name"] for r in conn.execute("PRAGMA table_info(work_folders)").fetchall()}
+        if "dismissed" not in folder_columns:
+            conn.execute("ALTER TABLE work_folders ADD COLUMN dismissed INTEGER NOT NULL DEFAULT 0")
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_updates_source_event"
                      " ON updates(source_event_key) WHERE source_event_key IS NOT NULL")
 

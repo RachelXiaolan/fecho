@@ -123,6 +123,58 @@ class TestWhitelist(ScanCase):
         self.assertTrue(folders[WORK], "之前勾过的要保留")
         self.assertNotIn("relative/x", folders, "相对路径对不上聊天记录里的目录，不收")
 
+    # ---- 从清单里移除（kaz 反馈：自动扫出来太多，想删掉几个）----
+
+    def test_removed_folder_stays_gone_after_the_next_report(self):
+        """这是这个功能的命门。
+
+        本机每晚都会把「用过 agent 的文件夹」整份重新上报一遍。要是移除只是删行，
+        第二天原样回来，等于没删。所以是标记，上报不碰这个标记。
+        """
+        junk = "/Users/alice/Desktop/随手开的"
+        cloudscan.report_folders(A, [{"path": junk}])
+        self.assertIn(junk, [f["path"] for f in cloudscan.folders_of(A)])
+
+        cloudscan.dismiss(A, [junk])
+        self.assertNotIn(junk, [f["path"] for f in cloudscan.folders_of(A)])
+
+        cloudscan.report_folders(A, [{"path": junk, "last_used": "2030-02-02"}])
+        self.assertNotIn(junk, [f["path"] for f in cloudscan.folders_of(A)],
+                         "上报不能把移除过的又变出来")
+        self.assertIn(junk, [f["path"] for f in cloudscan.folders_of(A, dismissed=True)])
+
+    def test_removing_a_ticked_folder_also_stops_scanning_it(self):
+        """看不见的文件夹不该还在扫描范围里。"""
+        self.assertIn(WORK, cloudscan.selected_folders(A))
+        cloudscan.dismiss(A, [WORK])
+        self.assertNotIn(WORK, cloudscan.selected_folders(A))
+
+    def test_removed_folders_can_be_put_back(self):
+        junk = "/Users/alice/tmp"
+        cloudscan.report_folders(A, [{"path": junk}])
+        cloudscan.dismiss(A, [junk])
+        cloudscan.dismiss(A, [junk], restore=True)
+        listed = {f["path"]: f["selected"] for f in cloudscan.folders_of(A)}
+        self.assertIn(junk, listed)
+        self.assertFalse(listed[junk], "放回来是放回清单，不是直接勾上")
+
+    def test_adding_a_removed_path_by_hand_brings_it_back(self):
+        """手动把移除过的路径又加进白名单，就当是反悔了。"""
+        junk = "/Users/alice/again"
+        cloudscan.report_folders(A, [{"path": junk}])
+        cloudscan.dismiss(A, [junk])
+        cloudscan.set_selected(A, [junk])
+        self.assertIn(junk, [f["path"] for f in cloudscan.folders_of(A)])
+        self.assertIn(junk, cloudscan.selected_folders(A))
+
+    def test_removing_only_touches_my_own_folders(self):
+        shared = "/Users/shared/work"
+        cloudscan.report_folders(A, [{"path": shared}])
+        cloudscan.report_folders(B, [{"path": shared}])
+        cloudscan.dismiss(A, [shared])
+        self.assertNotIn(shared, [f["path"] for f in cloudscan.folders_of(A)])
+        self.assertIn(shared, [f["path"] for f in cloudscan.folders_of(B)], "别人的不该跟着没")
+
     def test_reporting_again_keeps_ticks(self):
         cloudscan.report_folders(A, [{"path": WORK, "last_used": "2030-01-10"}])
         self.assertEqual(cloudscan.selected_folders(A), [WORK])

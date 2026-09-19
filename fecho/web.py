@@ -1076,6 +1076,29 @@ def build_app():
         me = guard(request, authorization)
         return {"selected": cloudscan.set_selected(me, body.get("selected") or [])}
 
+    @app.get("/api/folders/dismissed")
+    def api_folders_dismissed(request: Request, authorization: Optional[str] = Header(None)):
+        from . import cloudscan
+        _cloud_only()
+        me = guard(request, authorization)
+        return {"items": cloudscan.folders_of(me, dismissed=True)}
+
+    @app.post("/api/folders/dismiss")
+    def api_folders_dismiss(request: Request, body: Dict[str, Any] = Body(...),
+                            authorization: Optional[str] = Header(None)):
+        """把文件夹从清单里移除，或者恢复回来。
+
+        本机每晚重新上报所有用过 agent 的文件夹，所以是标记不是删除——
+        真删了第二天原样回来。
+        """
+        from . import cloudscan
+        _cloud_only()
+        me = guard(request, authorization)
+        paths = body.get("paths") or []
+        if not isinstance(paths, list):
+            raise ValueError("paths 必须是列表")
+        return cloudscan.dismiss(me, paths, restore=bool(body.get("restore")))
+
     @app.post("/api/scan/submit")
     def api_scan_submit(request: Request, body: Dict[str, Any] = Body(...),
                         authorization: Optional[str] = Header(None)):

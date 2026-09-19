@@ -271,9 +271,11 @@
           <div>记下刚做完的事</div><div>「记一下」</div>
           <div>开工前接上昨天的进度</div><div>「用 fecho 看看昨天做到哪了」</div>
           <div>改出日报时间</div><div>「把 fecho 出日报时间改到 19:30」，或网页「设置」</div>
-          <div>增减工作文件夹</div><div>网页「设置 → 工作文件夹」</div>
+          <div>增减工作文件夹</div><div>网页「设置 → 工作文件夹」。自动扫出来的太多、看着杂，把不想要的那行点「×」移除——本机下次上报不会再把它加回来，想找回来在列表底下「已移除」里恢复</div>
           <div>现在就扫一遍今天</div><div><code>python3 ~/.fecho-cloud/fecho_local.py check --date 今天日期</code><br>Windows：<code>py -3 "$HOME\.fecho-cloud\fecho_local.py" check --date 今天日期</code></div>
           <div>日报写得不对</div><div>网页「日报 → 修改」。改的写法会被学进你的写作偏好</div>
+          <div>不想让模型写，自己写</div><div>网页「日报 → 手动写日报」。<b>你写的不会被自动生成覆盖</b>，到点生成的版本只进「历史版本」；想换回自动版才点「重新生成」</div>
+          <div>让别的 agent 交记录<br><span class="muted">（装不了 MCP 的那种）</span></div><div>网页「日报」左边那列底下点「快速 API」，钥匙自动复制，粘给它就行。服务器上的 bot、网页版 ChatGPT 的 Actions 都能用</div>
           <div>某条进展归错了任务</div><div>网页「复核」里改归属，确认后模型不会再覆盖</div>
           <div>需要看全员日志</div><div>网页「设置 → 管理员 → 申请 admin」，等 Rachel 审批</div>
         </div>
@@ -297,6 +299,18 @@
           <div><p>第二天早上电脑一联网，本机采集会先把昨天补扫上去，那天的日报会自动重出。什么都不用做。</p></div></details>
         <details><summary>agent 说 token 无效或过期</summary>
           <div><p>token 连续 7 天没用才会过期。回 <a href="/onboard">onboard 页</a> 再生成一个交给 agent，让它按安装说明重新接一次。</p></div></details>
+        <details><summary>「快速 API」和平时的随手记有什么区别</summary>
+          <div><p>是给<b>装不了 MCP 的 agent</b> 留的路——服务器上的 bot、网页版 ChatGPT 的 Actions
+          这种，能发 HTTP 但接不了 MCP。你自己电脑上的 Claude Code、Codex 照常用随手记就行，不用碰它。</p>
+          <p>它能交两种东西：<b>零散进展</b>（和随手记一样，到点一起整理成日报，不覆盖任何东西），
+          或者<b>整篇写好的日报</b>（会顶掉当天那篇）。拿不准就交零散进展。</p>
+          <p><b>钥匙是谁的，记录就进谁的账号。</b>几个人共用一个 bot 时每人要填自己那把。
+          钥匙贴错地方了，回网页再点一次「快速 API」，旧的立刻作废。</p></div></details>
+        <details><summary>工作文件夹自动扫出来一大堆，看着乱</summary>
+          <div><p>本机会把你用 agent 干过活的文件夹都列出来，方便你挑。<b>没勾的一律不扫</b>，
+          对话连打开都不会打开，所以列在那里不影响隐私，只是看着杂。</p>
+          <p>不想要的点那一行的「×」移除掉，本机下次上报不会再把它加回来。
+          移除错了在列表底下「已移除」里点一下就放回来。</p></div></details>
         <details><summary>我改过的日报，会不会被自动重出的覆盖掉</summary>
           <div><p>不会。改过的日报只有你自己点「重新生成」才会被覆盖，覆盖掉的版本仍然留在「历史版本」里。有新进展时页面会提示你。</p></div></details>
         <details><summary>写作偏好学偏了</summary>
