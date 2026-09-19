@@ -232,10 +232,18 @@ def dashboard_payload(author: str, date: str) -> Dict[str, Any]:
 # ---------- FastAPI ----------
 
 def build_app():
+    from pathlib import Path
+
     from fastapi import Body, FastAPI, Header, HTTPException, Query, Request
     from fastapi.responses import HTMLResponse, JSONResponse
+    from fastapi.staticfiles import StaticFiles
 
     app = FastAPI(title="fecho", docs_url=None, redoc_url=None)
+
+    # 日报编辑器的打包产物。源码在仓库的 editor/，产物已经提交，部署时不用装 node
+    vendor_dir = Path(__file__).resolve().parent / "presets" / "vendor"
+    if vendor_dir.is_dir():
+        app.mount("/vendor", StaticFiles(directory=vendor_dir), name="vendor")
 
     @app.exception_handler(ValueError)
     async def value_error_handler(_request: Request, exc: ValueError):

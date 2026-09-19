@@ -17,3 +17,9 @@ fecho-团队LLM配置.json
 shared-llm-config.json
 *shared-config*.json
 *.secret.json
+
+# 编辑器的构建依赖，产物已经提交，不需要带上源码依赖
+editor/node_modules/
+
+# 本机跑预览用的启动配置，指向各人自己的 .venv
+.claude/

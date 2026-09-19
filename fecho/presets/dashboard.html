@@ -14,6 +14,10 @@
       --danger:#9a3f3a;--danger-bg:#fbe9e7;--shadow:0 1px 2px rgba(25,22,18,.05);
       --topbar-bg:rgba(247,246,242,.94);--surface-alt:#FBFAF7;--ink-soft:#45433f;--chip-bg:#eceaf5;--chip-ink:#5e587f;
       --viewas-ink:#3f3a6b;--hover-bg:#faf9ff;--link:#5b4fb0;--switch-off:#d9d6ce;--primary:var(--nav);color-scheme:light;
+      /* 日报编辑器（CodeMirror）。源码在仓库的 editor/，配色全部读这几个变量 */
+      --violet-ink:#6b5fc0;--ed-active:rgba(107,95,192,.06);--ed-sel:rgba(107,95,192,.18);
+      --ed-code-bg:#f2f0f7;--ed-code-ink:#8a5b17;--ed-kw:#7c3aed;--ed-str:#1f7a4d;
+      --ed-num:#b4531a;--ed-fn:#2563a8;--ed-type:#8a5b17;--ed-op:#1d6f86;
     }
     /* 黑夜模式：只换颜色变量，版式一点不动 */
     :root[data-theme="dark"]{
@@ -22,6 +26,9 @@
       --success:#7fd1ad;--success-bg:#173228;--warning:#e9bb6d;--warning-bg:#342810;--danger:#f1a39c;--danger-bg:#3b1e1c;
       --shadow:0 1px 2px rgba(0,0,0,.4);--topbar-bg:rgba(19,18,23,.92);--chip-bg:#2c2940;--chip-ink:#c9c3ea;
       --viewas-ink:#d6d0f5;--hover-bg:#26242f;--link:#b3a6f2;--switch-off:#46444e;--primary:#6f5fc7;color-scheme:dark;
+      --violet-ink:#a88bfa;--ed-active:rgba(168,139,250,.07);--ed-sel:rgba(168,139,250,.26);
+      --ed-code-bg:#2b2932;--ed-code-ink:#e6c07b;--ed-kw:#c792ea;--ed-str:#c3e88d;
+      --ed-num:#f78c6c;--ed-fn:#82aaff;--ed-type:#ffcb6b;--ed-op:#89ddff;
     }
     *{box-sizing:border-box}
     html{background:var(--canvas)}
@@ -31,20 +38,31 @@
     button{cursor:pointer}
     button:disabled{cursor:wait;opacity:.55}
     a{color:inherit}
-    .shell{min-height:100vh;display:grid;grid-template-columns:232px minmax(0,1fr)}
+    .shell{min-height:100vh;display:grid;grid-template-columns:232px minmax(0,1fr);transition:grid-template-columns .2s ease}
     /* 高度按缩放比例换算：整站缩放后 100vh 会被一起放大，侧边栏会比屏幕高 */
     .sidebar{position:sticky;top:0;height:calc(100vh / var(--zoom,1));padding:26px 18px 20px;background:var(--nav);
-      color:var(--nav-text);display:flex;flex-direction:column}
-    .brand{display:flex;align-items:center;gap:11px;padding:0 10px 28px}
-    .brand-mark{width:32px;height:32px;border-radius:9px;background:var(--violet);color:var(--nav);
+      color:var(--nav-text);display:flex;flex-direction:column;overflow-x:hidden}
+    .brand-row{display:flex;align-items:flex-start;gap:8px;padding:0 0 28px}
+    .brand{display:flex;align-items:center;gap:11px;padding:0 10px;flex:1;min-width:0}
+    .sidebar-toggle{flex:none;width:34px;height:34px;padding:0;border:1px solid rgba(255,255,255,.15);
+      border-radius:8px;background:transparent;color:#bcbac9;display:grid;place-items:center}
+    .sidebar-toggle:hover{background:rgba(255,255,255,.08);color:#fff}
+    .sidebar-toggle svg{transition:transform .2s ease}
+    .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+      clip:rect(0,0,0,0);white-space:nowrap;border:0}
+    .brand-mark{width:32px;height:32px;flex:none;border-radius:9px;background:var(--violet);color:var(--nav);
       display:grid;place-items:center;font-size:17px;font-weight:700;letter-spacing:-1px}
     .brand-name{font-size:19px;font-variation-settings:"wght" 540;font-weight:600;letter-spacing:-.4px}
     .brand-copy{font-size:11px;color:#bcbac9;margin-top:-1px}
+    .nav-icon{width:17px;height:17px;flex:none;opacity:.8}
+    .nav button.active .nav-icon{opacity:1}
+    /* 收起后只剩图标：没有图标的话侧边栏就是一列光秃秃的数字，认不出是哪一页 */
+    .shell.sidebar-collapsed .nav button .count{display:none}
     .nav-label{padding:0 10px 8px;color:#77738f;font-size:10px;font-weight:700;
       letter-spacing:1.2px;text-transform:uppercase}
     .nav{display:grid;gap:4px}
     .nav button{width:100%;border:0;background:transparent;color:#bcbac9;text-align:left;
-      border-radius:8px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between}
+      border-radius:8px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;display:flex;align-items:center;gap:9px}
     .nav button:hover{background:rgba(255,255,255,.06);color:#fff}
     .nav button.active{background:rgba(201,180,250,.15);color:#fff}
     .nav .count{min-width:22px;padding:1px 6px;text-align:center;border-radius:99px;
@@ -54,13 +72,22 @@
     .connection{display:flex;gap:8px;align-items:center;color:#bcbac9;font-size:12px}
     .pulse{width:7px;height:7px;border-radius:50%;background:#7dd5ac;box-shadow:0 0 0 4px rgba(125,213,172,.1)}
     .workspace{min-width:0}
-    /* 侧边栏收起。640px 以下侧边栏是底部导航条，收了就没法切页面，所以不参与 */
-    @media(min-width:641px){
-      /* 收起后直接变单列：侧边栏 display:none 会退出网格，内容区就会顶到第一列去，
-         留着 0 宽的第一列等于把内容挤成一条 */
-      .sidebar-collapsed .shell{grid-template-columns:minmax(0,1fr)}
-      .sidebar-collapsed .sidebar{display:none}
-    }
+    /* 日报页占满一屏：整页不滚，只有稿子那块滚，编辑器就能撑满剩下的高度 */
+    .workspace:has(.view[data-page="reports"].active){height:calc(100vh / var(--zoom,1));
+      display:flex;flex-direction:column;overflow:hidden}
+    .workspace:has(.view[data-page="reports"].active) main{flex:1;min-height:0;width:100%;overflow:hidden}
+    /* 收起：缩成 78px 的图标条，不是整个藏起来——收起后还看得见在哪一页。
+       640px 以下侧边栏是底部导航条，收了就没法切页面，所以那一档不参与 */
+    .shell.sidebar-collapsed{grid-template-columns:78px minmax(0,1fr)}
+    .shell.sidebar-collapsed .sidebar{padding-left:10px;padding-right:10px}
+    .shell.sidebar-collapsed .brand-row{display:grid;justify-items:center;gap:10px}
+    .shell.sidebar-collapsed .brand{flex:none;padding:0}
+    .shell.sidebar-collapsed .brand-name,.shell.sidebar-collapsed .brand-copy,
+    .shell.sidebar-collapsed .nav-label,.shell.sidebar-collapsed .nav button .nav-text,
+    .shell.sidebar-collapsed .sidebar-foot span,.shell.sidebar-collapsed .guide-text{display:none}
+    .shell.sidebar-collapsed .sidebar-toggle svg{transform:rotate(180deg)}
+    .shell.sidebar-collapsed .nav button{justify-content:center;min-height:44px;padding:10px 8px}
+    .shell.sidebar-collapsed .guide-link{justify-content:center;padding:10px 8px}
     .topbar-left{display:flex;align-items:center;gap:14px;min-width:0}
     .icon-btn{width:34px;height:34px;padding:0;border:1px solid var(--line);border-radius:9px;flex:none;
       background:var(--surface-soft);color:var(--muted);display:grid;place-items:center}
@@ -85,6 +112,8 @@
     .toolbar select{max-width:142px}
     main{max-width:1240px;margin:0 auto;padding:30px 34px 72px}
     .view{display:none}.view.active{display:block;animation:enter .24s ease both}
+    .view[data-page="reports"].active{display:flex;flex-direction:column;height:100%;min-height:0;overflow:hidden}
+    .view[data-page="reports"].active .report-layout{flex:1;min-height:0}
     @keyframes enter{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
     .loading{display:none;padding:80px 20px;text-align:center;color:var(--muted)}
     .loading.show{display:block}
@@ -151,11 +180,14 @@
     .dirty{display:none;align-items:center;justify-content:space-between;gap:16px;padding:14px 16px;
       border-radius:10px;background:var(--warning-bg);color:var(--warning);margin-bottom:14px}
     .dirty.show{display:flex}
-    .report-layout{display:grid;grid-template-columns:190px minmax(0,1fr);min-height:520px}
+    .report-layout{display:grid;grid-template-columns:170px minmax(0,1fr);min-height:0}
     .report-nav{padding:14px;border-right:1px solid var(--line);background:var(--surface-alt)}
     .report-nav button{width:100%;border:0;background:transparent;text-align:left;padding:9px 10px;border-radius:7px;font-size:12px}
     .report-nav button.active{background:var(--surface);box-shadow:var(--shadow);font-weight:600}
-    .report-paper{padding:30px 40px 36px;overflow:auto;font-size:14.5px;line-height:1.75;color:var(--ink)}
+    .report-paper{display:flex;flex-direction:column;min-height:0;padding:26px 34px 30px;
+      overflow:auto;font-size:14.5px;line-height:1.75;color:var(--ink)}
+    /* 改日报时编辑器自己铺满，内边距交给编辑器 */
+    .report-paper:has(.report-edit){padding:0}
     /* 渲染后的日报：参照 Obsidian 阅读视图——正文用无衬线、标题分层、列表缩进清楚 */
     .report-paper>:first-child{margin-top:0}
     .report-paper h1{font-size:24px;line-height:1.3;font-weight:650;letter-spacing:-.4px;margin:0 0 20px}
@@ -221,12 +253,6 @@
     .report-paper .md-img img{display:block;max-width:100%;height:auto;border-radius:6px;cursor:zoom-in}
     .report-paper .fold-more{display:none;margin-left:6px;color:var(--faint);font-weight:400;letter-spacing:1px}
     .report-paper .folded>.fold-more{display:inline}
-    .img-size:not([hidden]){display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted)}
-    .img-size input{min-height:0;padding:0;border:0;flex:1;max-width:320px;accent-color:#6f5fc7}
-    .img-size output{min-width:52px;font-variant-numeric:tabular-nums}
-    .edit-split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:start}
-    .edit-split.off{grid-template-columns:minmax(0,1fr)}
-    .edit-split.off .md-preview{display:none}
     .md-preview{border:1px solid var(--line);border-radius:10px;padding:16px 20px 16px 34px;min-height:440px;
       max-height:calc(75vh / var(--zoom,1));overflow:auto}
     @media (max-width:1100px){.edit-split{grid-template-columns:1fr}}
@@ -257,7 +283,9 @@
     .fb-body{white-space:pre-wrap;margin-top:0}
     .fb-images{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
     .fb-images img{width:120px;height:90px;object-fit:cover;border-radius:6px;border:1px solid var(--line);display:block}
-    .guide-link{display:block;margin-top:14px;padding:10px 12px;border-radius:8px;color:#bcbac9;text-decoration:none;font-size:13px}
+    .guide-link{display:flex;align-items:center;gap:8px;margin-top:14px;padding:10px 12px;
+      border-radius:8px;color:#bcbac9;text-decoration:none;font-size:13px}
+    .guide-icon{font-size:15px;line-height:1}
     .guide-link:hover{background:rgba(255,255,255,.06);color:#fff}
     .topbar-actions{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;justify-content:flex-end}
     .lang-switch{display:flex;gap:2px;background:var(--surface-soft);padding:3px;border-radius:9px;align-self:center}
@@ -268,10 +296,20 @@
     .theme-toggle:hover{color:var(--ink)}
     .theme-toggle .i-sun,:root[data-theme="dark"] .theme-toggle .i-moon{display:none}
     :root[data-theme="dark"] .theme-toggle .i-sun{display:block}
-    .report-edit{display:grid;gap:10px}
-    .report-editor,.style-editor{display:block;width:100%;resize:vertical;
+    .report-edit{display:flex;flex-direction:column;flex:1;min-height:0}
+    .report-edit .edit-hint{margin:0;padding:10px 16px;border-bottom:1px solid var(--line);
+      background:var(--surface-alt);font-size:11.5px;color:var(--muted)}
+    .report-editor{flex:1;min-height:0;overflow:hidden}
+    .report-editor .cm-editor{height:100%}
+    .report-editor .cm-scroller{overflow:auto}
+    .report-edit .button-row{padding:10px 16px;border-top:1px solid var(--line);
+      background:var(--surface-alt);align-items:center}
+    /* 用法提示一行放得下就放，放不下省略，鼠标停上去看全文 */
+    .md-hint{flex:1;min-width:0;font-size:11px;color:var(--faint);white-space:nowrap;
+      overflow:hidden;text-overflow:ellipsis}
+    @media(max-width:760px){.md-hint{display:none}}
+    .style-editor{display:block;width:100%;resize:vertical;
       font:13px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace}
-    .report-editor{min-height:440px;padding:14px 16px;tab-size:4}
     .style-editor{min-height:170px;border:0;border-radius:0;padding:14px 18px}
     .viewas{display:none;align-items:center;justify-content:space-between;gap:16px;padding:12px 16px;
       border-radius:10px;background:var(--chip-bg);color:var(--viewas-ink);margin-bottom:16px}
@@ -304,14 +342,22 @@
       background:var(--surface-alt);flex-wrap:wrap}
     .panel-foot input{flex:1;min-width:220px}
     @media(max-width:900px){
-      .shell{grid-template-columns:78px minmax(0,1fr)}.sidebar{padding:22px 10px}.brand{padding:0 8px 26px}.brand-copy,.brand-name,.nav-label,.nav button span:first-child,.sidebar-foot span{display:none}
-      .nav button{justify-content:center;min-height:44px}.topbar{padding:17px 22px;align-items:flex-start}.toolbar{max-width:480px}
+      .shell:not(.sidebar-expanded){grid-template-columns:78px minmax(0,1fr)}
+      .shell:not(.sidebar-expanded) .sidebar{padding:22px 10px}
+      .shell:not(.sidebar-expanded) .brand{padding:0 8px}
+      .shell:not(.sidebar-expanded) .brand-copy,.shell:not(.sidebar-expanded) .brand-name,
+      .shell:not(.sidebar-expanded) .nav-label,.shell:not(.sidebar-expanded) .nav button .nav-text,
+      .shell:not(.sidebar-expanded) .sidebar-foot span,.shell:not(.sidebar-expanded) .guide-text{display:none}
+      .shell:not(.sidebar-expanded) .nav button{justify-content:center;min-height:44px}
+      .shell:not(.sidebar-expanded) .nav button .count{display:none}
+      .shell.sidebar-expanded{grid-template-columns:232px minmax(0,1fr)}
+      .shell.sidebar-expanded .sidebar{padding:26px 18px 20px}.topbar{padding:17px 22px;align-items:flex-start}.toolbar{max-width:480px}
       main{padding:24px 22px 64px}.two-col,.report-layout{grid-template-columns:1fr}.report-nav{border-right:0;border-bottom:1px solid var(--line);display:flex;overflow:auto}.report-nav button{width:auto;white-space:nowrap}
       .review-grid{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}
     }
     @media(max-width:640px){
       .shell{display:block}.sidebar{position:fixed;z-index:20;top:auto;bottom:0;width:100%;height:62px;padding:7px 8px;background:var(--nav-deep)}
-      .brand,.nav-label,.sidebar-foot{display:none}.nav{grid-auto-flow:column;grid-auto-columns:1fr;gap:2px}.nav button{padding:6px 3px;display:grid;place-items:center;gap:2px;font-size:10px}.nav button span:first-child{display:block}.nav .count{font-size:9px;min-width:18px;padding:0 4px}
+      .brand-row,.nav-label,.sidebar-foot,.sidebar-toggle{display:none}.nav{grid-auto-flow:column;grid-auto-columns:1fr;gap:2px}.nav button{padding:6px 3px;display:grid;place-items:center;gap:2px;font-size:10px}.nav button .nav-text{display:block}.nav .count{font-size:9px;min-width:18px;padding:0 4px}
       .topbar{position:static;display:block;padding:18px 16px}.toolbar{margin-top:15px;display:grid;grid-template-columns:1fr 1fr}.toolbar .field:first-child{grid-column:1/-1}.toolbar input,.toolbar select{width:100%;max-width:none}
       main{padding:20px 14px 92px}.hero{padding:23px 21px}.hero h2{font-size:25px}.hero .hero-action{position:static;margin-top:18px}.metrics{gap:8px}.metric{padding:14px}.metric strong{font-size:23px}
       .two-col{display:block}.two-col>div+div{margin-top:18px}.task-row{grid-template-columns:1fr}.task-actions{justify-content:flex-start}.report-paper{padding:22px 18px}.toast{left:14px;right:14px;bottom:76px}
@@ -321,26 +367,28 @@
 <body>
 <div class="shell">
   <aside class="sidebar" data-i18n-aria="nav_aria">
-    <div class="brand"><div class="brand-mark">f°</div><div><div class="brand-name">fecho</div><div class="brand-copy">work, remembered</div></div></div>
+    <div class="brand-row">
+      <div class="brand"><div class="brand-mark">f°</div><div><div class="brand-name">fecho</div><div class="brand-copy">work, remembered</div></div></div>
+      <button class="sidebar-toggle" id="sidebar-toggle" type="button" aria-expanded="true" data-i18n-aria="sidebar_collapse"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="m14.5 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="sr-only" data-i18n="sidebar_collapse"></span></button>
+    </div>
     <div class="nav-label">Workspace</div>
     <nav class="nav">
-      <button class="active" data-view="today"><span data-i18n="nav_today"></span><span class="count" id="nav-today">—</span></button>
-      <button data-view="review"><span data-i18n="nav_review"></span><span class="count" id="nav-review">—</span></button>
-      <button data-view="tasks"><span data-i18n="nav_tasks"></span><span class="count" id="nav-tasks">—</span></button>
-      <button data-view="reports"><span data-i18n="nav_reports"></span><span class="count" id="nav-reports">—</span></button>
-      <button data-view="system"><span data-i18n="nav_system"></span><span class="count" id="nav-system">—</span></button>
-      <button data-view="settings" data-cloud-only hidden><span data-i18n="nav_settings"></span><span class="count" id="nav-settings">—</span></button>
-      <button data-view="feedback" data-cloud-only hidden><span data-i18n="nav_feedback"></span><span class="count" id="nav-feedback">—</span></button>
-      <button data-view="admin" data-admin-only hidden><span data-i18n="nav_admin"></span><span class="count" id="nav-admin">—</span></button>
+      <button class="active" data-view="today"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 2v3M16 2v3M3.5 9h17M4 5.5h16a1 1 0 0 1 1 1V19a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6.5a1 1 0 0 1 1-1Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="nav-text" data-i18n="nav_today"></span><span class="count" id="nav-today">—</span></button>
+      <button data-view="review"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 12.5 2 2 4-4M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="nav-text" data-i18n="nav_review"></span><span class="count" id="nav-review">—</span></button>
+      <button data-view="tasks"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4 6h1M4 12h1M4 18h1" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="nav-text" data-i18n="nav_tasks"></span><span class="count" id="nav-tasks">—</span></button>
+      <button data-view="reports"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7l-4-4Zm0 0v4h4M9 12h6M9 16h4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="nav-text" data-i18n="nav_reports"></span><span class="count" id="nav-reports">—</span></button>
+      <button data-view="system"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l2.5-6 5 12 2.5-6h4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="nav-text" data-i18n="nav_system"></span><span class="count" id="nav-system">—</span></button>
+      <button data-view="settings" data-cloud-only hidden><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm8.5-3a8.5 8.5 0 0 0-.13-1.4l2-1.5-2-3.5-2.4.9a8.5 8.5 0 0 0-2.4-1.4L15.2 2h-4l-.37 2.6a8.5 8.5 0 0 0-2.4 1.4l-2.4-.9-2 3.5 2 1.5a8.5 8.5 0 0 0 0 2.8l-2 1.5 2 3.5 2.4-.9a8.5 8.5 0 0 0 2.4 1.4l.37 2.6h4l.37-2.6a8.5 8.5 0 0 0 2.4-1.4l2.4.9 2-3.5-2-1.5c.08-.46.13-.93.13-1.4Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="nav-text" data-i18n="nav_settings"></span><span class="count" id="nav-settings">—</span></button>
+      <button data-view="feedback" data-cloud-only hidden><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.3-.6L3 21l1.8-5A8.3 8.3 0 0 1 4 11.5 8.4 8.4 0 0 1 12.5 3 8.4 8.4 0 0 1 21 11.5Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="nav-text" data-i18n="nav_feedback"></span><span class="count" id="nav-feedback">—</span></button>
+      <button data-view="admin" data-admin-only hidden><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5.5c0 4.3 2.9 8.3 7 9.5 4.1-1.2 7-5.2 7-9.5V6l-7-3Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="nav-text" data-i18n="nav_admin"></span><span class="count" id="nav-admin">—</span></button>
     </nav>
-    <a class="guide-link" href="/guide" target="_blank" rel="noopener" data-i18n="nav_guide"></a>
+    <a class="guide-link" href="/guide" target="_blank" rel="noopener"><span class="guide-icon" aria-hidden="true">↗</span><span class="guide-text" data-i18n="nav_guide"></span></a>
     <div class="sidebar-foot"><div class="connection"><i class="pulse"></i><span id="connection-copy" data-i18n="connection_local"></span></div></div>
   </aside>
 
   <div class="workspace">
     <header class="topbar">
       <div class="topbar-left">
-        <button class="icon-btn" id="sidebar-toggle" type="button" aria-expanded="true" data-i18n-aria="sidebar_toggle"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg></button>
         <div class="page-title"><h1 id="page-title"></h1><p id="page-subtitle"></p></div>
       </div>
       <div class="topbar-actions">
@@ -461,7 +509,7 @@
     "fb_empty": "先写点内容或加一张图", "fb_too_many": "最多 {n} 张图", "fb_bad_type": "只支持 PNG、JPEG、WebP、GIF 图片",
     "fb_too_big": "图片加起来太大了，删掉一两张再提交",
     "fb_sent": "已提交，谢谢！", "fb_status_saved": "状态已更新",
-    "nav_guide": "接入指南 ↗",
+    "nav_guide": "接入指南",
     "connection_local": "本地服务已连接", "lang_aria": "界面语言", "filters_aria": "全局筛选",
     "filter_date": "工作日期", "filter_agent": "Agent", "filter_source": "记录方式", "filter_status": "完成状态", "all": "全部",
     "retry": "重试", "viewas_exit": "回到我自己的", "viewas_copy": "正在查看 {name}（{author}）的日志 · 只读",
@@ -516,12 +564,11 @@
     "cancel": "取消", "save": "保存", "no_voice": "尚未生成口播稿。",
     "write_report": "手动写日报", "write_hint": "还没生成日报，可以先自己写。保存后：到点自动生成的版本不会覆盖它，会放进「历史版本」；口播稿按你写的出。",
     "write_template": "# {date} 工作日志\n\n## Done\n\n- [x] \n\n## In Progress\n\n- [/] \n",
-    "img_insert": "插入图片", "img_alt": "图片", "img_uploading": "图片上传中…", "img_inserted": "图片已插入。光标放在图片那一行，编辑框上方会出现宽度滑块",
+    "img_insert": "插入图片", "img_alt": "图片", "img_uploading": "图片上传中…", "img_inserted": "图片已插入。拖图片右下角的方块改大小",
     "img_view": "查看大图", "img_width": "图片宽度", "fold": "折叠或展开",
-    "preview_show": "显示预览", "preview_hide": "关掉预览", "preview_aria": "预览",
     "zoom_aria": "页面缩放", "zoom_in": "放大", "zoom_out": "缩小", "zoom_reset": "点一下恢复原始大小",
-    "sidebar_toggle": "收起或展开侧边栏",
-    "md_hint": "和 Obsidian 一样：回车自动接着写 - / 1. / - [ ]，空的一项再按回车退出列表；Tab / Shift+Tab 缩进；编号自动重排。- [x] 完成，- [/] 等其他状态打勾不划掉；> [!note]- 可折叠提示框；表格、代码块；直接粘贴或拖入图片。",
+    "sidebar_collapse": "收起侧边栏", "sidebar_expand": "展开侧边栏",
+    "md_hint": "边写边渲染，光标移到哪一行才露出那一行的原文。回车自动接着写 - / 1. / - [ ]，空的一项再按回车退出列表；Tab / Shift+Tab 缩进；编号自动重排。点方框直接打勾（[x] 划掉，[a] 不划掉）；表格可以直接改，拖边线调列宽行高；图片拖右下角改大小；粘贴或拖入图片直接上传。",
     "toast_write_saved": "已保存。之后自动生成的版本不会覆盖它，会放进历史版本",
     "version_label": "版本 {n} · {kind} · {by} · {time}", "by_human": "人工修改", "by_model": "模型生成",
     "no_history": "还没有历史版本。", "no_warnings": "本次生成没有警告。",
@@ -594,7 +641,7 @@
     "fb_empty": "Write something or add an image first", "fb_too_many": "Up to {n} images", "fb_bad_type": "Only PNG, JPEG, WebP or GIF images",
     "fb_too_big": "The images are too large together; remove one or two and try again",
     "fb_sent": "Sent — thank you!", "fb_status_saved": "Status updated",
-    "nav_guide": "Setup guide ↗",
+    "nav_guide": "Setup guide",
     "connection_local": "Local service connected", "lang_aria": "Interface language", "filters_aria": "Filters",
     "filter_date": "Work date", "filter_agent": "Agent", "filter_source": "Captured via", "filter_status": "Status", "all": "All",
     "retry": "Retry", "viewas_exit": "Back to mine", "viewas_copy": "Viewing {name} ({author}) · read-only",
@@ -649,12 +696,11 @@
     "cancel": "Cancel", "save": "Save", "no_voice": "No voice script yet.",
     "write_report": "Write report", "write_hint": "No report yet — you can write your own. After saving, automatic versions won't replace it and go to History instead; the voice script follows what you wrote.",
     "write_template": "# {date} Work log\n\n## Done\n\n- [x] \n\n## In Progress\n\n- [/] \n",
-    "img_insert": "Insert image", "img_alt": "image", "img_uploading": "Uploading image…", "img_inserted": "Image inserted. Put the cursor on the image's line and a width slider appears above the editor",
+    "img_insert": "Insert image", "img_alt": "image", "img_uploading": "Uploading image…", "img_inserted": "Image inserted. Drag the square at its bottom-right corner to resize",
     "img_view": "View image", "img_width": "Image width", "fold": "Fold or unfold",
-    "preview_show": "Show preview", "preview_hide": "Hide preview", "preview_aria": "Preview",
     "zoom_aria": "Page zoom", "zoom_in": "Zoom in", "zoom_out": "Zoom out", "zoom_reset": "Click to reset to 100%",
-    "sidebar_toggle": "Collapse or expand the sidebar",
-    "md_hint": "Works like Obsidian: Enter continues - / 1. / - [ ], Enter on an empty item leaves the list; Tab / Shift+Tab indent; numbers renumber automatically. - [x] done, - [/] and other marks show checked without strikethrough; > [!note]- collapsible callouts; tables, code blocks; paste or drop images.",
+    "sidebar_collapse": "Collapse sidebar", "sidebar_expand": "Expand sidebar",
+    "md_hint": "Renders as you type; only the line your cursor is on shows its Markdown. Enter continues - / 1. / - [ ], Enter on an empty item leaves the list; Tab / Shift+Tab indent; numbers renumber automatically. Click a box to tick it ([x] strikes through, [a] does not); edit tables in place and drag their borders to resize; drag an image's corner to resize; paste or drop images to upload.",
     "toast_write_saved": "Saved. Automatic versions won't replace it; they go to History",
     "version_label": "Version {n} · {kind} · {by} · {time}", "by_human": "Edited by you", "by_model": "Generated",
     "no_history": "No earlier versions.", "no_warnings": "No notes for this run.",
@@ -711,6 +757,8 @@
 }
 </script>
 
+<!-- 日报编辑器。源码 editor/entry.js，产物已提交，部署时不用装 node -->
+<script src="/vendor/cm6/editor.min.js"></script>
 <script>
   const $ = (selector, root=document) => root.querySelector(selector);
   const $$ = (selector, root=document) => [...root.querySelectorAll(selector)];
@@ -735,6 +783,8 @@
     $$('[data-i18n-placeholder]').forEach(el=>{ el.placeholder=t(el.dataset.i18nPlaceholder); });
     $$('[data-i18n-aria]').forEach(el=>{ el.setAttribute('aria-label',t(el.dataset.i18nAria)); });
     $$('[data-lang]').forEach(b=>b.classList.toggle('active',b.dataset.lang===lang));
+    const shell=$('.shell');
+    if(shell&&typeof applySidebar==='function') applySidebar(shell.classList.contains('sidebar-collapsed'),{persist:false});
   }
   function setLang(next){
     lang=next; try{ localStorage.setItem(LANG_KEY,next); }catch(_){}
@@ -879,6 +929,9 @@
     });
     s=s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,'<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
     s=s.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
+    // 斜体要放在加粗后面：先把 ** 收走，剩下的单个 * 才是斜体。~~删除线~~ 一并支持
+    s=s.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g,'$1<em>$2</em>');
+    s=s.replace(/~~([^~\n]+)~~/g,'<del>$1</del>');
     return s.replace(/(\d+)/g,(_,i)=>'<code>'+codes[+i]+'</code>');
   }
 
@@ -911,6 +964,10 @@
 
     for(let i=0;i<lines.length;i++){
       const line=lines[i].replace(/\s+$/,'');
+
+      // 整行的 HTML 注释不显示。编辑器把表格列宽行高存成 <!-- fecho-table ... -->
+      // 跟在表格后面，看日报时不该冒出来
+      if(/^<!--[\s\S]*-->$/.test(line.trim())) continue;
 
       // 代码块：原样显示，里面的符号一律不当标记
       const fence=line.match(FENCE);
@@ -1035,112 +1092,6 @@
 
   // ---- 改日报的编辑框：和 Obsidian 一样，回车延续列表、Tab 缩进、编号自动重排 ----
   // 这几个函数只算文字，不碰页面，方便单独测
-  const LIST_LINE=/^(\s*)(?:([-*+])|(\d+)([.)]))(\s+)(\[.\]\s+)?(.*)$/;
-  const INDENT='  ';
-  const indentWidth=s=>s.replace(/\t/g,'    ').length;
-  function lineBounds(value,pos){ const start=value.lastIndexOf('\n',pos-1)+1; let end=value.indexOf('\n',pos); if(end<0) end=value.length; return [start,end]; }
-  // 只重排光标所在的这一个列表（遇到空行就算另一个列表），每一层从这一层第一项的编号往下数
-  function renumberList(value, caret){
-    const lines=value.split('\n'), row=value.slice(0,caret).split('\n').length-1;
-    const inBlock=line=>line.trim()!==''&&(LIST_LINE.test(line)||/^\s/.test(line));
-    if(!inBlock(lines[row]||'')) return {value, caret};
-    let a=row, b=row;
-    while(a>0&&inBlock(lines[a-1])) a--;
-    while(b<lines.length-1&&inBlock(lines[b+1])) b++;
-    const col=caret-(value.lastIndexOf('\n',caret-1)+1), stack=[];
-    let shift=0;
-    for(let i=a;i<=b;i++){
-      const m=lines[i].match(LIST_LINE); if(!m) continue;
-      const ind=indentWidth(m[1]);
-      while(stack.length&&stack[stack.length-1].indent>ind) stack.pop();
-      let top=stack.length&&stack[stack.length-1].indent===ind?stack[stack.length-1]:null;
-      if(m[3]===undefined){ if(top) top.next=null; else stack.push({indent:ind,next:null}); continue; }
-      let num;
-      if(top&&top.next!==null) num=top.next;
-      else{ num=parseInt(m[3],10); if(top) stack.pop(); top={indent:ind,next:0}; stack.push(top); }
-      top.next=num+1;
-      if(String(num)!==m[3]){
-        const d=String(num).length-m[3].length;
-        if(i<row||(i===row&&col>m[1].length)) shift+=d;
-        lines[i]=m[1]+num+lines[i].slice(m[1].length+m[3].length);
-      }
-    }
-    return {value:lines.join('\n'), caret:caret+shift};
-  }
-  function listEnter(value, start, end){
-    const [ls,le]=lineBounds(value,start);
-    if(end>le) return null;                              // 选中了好几行：按普通回车
-    const line=value.slice(ls,le), m=line.match(LIST_LINE);
-    if(!m) return null;
-    if(start-ls<line.length-m[7].length) return null;    // 光标还在「- [ ] 」这些符号里：按普通回车
-    if(!m[7].trim()&&end===le){                          // 空的一项再按回车：有缩进往外提一层，没缩进就退出列表
-      const lead=m[1].match(/(\t| {1,2})$/);
-      const replaced=lead?line.slice(0,m[1].length-lead[0].length)+line.slice(m[1].length):'';
-      return renumberList(value.slice(0,ls)+replaced+value.slice(le), ls+replaced.length);
-    }
-    const marker=m[2]?m[2]:(parseInt(m[3],10)+1)+m[4];
-    const insert='\n'+m[1]+marker+m[5]+(m[6]?'[ ] ':'');   // 待办接着出一个没做的 [ ]
-    return renumberList(value.slice(0,start)+insert+value.slice(end), start+insert.length);
-  }
-  function listIndent(value, start, end, outdent){
-    const ls=lineBounds(value,start)[0];
-    const le=lineBounds(value, end>start&&value[end-1]==='\n'?end-1:end)[1];
-    const lines=value.slice(ls,le).split('\n');
-    if(!lines.some(line=>LIST_LINE.test(line))) return null;   // 不在列表里：Tab 照常跳到下一个按钮
-    let firstDelta=null, total=0;
-    const changed=lines.map(line=>{
-      let next=line;
-      if(outdent){ const lead=line.match(/^(\t| {1,2})/); if(lead) next=line.slice(lead[0].length); }
-      else if(line.trim()) next=INDENT+line;
-      // 挪到别的层级的编号项先当成 1.：接在同层上一项后面就会被重排成接着数，新开一层就从 1 开始
-      const m=next!==line&&next.match(LIST_LINE);
-      if(m&&m[3]!==undefined&&m[3]!=='1') next=m[1]+'1'+next.slice(m[1].length+m[3].length);
-      const d=next.length-line.length; if(firstDelta===null) firstDelta=d; total+=d;
-      return next;
-    });
-    const v=value.slice(0,ls)+changed.join('\n')+value.slice(le);
-    const s=Math.max(ls,start+firstDelta), e=Math.max(s,end+total);
-    const a=renumberList(v,s), b=renumberList(a.value, e+(a.value.length-v.length));
-    return {value:b.value, start:a.caret, end:Math.max(a.caret,b.caret)};
-  }
-  // 光标所在那一行的图片（光标压在哪张就是哪张，否则取这一行第一张）
-  function imageAtCaret(value, pos){
-    const [ls,le]=lineBounds(value,pos), line=value.slice(ls,le), re=new RegExp(MD_IMG.source,'g');
-    let m, hit=null;
-    while((m=re.exec(line))){ if(!hit) hit=m; if(pos-ls>=m.index&&pos-ls<=m.index+m[0].length){ hit=m; break; } }
-    if(!hit) return null;
-    const parts=hit[1].split('|');
-    const width=parts.length>1&&/^\d+(x\d+)?$/.test(parts[parts.length-1].trim())?parseInt(parts.pop(),10):null;
-    return {start:ls+hit.index, end:ls+hit.index+hit[0].length, alt:parts.join('|'), url:hit[2], width};
-  }
-  // 改动走浏览器自己的输入（execCommand），Cmd+Z 还能撤销；不支持的浏览器直接改值
-  function applyEditorEdit(editor, next, selStart, selEnd){
-    const old=editor.value;
-    if(next!==old){
-      let a=0; while(a<old.length&&a<next.length&&old[a]===next[a]) a++;
-      let b=0; while(b<old.length-a&&b<next.length-a&&old[old.length-1-b]===next[next.length-1-b]) b++;
-      const text=next.slice(a,next.length-b);
-      editor.focus(); editor.setSelectionRange(a,old.length-b);
-      let ok=false; try{ ok=document.execCommand(text?'insertText':'delete',false,text); }catch(_){}
-      if(!ok||editor.value!==next) editor.value=next;
-    }
-    editor.setSelectionRange(selStart,selEnd);
-  }
-  // 预览默认关着；开着的时候边写边更新。开关状态记在这台电脑的浏览器里
-  const PREVIEW_KEY='fecho-preview';
-  state.preview=(()=>{ try{ return localStorage.getItem(PREVIEW_KEY)==='1'; }catch(_){ return false; } })();
-  let previewTimer=null;
-  function updatePreview(){
-    const editor=$('#report-editor'), preview=$('#report-preview');
-    if(!editor||!preview||!state.preview) return;
-    preview.innerHTML=md(editor.value); enhanceMd(preview);
-  }
-  function syncImageSize(){
-    const editor=$('#report-editor'), row=$('#img-size'); if(!editor||!row) return;
-    const img=imageAtCaret(editor.value, editor.selectionStart);
-    row.hidden=!img; if(!img) return;
-    const width=img.width||480; $('#img-width').value=width; $('#img-width-value').textContent=width+'px';
-  }
   function openLightbox(src, alt){
     let box=$('#lightbox');
     if(!box){ box=document.createElement('div'); box.id='lightbox'; box.className='lightbox'; box.setAttribute('role','dialog'); box.setAttribute('aria-modal','true'); box.innerHTML='<img alt="">'; document.body.appendChild(box); }
@@ -1152,16 +1103,14 @@
   async function uploadReportImages(files){
     if(state.viewAs){ toast(t('toast_readonly'),null,true); return; }
     for(const file of files){
-      const editor=$('#report-editor'); if(!editor) return;
       try{
         if(!FB_TYPES.test(file.type)) throw new Error(t('fb_bad_type'));
         toast(t('img_uploading'));
         const blob=file.size<=FB_TARGET_BYTES?file:await shrinkImage(file);
         const dataUrl=await readAsDataURL(blob);
         const r=await post('/api/reports/images',{data:dataUrl.split(',')[1]});
-        const at=editor.selectionStart, before=editor.value.slice(0,at);
-        editor.setRangeText((before&&!before.endsWith('\n')?'\n':'')+`![${t('img_alt')}|480](${r.url})\n`, at, editor.selectionEnd, 'end');
-        editor.focus(); syncImageSize(); toast(t('img_inserted'));
+        FechoEditor.insert(`![${t('img_alt')}|480](${r.url})`);
+        toast(t('img_inserted'));
       }catch(error){ toast(error.message,null,true); }
     }
   }
@@ -1182,7 +1131,7 @@
     const updates=(state.data.overview||{}).updates||0;
     const noDaily=updates ? t('no_daily_with_updates',{n:updates}) : t('no_daily_empty');
     if(state.reportTab==='daily') html=state.editing
-      ?`<div class="report-edit"><div class="button-row" style="justify-content:space-between;align-items:center"><p class="meta" style="margin:0;flex:1">${esc(t(report.daily?'edit_hint':'write_hint'))}</p><button class="btn small" type="button" id="toggle-preview">${esc(t(state.preview?'preview_hide':'preview_show'))}</button><button class="btn small" type="button" id="insert-image">${esc(t('img_insert'))}</button></div><input type="file" id="report-image-file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden><div class="img-size" id="img-size" hidden><span>${esc(t('img_width'))}</span><input type="range" id="img-width" min="80" max="1200" step="10" aria-label="${esc(t('img_width'))}"><output id="img-width-value"></output></div><div class="edit-split${state.preview?'':' off'}" id="edit-split"><textarea id="report-editor" class="report-editor" aria-label="${esc(t('edit_aria'))}">${esc(report.daily||t('write_template',{date:state.data.date}))}</textarea><div class="md-preview" id="report-preview" aria-label="${esc(t('preview_aria'))}"></div></div><p class="meta" style="margin:0">${esc(t('md_hint'))}</p><div class="button-row"><button class="btn" id="cancel-edit">${esc(t('cancel'))}</button><button class="btn primary" id="save-edit">${esc(t('save'))}</button></div></div>`
+      ?`<div class="report-edit"><p class="meta edit-hint">${esc(t(report.daily?'edit_hint':'write_hint'))}</p><div class="report-editor" id="report-editor" aria-label="${esc(t('edit_aria'))}"></div><input type="file" id="report-image-file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden><div class="button-row"><button class="btn small" type="button" id="insert-image">${esc(t('img_insert'))}</button><span class="md-hint" title="${esc(t('md_hint'))}">${esc(t('md_hint'))}</span><button class="btn" id="cancel-edit">${esc(t('cancel'))}</button><button class="btn primary" id="save-edit">${esc(t('save'))}</button></div></div>`
       :(report.daily?md(report.daily):empty(noDaily));
     if(state.reportTab==='voice') html=report.voice?md(report.voice):empty(t('no_voice'));
     if(state.reportTab==='history') html=report.history.length
@@ -1195,8 +1144,13 @@
     if(state.reportHtml===html) return;
     state.reportHtml=html;
     state.reportSig=hashText(html);
+    FechoEditor.destroy();                    // 重画前先把上一个编辑器拆掉，不然事件和 DOM 都留着
     $('#report-content').innerHTML=html;
-    if(state.editing&&state.reportTab==='daily') updatePreview();
+    if(state.editing&&state.reportTab==='daily'){
+      FechoEditor.create($('#report-editor'), report.daily||t('write_template',{date:state.data.date}),
+                         {onImages:uploadReportImages});
+      FechoEditor.focus();
+    }
     else { enhanceMd($('#report-content')); restoreFolds($('#report-content')); }
   }
 
@@ -1241,15 +1195,7 @@
     if(zoomBtn){ stepZoom(zoomBtn.dataset.zoom==='in'?1:-1); return; }
     if(event.target.closest('#zoom-level')){ applyZoom(1); return; }          // 点百分比恢复 100%
     if(event.target.closest('#sidebar-toggle')){
-      applySidebar(!document.documentElement.classList.contains('sidebar-collapsed')); return;
-    }
-    if(event.target.closest('#toggle-preview')){
-      state.preview=!state.preview;
-      try{ localStorage.setItem(PREVIEW_KEY, state.preview?'1':'0'); }catch(_){}
-      const split=$('#edit-split'); if(split) split.classList.toggle('off',!state.preview);
-      $('#toggle-preview').textContent=t(state.preview?'preview_hide':'preview_show');
-      updatePreview();
-      return;
+      applySidebar(!$('.shell').classList.contains('sidebar-collapsed')); return;
     }
     const langButton=event.target.closest('[data-lang]'); if(langButton){ if(langButton.dataset.lang!==lang) setLang(langButton.dataset.lang); return; }
     const nav=event.target.closest('[data-view]'); if(nav){switchView(nav.dataset.view);return;}
@@ -1258,11 +1204,11 @@
     const decide=event.target.closest('[data-decide]');
     if(decide){ decide.disabled=true; try{ await post(`/api/admin/requests/${encodeURIComponent(decide.dataset.decide)}`,{approve:decide.dataset.approve==='1'}); toast(t(decide.dataset.approve==='1'?'toast_approved':'toast_denied')); await loadAdmin(); }catch(error){toast(error.message,null,true);} finally{decide.disabled=false;} return; }
     if(event.target.closest('#request-admin')){ try{ await post('/api/admin/request',{}); state.me=await request('/api/me'); renderSettings(); toast(t('toast_requested')); }catch(error){toast(error.message,null,true);} return; }
-    if(event.target.closest('#edit-report')){ if(state.viewAs){toast(t('toast_readonly'),null,true);return;} state.editing=true; state.reportTab='daily'; renderReports(); const editor=$('#report-editor'); if(editor) editor.focus(); return; }
+    if(event.target.closest('#edit-report')){ if(state.viewAs){toast(t('toast_readonly'),null,true);return;} state.editing=true; state.reportTab='daily'; renderReports(); FechoEditor.focus(); return; }
     if(event.target.closest('#cancel-edit')){ state.editing=false; renderReports(); return; }
     const saveEdit=event.target.closest('#save-edit');
     if(saveEdit){ saveEdit.disabled=true;
-      try{ const r=await post('/api/reports/daily',{date:state.data.date,content_md:$('#report-editor').value}); state.editing=false; state.data=r.dashboard; renderAll();
+      try{ const r=await post('/api/reports/daily',{date:state.data.date,content_md:FechoEditor.value()}); state.editing=false; state.data=r.dashboard; renderAll();
         toast(t(r.saved.status==='unchanged'?'toast_unchanged':r.saved.new?'toast_write_saved':'toast_edit_saved')); if(state.me&&state.me.cloud) loadStyle().catch(()=>{}); }
       catch(error){ saveEdit.disabled=false; toast(error.message,null,true); }
       return; }
@@ -1510,51 +1456,8 @@
     finally{ button.disabled=false; }
   });
 
-  // 改日报：和 Obsidian 一样，回车延续列表、Tab 缩进、编号自动重排；粘贴、拖入、按钮选图都会先传图再把地址写进原文
-  document.addEventListener('keydown',event=>{
-    if(event.key==='Escape') closeLightbox();
-    const editor=event.target; if(!editor||editor.id!=='report-editor') return;
-    if(event.isComposing||event.keyCode===229) return;       // 中文输入法正在选字：回车是确认候选词，不是换行
-    if(event.altKey||event.metaKey||event.ctrlKey) return;
-    let r=null;
-    if(event.key==='Enter'&&!event.shiftKey){ const x=listEnter(editor.value,editor.selectionStart,editor.selectionEnd); if(x) r={value:x.value,start:x.caret,end:x.caret}; }
-    else if(event.key==='Tab') r=listIndent(editor.value,editor.selectionStart,editor.selectionEnd,event.shiftKey);
-    if(!r) return;
-    event.preventDefault(); applyEditorEdit(editor,r.value,r.start,r.end); syncImageSize();
-  });
-  document.addEventListener('input',event=>{
-    if(event.target.id==='report-editor'){
-      const editor=event.target;
-      // 删掉一项、粘进来几行之后，把这一个列表的编号重排
-      if(/^(delete|insertFromPaste|insertFromDrop)/.test(event.inputType||'')){
-        const r=renumberList(editor.value,editor.selectionStart);
-        if(r.value!==editor.value) applyEditorEdit(editor,r.value,r.caret,r.caret);
-      }
-      syncImageSize();
-      clearTimeout(previewTimer); previewTimer=setTimeout(updatePreview,150);
-      return;
-    }
-    // 光标在图片那一行时，拖宽度滑块直接改原文里的 |宽度
-    if(event.target.id==='img-width'){
-      const editor=$('#report-editor'); if(!editor) return;
-      const img=imageAtCaret(editor.value,editor.selectionStart); if(!img) return;
-      const width=parseInt(event.target.value,10);
-      editor.setRangeText(`![${img.alt}|${width}](${img.url})`, img.start, img.end, 'start');
-      editor.setSelectionRange(img.start,img.start);
-      $('#img-width-value').textContent=width+'px';
-    }
-  });
-  ['keyup','mouseup'].forEach(type=>document.addEventListener(type,event=>{ if(event.target.id==='report-editor') syncImageSize(); }));
-  document.addEventListener('paste',event=>{
-    if(event.target.id!=='report-editor') return;
-    const files=[...((event.clipboardData||{}).files||[])].filter(file=>file.type.startsWith('image/'));
-    if(files.length){ event.preventDefault(); uploadReportImages(files); }
-  });
-  document.addEventListener('dragover',event=>{ if(event.target.id==='report-editor'&&hasFiles(event)) event.preventDefault(); });
-  document.addEventListener('drop',event=>{
-    if(event.target.id!=='report-editor'||!hasFiles(event)) return;
-    event.preventDefault(); uploadReportImages([...event.dataTransfer.files].filter(file=>file.type.startsWith('image/')));
-  });
+  // 改日报的键盘行为（回车续写列表、Tab 缩进、编号重排）和贴图都在编辑器里做，见 editor/entry.js
+  document.addEventListener('keydown',event=>{ if(event.key==='Escape') closeLightbox(); });
   document.addEventListener('change',event=>{ if(event.target.id!=='report-image-file') return; uploadReportImages([...event.target.files]); event.target.value=''; });
 
   // 页面放大缩小 + 侧边栏收起：都记在这台电脑的浏览器里，下次进来还是上次那样
@@ -1572,16 +1475,30 @@
     let i=ZOOM_STEPS.indexOf(now); if(i<0) i=ZOOM_STEPS.indexOf(1);
     applyZoom(ZOOM_STEPS[Math.max(0,Math.min(ZOOM_STEPS.length-1,i+delta))]);
   }
-  function applySidebar(collapsed){
-    document.documentElement.classList.toggle('sidebar-collapsed',collapsed);
-    const button=$('#sidebar-toggle'); if(button) button.setAttribute('aria-expanded',String(!collapsed));
-    try{ localStorage.setItem(SIDEBAR_KEY,collapsed?'1':'0'); }catch(_){}
+  // 收起 / 展开都记在这台电脑上。窄屏没存过就默认收着——那一档本来就放不下宽侧边栏
+  function applySidebar(collapsed,{persist=true}={}){
+    const shell=$('.shell'); if(!shell) return;
+    shell.classList.toggle('sidebar-collapsed',collapsed);
+    shell.classList.toggle('sidebar-expanded',!collapsed);
+    const button=$('#sidebar-toggle');
+    if(button){
+      const key=collapsed?'sidebar_expand':'sidebar_collapse';
+      button.setAttribute('aria-expanded',String(!collapsed));
+      button.setAttribute('aria-label',t(key)); button.setAttribute('title',t(key));
+      const label=$('.sr-only',button); if(label) label.textContent=t(key);
+    }
+    if(persist){ try{ localStorage.setItem(SIDEBAR_KEY,collapsed?'1':'0'); }catch(_){} }
   }
   (()=>{
-    let zoom=1, collapsed=false;
-    try{ zoom=parseFloat(localStorage.getItem(ZOOM_KEY))||1; collapsed=localStorage.getItem(SIDEBAR_KEY)==='1'; }catch(_){}
+    let zoom=1, collapsed=null;
+    try{
+      zoom=parseFloat(localStorage.getItem(ZOOM_KEY))||1;
+      const saved=localStorage.getItem(SIDEBAR_KEY);
+      if(saved==='1'||saved==='0') collapsed=saved==='1';
+    }catch(_){}
+    if(collapsed===null) collapsed=window.matchMedia('(max-width:900px)').matches;
     applyZoom(ZOOM_STEPS.includes(zoom)?zoom:1);
-    applySidebar(collapsed);
+    applySidebar(collapsed,{persist:false});
   })();
 
   applyStatic();
