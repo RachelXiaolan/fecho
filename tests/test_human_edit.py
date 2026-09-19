@@ -1,6 +1,8 @@
 """人亲手改日报：旧版进历史、不被自动覆盖、按改动学写作偏好、按新日报重出口播稿。"""
 import _env  # noqa: F401  必须在 import fecho 之前
+import inspect
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from fecho import accounts, config, db, digest, jobs, llm, pto, store, style, web, worker  # noqa: E402
@@ -246,6 +248,34 @@ class TestPageContract(unittest.TestCase):
     def test_edit_and_style_controls_exist(self):
         for needle in ('id="edit-report"', "/api/reports/daily", 'id="style-editor"', "/api/style"):
             self.assertIn(needle, self.html)
+
+    def test_editor_bundle_is_cache_busted(self):
+        """产物文件名不变，不挂版本号浏览器会一直用缓存里的旧编辑器。
+
+        版本号是返回页面时替进去的，所以这里连 web 一起验。
+        """
+        from fecho import __version__, web
+        self.assertIn('src="/vendor/cm6/editor.min.js"', self.html)
+        source = inspect.getsource(web.build_app)
+        self.assertIn("/vendor/cm6/editor.min.js?v=", source,
+                      "返回页面时要给编辑器产物挂上版本号")
+        self.assertIn("__version__", source)
+
+    def test_editor_skips_empty_mark_decorations(self):
+        """空的 mark 装饰会让 CM6 抛错，并把整个渲染层停掉。
+
+        真实事故：手写日报的模板里有 `- [x] `——勾选框后面是空的。给「做完」画删除线时
+        范围起终点重合，CM6 抛 RangeError，插件被停掉，结果一个标记都不渲染，
+        `#` `##` `[ ]` 全是原文。新的一天点「手动写日报」必中。
+
+        修法是渲染层容错（谁手打一个空的 `- [x] ` 都会踩，不只是模板），所以这里钉的是
+        渲染层的防护，不是禁止模板出现这种写法。
+        """
+        entry = (Path(__file__).resolve().parents[1] / "editor" / "entry.js").read_text(encoding="utf-8")
+        self.assertIn("deco.point === false", entry,
+                      "add() 要跳过零长度的 mark 装饰")
+        self.assertIn("bodyFrom < line.to", entry,
+                      "勾选框后面没字就别画删除线")
 
     def test_auto_refresh_does_not_wipe_what_you_are_typing(self):
         body = self.html[self.html.index("function renderReports"):]

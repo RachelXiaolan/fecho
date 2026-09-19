@@ -920,7 +920,11 @@ def build_app():
         from pathlib import Path
         if config.CLOUD and not _signed_in(request):
             return RedirectResponse("/login", status_code=302)
-        return (Path(__file__).resolve().parent / "presets" / "dashboard.html").read_text(encoding="utf-8")
+        html = (Path(__file__).resolve().parent / "presets" / "dashboard.html").read_text(encoding="utf-8")
+        # 编辑器产物的文件名不变，浏览器会一直吃缓存里的旧版本。挂上版本号，
+        # 升级之后必定重新取——不然同事升级了也还在用旧编辑器
+        return html.replace("/vendor/cm6/editor.min.js",
+                            "/vendor/cm6/editor.min.js?v=" + __version__)
 
     return app
 

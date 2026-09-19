@@ -55,7 +55,12 @@ function blockDecorations(view, active, add) {
         const mark = m[4]
         const done = /^[xX]$/.test(mark), checked = mark !== ' '
         add(line.from, line.from, Decoration.line({class: 'md-task'}))
-        if (done && !on) add(line.from + m[0].length, line.to, Decoration.mark({class: 'md-task-done'}))
+        // 后面还有字才划掉。`- [x] ` 这种空的一项范围是零长度，
+        // CM6 不收空的 mark 装饰，会连累整个渲染层被禁用
+        const bodyFrom = line.from + m[0].length
+        if (done && !on && bodyFrom < line.to) {
+          add(bodyFrom, line.to, Decoration.mark({class: 'md-task-done'}))
+        }
         if (!on) {
           const indent = line.from + m[1].length
           const markerEnd = indent + m[2].length + m[3].length
@@ -480,7 +485,12 @@ const livePreview = ViewPlugin.fromClass(class {
   build(view) {
     const active = view.hasFocus ? activeLines(view.state) : new Set()
     const items = []
-    const add = (from, to, deco, block) => items.push({from, to, deco, block})
+    // 零长度的 mark 装饰会让 CM6 抛错、把整个插件停掉，整页就一个标记都不渲染了。
+    // deco.point 是 CM6 自己的判别：mark 是 false，widget 和行装饰是 true（它们本来就可以零长）
+    const add = (from, to, deco, block) => {
+      if (from === to && deco.point === false) return
+      items.push({from, to, deco, block})
+    }
     blockDecorations(view, active, add)
     inlineDecorations(view, active, add)
     foldArrows(view, add)
