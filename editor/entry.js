@@ -200,7 +200,8 @@ function inlineDecorations(view, active, add) {
             add(node.from + 1 + m[1].length, node.to, Decoration.replace({}))
             add(node.from + 1, node.from + 1 + m[1].length, Decoration.mark({class: 'md-link'}))
           }
-          return false
+          // 这里**不能**停下：链接文字里还可能有 **加粗**、`代码`，
+          // 不往下走的话那些标记永远藏不掉，光标没过去也露着原文
         }
       },
     })
@@ -708,7 +709,7 @@ const theme = EditorView.theme({
   '.md-fold': {position: 'absolute', left: '4px', color: 'var(--muted)', cursor: 'pointer',
     opacity: '0', transition: 'opacity .12s', fontSize: '15px', lineHeight: '1.2'},
   '.cm-line:hover .md-fold, .md-fold.folded': {opacity: '1'},
-  '.md-strong': {fontWeight: '700', color: 'var(--ink)'},
+  '.md-strong': {fontWeight: '700'},        // 不定颜色：链接里的加粗要保持链接色
   '.md-em': {fontStyle: 'italic'},
   '.md-strike': {textDecoration: 'line-through', color: 'var(--muted)'},
   '.md-code': {fontFamily: 'ui-monospace,SFMono-Regular,Menlo,monospace',
