@@ -1,4 +1,4 @@
-import {EditorState, StateField, Prec} from '@codemirror/state'
+import {EditorState, StateField, Prec, EditorSelection} from '@codemirror/state'
 import {EditorView, Decoration, WidgetType, ViewPlugin, keymap, drawSelection, highlightActiveLine} from '@codemirror/view'
 import {defaultKeymap, history, historyKeymap, indentMore, indentLess} from '@codemirror/commands'
 import {markdown, markdownLanguage} from '@codemirror/lang-markdown'
@@ -330,6 +330,11 @@ function buildTableDOM(raw, sizes) {
     if (!table.contains(e.relatedTarget)) commit()
   })
   table.addEventListener('keydown', (e) => {
+    // 格子是 contenteditable，⌘B 会被浏览器接管、插一个 <b> 标签进来；
+    // 而写回原文时只读纯文本，那层格式会悄无声息地消失。宁可不让它生效
+    if ((e.metaKey || e.ctrlKey) && 'biu'.includes(e.key.toLowerCase())) {
+      e.preventDefault(); return
+    }
     if (e.key === 'Enter') { e.preventDefault(); return }          // 单元格就一行
     if (e.key === 'Tab') {                                          // Tab 在单元格之间走
       const all = [...table.querySelectorAll('th,td')]
@@ -659,6 +664,40 @@ const autoRenumber = EditorView.updateListener.of((u) => {
   })
 })
 
+// ---------- 加粗 / 斜体这类快捷键 ----------
+// CM6 默认没有这些，得自己接。选中了就把两头包上标记，已经包着的再按一次去掉；
+// 没选中就插一对标记、光标落中间，接着打字就是粗的
+const wrapWith = (marker) => (view) => {
+  const len = marker.length
+  view.dispatch(view.state.changeByRange((range) => {
+    const {from, to} = range
+    const doc = view.state.doc
+    const inside = doc.sliceString(from, to)
+    // 选中的就是「**文字**」：把里面那层扒掉
+    if (inside.length >= 2 * len && inside.startsWith(marker) && inside.endsWith(marker)) {
+      return {
+        changes: {from, to, insert: inside.slice(len, inside.length - len)},
+        range: EditorSelection.range(from, to - 2 * len),
+      }
+    }
+    // 只选中了文字、标记在外面：「**[文字]**」
+    const before = doc.sliceString(Math.max(0, from - len), from)
+    const after = doc.sliceString(to, Math.min(doc.length, to + len))
+    if (before === marker && after === marker) {
+      return {
+        changes: [{from: from - len, to: from}, {from: to, to: to + len}],
+        range: EditorSelection.range(from - len, to - len),
+      }
+    }
+    return {
+      changes: {from, to, insert: marker + inside + marker},
+      range: range.empty ? EditorSelection.cursor(from + len)
+                         : EditorSelection.range(from + len, to + len),
+    }
+  }))
+  return true
+}
+
 // 配色全部走 CSS 变量：明暗切换时变量变了样式就跟着变，编辑器不用重建
 const theme = EditorView.theme({
   '&': {backgroundColor: 'var(--surface)', color: 'var(--ink)', fontSize: '14.5px'},
@@ -788,6 +827,10 @@ window.FechoEditor = {
           // markdown() 自带一套 Prec.high 的回车绑定（insertNewlineContinueMarkup），
           // 规则和我们要的 Obsidian 行为不一样，所以这里必须用 highest 压过它
           Prec.highest(keymap.of([
+            {key: 'Mod-b', run: wrapWith('**')},                 // 加粗
+            {key: 'Mod-i', run: wrapWith('*')},                  // 斜体
+            {key: 'Mod-e', run: wrapWith('`')},                  // 行内代码
+            {key: 'Mod-Shift-x', run: wrapWith('~~')},           // 删除线
             {key: 'Enter', run: listOnEnter},                    // 列表行回车自动接着写
             {key: 'Tab', run: listOnTab(false), shift: listOnTab(true)},
             {key: 'Tab', run: indentMore, shift: indentLess},    // 不在列表里就是普通缩进
