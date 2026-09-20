@@ -39,6 +39,17 @@
    from fecho import db; db.init(); print('建好', len(db.table_names()), '张表')"
    ```
 
+### 改了 SQL 之后（每次都要做）
+
+本机测试跑的是 SQLite，线上是 Postgres，两边的方言不一样。动过任何 SQL 就跑一次：
+
+```bash
+.venv/bin/python scripts/test_postgres.py -q
+```
+
+它会起一个临时 Postgres 把全部测试跑一遍。0.9.1 就是没跑这个，
+`CASE WHEN ? THEN`（SQLite 认、Postgres 要布尔）一路推到线上，点「隐藏文件夹」当场 500。
+
 ### 改了表结构之后（每次都要做）
 
 网站那边（`api/index.py`）**不建表**：它每来一个请求就在一个短命的小进程里跑一次，

@@ -149,6 +149,24 @@ class TestWhitelist(ScanCase):
         cloudscan.dismiss(A, [WORK])
         self.assertNotIn(WORK, cloudscan.selected_folders(A))
 
+    def test_hiding_uses_plain_sql_that_postgres_accepts(self):
+        """别用只有 SQLite 认的写法。
+
+        0.9.1 那版把「标记隐藏」和「取消勾选」塞进一句
+        `SET dismissed=?, selected=CASE WHEN ? THEN selected ELSE 0 END`。
+        SQLite 收整数当条件，Postgres 要布尔，线上点「隐藏」当场 500——
+        而本机测试跑的是 SQLite，一路放行。
+
+        真正的防线是 `scripts/test_postgres.py`（动过 SQL 就跑一次）；
+        这条只是把「隐藏必须顺手取消勾选」钉住，免得以后拆 SQL 时丢掉。
+        """
+        import inspect
+        # 先把注释去掉——讲这段历史的注释本身就带着那串字
+        code = "\n".join(line for line in inspect.getsource(cloudscan).splitlines()
+                         if not line.strip().startswith("#"))
+        self.assertNotIn("CASE WHEN ?", code,
+                         "CASE WHEN 的条件在 Postgres 上必须是布尔，别传整数")
+
     def test_removed_folders_can_be_put_back(self):
         junk = "/Users/alice/tmp"
         cloudscan.report_folders(A, [{"path": junk}])

@@ -3,6 +3,24 @@
 版本号写在 `pyproject.toml` 和 `fecho/__init__.py`，两处要一致。每个版本在 git 上打 `vX.Y.Z` 标签。
 按框架环节标注：①采集 ②归属 ③存储 ④整理 ⑤交付 ⑥登录·运行时。
 
+## 0.9.2 · 2026-09-20
+
+### ⑤ 交付
+
+- **修：线上点「隐藏这个文件夹」500。** 那条 SQL 用了 `CASE WHEN ? THEN` 一步到位，
+  SQLite 认，Postgres 不认——它要的是布尔，给整数直接
+  `DatatypeMismatch: argument of CASE/WHEN must be type boolean`。拆成两句，不依赖方言。
+
+### 记一笔
+
+- **这个 bug 本可以在本机拦住**：仓库里早有 `scripts/test_postgres.py`，
+  能在一个临时 Postgres 上把全部测试跑一遍，专门防这种方言差异。
+  写 0.9.1 时只跑了 SQLite 那套就推上线了。以后**动到 SQL 就要跑一次**：
+
+  ```
+  .venv/bin/python scripts/test_postgres.py -q
+  ```
+
 ## 0.9.1 · 2026-09-20
 
 ### ⑤ 交付 · 工作文件夹不再是一长条

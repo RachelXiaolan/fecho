@@ -182,11 +182,15 @@ def dismiss(author: str, paths: Iterable[str], restore: bool = False) -> Dict[st
     n = 0
     with db.cursor() as conn:
         for path in want:
+            # 分成两句写。原来那句用 CASE WHEN ? THEN 一步到位，SQLite 认、Postgres 不认
+            # （它要的是布尔，给整数会 DatatypeMismatch）——线上因此 500 过一次
             cur = conn.execute(
-                "UPDATE work_folders SET dismissed=?, selected=CASE WHEN ? THEN selected ELSE 0 END"
-                " WHERE author=? AND path=?",
-                (0 if restore else 1, 1 if restore else 0, author, path))
+                "UPDATE work_folders SET dismissed=? WHERE author=? AND path=?",
+                (0 if restore else 1, author, path))
             n += cur.rowcount if getattr(cur, "rowcount", 0) and cur.rowcount > 0 else 0
+            if not restore:                      # 隐藏的同时取消勾选：看不见的文件夹不该还在扫
+                conn.execute("UPDATE work_folders SET selected=0 WHERE author=? AND path=?",
+                             (author, path))
     return {"dismissed": n, "items": folders_of(author)}
 
 
