@@ -354,7 +354,8 @@
       border-radius:6px;font-size:15px;line-height:1;padding:0;opacity:0;flex:none}
     .folder:hover .folder-drop,.folder-drop:focus-visible{opacity:1}
     .folder-drop:hover{background:var(--danger-bg);color:var(--danger)}
-    .folder-group{background:var(--surface-alt)}
+    .folder-group{background:var(--surface-alt);grid-template-columns:16px auto minmax(0,1fr) auto auto;gap:10px}
+    .folder-tally{font-variant-numeric:tabular-nums}
     .folder-toggle{border:0;background:transparent;color:var(--muted);width:16px;height:16px;
       padding:0;font-size:10px;line-height:1;transition:transform .12s}
     .folder-toggle.open{transform:rotate(90deg)}
@@ -622,7 +623,7 @@
     "folders_heading": "工作文件夹", "folders_sub": "只有勾选的文件夹里的对话会被扫描；没勾的，对话连打开都不会打开。",
     "folders_count": "已勾选 {picked} / {total}", "folder_last_used": "最近 {date}",
     "folder_drop": "从清单里移除", "folder_restore": "放回清单", "folder_drop_group": "把这一组都移除",
-    "folders_in_group": "{n} 个", "folders_in_group_picked": "勾了 {n}",
+    "folder_pick_group": "这一组全勾上 / 全取消",
     "folders_dropped": "已移除 {n} 个（本机再上报也不会回来）", "show": "显示", "hide": "收起",
     "toast_folder_dropped": "已移除 {n} 个。本机下次上报不会再把它们加回来",
     "toast_folder_restored": "已放回清单",
@@ -763,7 +764,7 @@
     "folders_heading": "Work folders", "folders_sub": "Only conversations in checked folders are scanned; unchecked folders are never even opened.",
     "folders_count": "{picked} of {total} selected", "folder_last_used": "Last used {date}",
     "folder_drop": "Remove from the list", "folder_restore": "Put back", "folder_drop_group": "Remove the whole group",
-    "folders_in_group": "{n}", "folders_in_group_picked": "{n} ticked",
+    "folder_pick_group": "Tick or untick the whole group",
     "folders_dropped": "{n} removed (local capture won't bring them back)", "show": "Show", "hide": "Hide",
     "toast_folder_dropped": "Removed {n}. Local capture won't add them back",
     "toast_folder_restored": "Back in the list",
@@ -1452,9 +1453,12 @@
     const html=folderTree(items).map(({key,list})=>{
       if(list.length===1) return row(list[0]);
       const shown=open.has(key), n=list.filter(f=>f.selected).length;
+      // 组头那个勾选框管整组：全勾上就是勾上，勾了一部分是半选（打开后取消某个就会变成这样）
       const head=`<div class="folder folder-group"><button type="button" class="folder-toggle${shown?' open':''}" data-group="${esc(key)}" aria-expanded="${shown}">▸</button>`
+        +`<input type="checkbox" data-group-tick="${esc(key)}" ${n===list.length?'checked':''}`
+        +` aria-label="${esc(t('folder_pick_group'))}" title="${esc(t('folder_pick_group'))}">`
         +`<span class="folder-path">${esc(key)}</span>`
-        +`<span class="meta" style="margin:0">${esc(t('folders_in_group',{n:list.length}))}${n?' · '+esc(t('folders_in_group_picked',{n})):''}</span>`
+        +`<span class="meta folder-tally" style="margin:0">${n}/${list.length}</span>`
         +drop(key,t('folder_drop_group'))+`</div>`;
       if(!shown) return head;
       // 展开后子项只显示组名之后的那一截，全路径放 title 里
@@ -1463,6 +1467,12 @@
     }).join('');
 
     $('#folder-list').innerHTML=items.length?html:empty(t('folders_empty'),t('folders_empty_sub'));
+    // 半选（indeterminate）没有对应的 HTML 属性，只能画完再设一遍
+    $$('[data-group-tick]').forEach(box=>{
+      const list=items.filter(f=>folderGroup(f.path)===box.dataset.groupTick);
+      const n=list.filter(f=>f.selected).length;
+      box.indeterminate=n>0&&n<list.length;
+    });
     renderDroppedFolders();
   }
   // 移除掉的单独一块，默认收着——列表本来就长，别再添乱
@@ -1520,6 +1530,14 @@
       try{ await post(`/api/agents/${encodeURIComponent(toggle.dataset.agentToggle)}`,{scan_enabled:on}); await loadSettings(); toast(t(on?'toast_scan_on':'toast_scan_off')); }
       catch(error){ toggle.checked=!on; toggle.disabled=false; toast(error.message,null,true); }
       return; }
+    const groupTick=event.target.closest('[data-group-tick]');
+    if(groupTick){
+      const key=groupTick.dataset.groupTick;
+      const list=state.settings.folders.filter(f=>folderGroup(f.path)===key);
+      const on=groupTick.checked;                       // 半选时点一下会变成全选
+      list.forEach(f=>{ f.selected=on; });
+      renderFolders(); return;
+    }
     const folder=event.target.closest('[data-folder]');
     if(folder){ const item=state.settings.folders.find(f=>f.path===folder.dataset.folder); if(item) item.selected=folder.checked; renderFolders(); }
   });
