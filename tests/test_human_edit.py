@@ -277,6 +277,20 @@ class TestPageContract(unittest.TestCase):
         self.assertIn("bodyFrom < line.to", entry,
                       "勾选框后面没字就别画删除线")
 
+    def test_folder_list_groups_by_the_fourth_level(self):
+        """工作文件夹按第 4 级分组折叠。
+
+        自动扫出来的动辄上百个（线上 tony 198 个、kaz 83 个），摊开根本看不过来。
+        /Users/你/Documents/work 底下那一堆收成一行，点开才展开。
+        """
+        body = self.html[self.html.index("const FOLDER_DEPTH"):]
+        body = body[:body.index("function renderDroppedFolders")]
+        self.assertIn("FOLDER_DEPTH=4", body.replace(" ", ""), "第 4 级开始分组")
+        self.assertIn("path.startsWith('/')?'/':''", body.replace(" ", ""),
+                      "Windows 路径是 C:/… ，开头没有斜杠，拼回去时别硬加")
+        self.assertIn("list.length===1", body.replace(" ", ""),
+                      "组里只有一个就直接平铺，不必为它套一层")
+
     def test_auto_refresh_does_not_wipe_what_you_are_typing(self):
         body = self.html[self.html.index("function renderReports"):]
         body = body[:body.index("function renderSystem")]

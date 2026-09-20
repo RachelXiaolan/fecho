@@ -354,6 +354,12 @@
       border-radius:6px;font-size:15px;line-height:1;padding:0;opacity:0;flex:none}
     .folder:hover .folder-drop,.folder-drop:focus-visible{opacity:1}
     .folder-drop:hover{background:var(--danger-bg);color:var(--danger)}
+    .folder-group{background:var(--surface-alt)}
+    .folder-toggle{border:0;background:transparent;color:var(--muted);width:16px;height:16px;
+      padding:0;font-size:10px;line-height:1;transition:transform .12s}
+    .folder-toggle.open{transform:rotate(90deg)}
+    .folder-kids .folder{padding-left:34px;background:var(--surface)}
+    .folder-kids .folder-path{color:var(--ink-soft)}
     .folder.gone{opacity:.55}
     .folder.gone .folder-path{text-decoration:line-through}
     .folders-gone{padding:12px 18px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
@@ -615,9 +621,10 @@
     "agent_note_claude": "含桌面版和命令行的 Code 对话；扫描用命令行 claude 的登录和配置", "entry_claude-desktop": "桌面版", "entry_cli": "命令行",
     "folders_heading": "工作文件夹", "folders_sub": "只有勾选的文件夹里的对话会被扫描；没勾的，对话连打开都不会打开。",
     "folders_count": "已勾选 {picked} / {total}", "folder_last_used": "最近 {date}",
-    "folder_drop": "从清单里移除", "folder_restore": "放回清单",
+    "folder_drop": "从清单里移除", "folder_restore": "放回清单", "folder_drop_group": "把这一组都移除",
+    "folders_in_group": "{n} 个", "folders_in_group_picked": "勾了 {n}",
     "folders_dropped": "已移除 {n} 个（本机再上报也不会回来）", "show": "显示", "hide": "收起",
-    "toast_folder_dropped": "已移除。本机下次上报不会再把它加回来",
+    "toast_folder_dropped": "已移除 {n} 个。本机下次上报不会再把它们加回来",
     "toast_folder_restored": "已放回清单",
     "folders_empty": "还没有上报的文件夹", "folders_empty_sub": "本机采集装好后，用 agent 干过活的文件夹会自动出现在这里。也可以在下面手动添加。",
     "folder_add_placeholder": "手动加一个文件夹的完整路径，比如 /Users/you/work 或 C:\\Users\\you\\work", "folder_add_aria": "手动添加文件夹",
@@ -755,9 +762,10 @@
     "agent_note_claude": "Covers Code sessions from both the desktop app and the CLI; scanning uses the CLI's login and config", "entry_claude-desktop": "Desktop", "entry_cli": "CLI",
     "folders_heading": "Work folders", "folders_sub": "Only conversations in checked folders are scanned; unchecked folders are never even opened.",
     "folders_count": "{picked} of {total} selected", "folder_last_used": "Last used {date}",
-    "folder_drop": "Remove from the list", "folder_restore": "Put back",
+    "folder_drop": "Remove from the list", "folder_restore": "Put back", "folder_drop_group": "Remove the whole group",
+    "folders_in_group": "{n}", "folders_in_group_picked": "{n} ticked",
     "folders_dropped": "{n} removed (local capture won't bring them back)", "show": "Show", "hide": "Hide",
-    "toast_folder_dropped": "Removed. Local capture won't add it back",
+    "toast_folder_dropped": "Removed {n}. Local capture won't add them back",
     "toast_folder_restored": "Back in the list",
     "folders_empty": "No folders reported yet", "folders_empty_sub": "Once local capture is installed, folders you've worked in with agents show up here. You can also add one below.",
     "folder_add_placeholder": "Add a folder by its full path, e.g. /Users/you/work or C:\\Users\\you\\work", "folder_add_aria": "Add a folder",
@@ -1278,8 +1286,22 @@
   document.addEventListener('click', async event=>{
     const help=$('#quick-api-help-text');
     if(help&&!event.target.closest('.quick-api-entry')) help.hidden=true;
+    const group=event.target.closest('[data-group]');
+    if(group){
+      event.preventDefault();
+      const open=state.settings.openGroups;
+      open.has(group.dataset.group)?open.delete(group.dataset.group):open.add(group.dataset.group);
+      renderFolders(); return;
+    }
     const drop=event.target.closest('[data-drop]');
-    if(drop){ event.preventDefault(); dropFolder(drop.dataset.drop,false); return; }
+    if(drop){
+      event.preventDefault();
+      // 点在组头上就是整组一起移除——扫出来一堆 Codex/日期 目录，一个个点太累
+      const key=drop.dataset.drop;
+      const inGroup=(state.settings.folders||[]).filter(f=>folderGroup(f.path)===key);
+      const paths=inGroup.length>1?inGroup.map(f=>f.path):[key];
+      dropFolder(paths,false); return;
+    }
     const back=event.target.closest('[data-restore]');
     if(back){ event.preventDefault(); dropFolder(back.dataset.restore,true); return; }
     if(event.target.closest('#folders-gone-toggle')){
@@ -1404,12 +1426,43 @@
       :req?`<div class="item-title">${esc(t('request_pending'))}</div><div class="meta">${esc(t('request_pending_sub',{time:stamp(req.created_at)}))}</div>`
       :`<div class="item-head"><div><div class="item-title">${esc(t('not_admin'))}</div><div class="meta">${esc(t('not_admin_sub'))}</div></div><button class="btn" id="request-admin">${esc(t('request_admin'))}</button></div>`;
   }
+  // 按第 4 级目录分组折叠。/Users/你/Documents/work 底下那一堆平时收着，点一下才展开——
+  // 自动扫出来的文件夹动辄上百个，摊开根本看不过来
+  const FOLDER_DEPTH=4;
+  function folderGroup(path){
+    const lead=path.startsWith('/')?'/':'';            // Windows 路径是 C:/... ，没有开头那道斜杠
+    return lead+path.split('/').filter(Boolean).slice(0,FOLDER_DEPTH).join('/');
+  }
+  function folderTree(items){
+    const map=new Map();
+    items.forEach(f=>{ const k=folderGroup(f.path); if(!map.has(k)) map.set(k,[]); map.get(k).push(f); });
+    return [...map.entries()].map(([key,list])=>({key,list}));
+  }
   function renderFolders(){
     const items=state.settings.folders, picked=items.filter(f=>f.selected).length;
     $('#folder-count').textContent=t('folders_count',{picked, total:items.length});
-    const row=f=>`<label class="folder"><input type="checkbox" data-folder="${esc(f.path)}" ${f.selected?'checked':''}><span class="folder-path">${esc(f.path)}</span><span class="meta" style="margin:0">${f.last_used?esc(t('folder_last_used',{date:f.last_used})):''}</span><button type="button" class="folder-drop" data-drop="${esc(f.path)}" title="${esc(t('folder_drop'))}" aria-label="${esc(t('folder_drop'))}">×</button></label>`;
-    $('#folder-list').innerHTML=items.length?items.map(row).join('')
-      :empty(t('folders_empty'),t('folders_empty_sub'));
+    if(!state.settings.openGroups) state.settings.openGroups=new Set();
+    const open=state.settings.openGroups;
+    const tick=f=>`<input type="checkbox" data-folder="${esc(f.path)}" ${f.selected?'checked':''}>`;
+    const when=f=>`<span class="meta" style="margin:0">${f.last_used?esc(t('folder_last_used',{date:f.last_used})):''}</span>`;
+    const drop=(path,label)=>`<button type="button" class="folder-drop" data-drop="${esc(path)}" title="${esc(label)}" aria-label="${esc(label)}">×</button>`;
+    // 单独一个的直接平铺，没必要为它套一层
+    const row=(f,short)=>`<label class="folder"${short?` title="${esc(f.path)}"`:''}>${tick(f)}<span class="folder-path">${esc(short||f.path)}</span>${when(f)}${drop(f.path,t('folder_drop'))}</label>`;
+
+    const html=folderTree(items).map(({key,list})=>{
+      if(list.length===1) return row(list[0]);
+      const shown=open.has(key), n=list.filter(f=>f.selected).length;
+      const head=`<div class="folder folder-group"><button type="button" class="folder-toggle${shown?' open':''}" data-group="${esc(key)}" aria-expanded="${shown}">▸</button>`
+        +`<span class="folder-path">${esc(key)}</span>`
+        +`<span class="meta" style="margin:0">${esc(t('folders_in_group',{n:list.length}))}${n?' · '+esc(t('folders_in_group_picked',{n})):''}</span>`
+        +drop(key,t('folder_drop_group'))+`</div>`;
+      if(!shown) return head;
+      // 展开后子项只显示组名之后的那一截，全路径放 title 里
+      return head+`<div class="folder-kids">`
+        +list.map(f=>row(f, f.path===key?f.path:f.path.slice(key.length+1)||f.path)).join('')+`</div>`;
+    }).join('');
+
+    $('#folder-list').innerHTML=items.length?html:empty(t('folders_empty'),t('folders_empty_sub'));
     renderDroppedFolders();
   }
   // 移除掉的单独一块，默认收着——列表本来就长，别再添乱
@@ -1424,12 +1477,13 @@
       :`${esc(t('folders_dropped',{n:gone.length}))} <button type="button" id="folders-gone-toggle">${esc(t('show'))}</button>`;
   }
   async function dropFolder(path, restore){
+    const paths=Array.isArray(path)?path:[path];
     try{
-      await post('/api/folders/dismiss',{paths:[path], restore:!!restore});
+      await post('/api/folders/dismiss',{paths, restore:!!restore});
       const [list,gone]=await Promise.all([request('/api/folders'),request('/api/folders/dismissed')]);
       state.settings.folders=list.items; state.settings.dropped=gone.items;
       renderFolders();
-      toast(t(restore?'toast_folder_restored':'toast_folder_dropped'));
+      toast(restore?t('toast_folder_restored'):t('toast_folder_dropped',{n:paths.length}));
     }catch(error){ toast(error.message,null,true); }
   }
   async function loadAdmin(){
