@@ -278,18 +278,33 @@ class TestPageContract(unittest.TestCase):
                       "勾选框后面没字就别画删除线")
 
     def test_folder_list_groups_by_the_fourth_level(self):
-        """工作文件夹按第 4 级分组折叠。
+        """工作文件夹按第 4 级归堆折叠。
 
         自动扫出来的动辄上百个（线上 tony 198 个、kaz 83 个），摊开根本看不过来。
-        /Users/你/Documents/work 底下那一堆收成一行，点开才展开。
+        只做分组，不动勾选语义——组头是个标签，没有勾选框。
         """
         body = self.html[self.html.index("const FOLDER_DEPTH"):]
-        body = body[:body.index("function renderDroppedFolders")]
-        self.assertIn("FOLDER_DEPTH=4", body.replace(" ", ""), "第 4 级开始分组")
-        self.assertIn("path.startsWith('/')?'/':''", body.replace(" ", ""),
-                      "Windows 路径是 C:/… ，开头没有斜杠，拼回去时别硬加")
-        self.assertIn("list.length===1", body.replace(" ", ""),
-                      "组里只有一个就直接平铺，不必为它套一层")
+        body = body[:body.index("function renderHiddenFolders")]
+        flat = body.replace(" ", "")
+        self.assertIn("FOLDER_DEPTH=4", flat)
+        self.assertIn("path.startsWith('/')?'/':''", flat,
+                      "Windows 路径是 C:/… ，开头没有斜杠，拼组名时别硬加")
+        self.assertIn("list.length===1", flat, "组里只有一个就直接平铺")
+        self.assertNotIn('type="checkbox"data-group-tick', flat,
+                         "组头不能有勾选框：一个文件夹可能自己是对话分组、底下又有别的，"
+                         "替人决定两者关系会把人家自己那条弄丢")
+
+    def test_picking_a_folder_cascades_both_ways(self):
+        """扫描含子目录，所以勾选必须两头连锁，否则勾选框显示的和真正扫的对不上。
+
+        勾一个 → 它盖住的下级一并打勾（它们确实在扫）。
+        取消一个 → 盖过它的上级一起取消（否则取消是假的），它自己的下级也一起取消。
+        """
+        body = self.html[self.html.index("function setFolderPick"):]
+        body = body[:body.index("function renderFolders")]
+        flat = body.replace(" ", "")
+        self.assertIn("folderUnder(path,f.path)", flat, "向下：盖住的下级跟着走")
+        self.assertIn("!on&&folderUnder(f.path,path)", flat, "向上：取消时盖过它的上级也要取消")
 
     def test_auto_refresh_does_not_wipe_what_you_are_typing(self):
         body = self.html[self.html.index("function renderReports"):]
