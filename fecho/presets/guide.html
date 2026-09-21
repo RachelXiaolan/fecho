@@ -4,26 +4,27 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>接入与验收指南 · Fecho</title>
+  <link rel="icon" href="/assets/fecho-mark.svg" type="image/svg+xml">
   <script id="theme-boot">try{var s=localStorage.getItem('fecho-theme');document.documentElement.dataset.theme=s==='dark'||s==='light'?s:(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');}catch(_){document.documentElement.dataset.theme='light';}
   document.addEventListener('click',function(e){var b=e.target.closest&&e.target.closest('#theme-toggle');if(!b)return;var n=document.documentElement.dataset.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=n;try{localStorage.setItem('fecho-theme',n);}catch(_){}});</script>
   <style>
     /* 和 Fecho 面板同一套颜色、同一套字体；不引外部字体，断网也能打开 */
     :root{
-      --ground:#f7f6f2; --surface:#ffffff; --sunk:#efede6;
-      --ink:#292827; --muted:#6f6b75; --line:#e3e0d8;
-      --brand:#1b1938; --brand-ink:#ffffff; --accent:#c9b4fa; --accent-soft:#eee7fd;
-      --done:#23634d; --done-soft:#e4f1ea; --warn:#8a5b17; --warn-soft:#fbf0d9;
-      --sans:"Avenir Next","SF Pro Text","PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+      --canvas:#fff9ec; --ground:var(--canvas); --surface:#fffdf9; --sunk:#fff4e2;
+      --ink:#3f3748; --muted:#6f6578; --line:#ddcfdd;
+      --brand:#5d526b; --brand-ink:#fffdf9; --taro:#a99bb5; --butter:#f0c75f; --butter-deep:#b6801e; --accent:#d8c6dc; --accent-soft:#f5eff6;
+      --done:#3e735e; --done-soft:#e7f1e9; --warn:#9a6815; --warn-soft:#fff0c7;
+      --sans:"Avenir Next","SF Pro Rounded","SF Pro Text","PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
       --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
-      --mark-ink:#1b1938;color-scheme:light;
+      --mark-ink:#3f3748;color-scheme:light;
     }
     /* 黑夜模式：和 Fecho 面板同一套，记在 fecho-theme */
     :root[data-theme="dark"]{
-      --ground:#131217; --surface:#1b1a21; --sunk:#26252d;
-      --ink:#e9e7e3; --muted:#a6a2ad; --line:#34323b;
-      --brand:#b3a6f2; --brand-ink:#15132a; --accent:#8f7ae0; --accent-soft:#2c2940;
-      --done:#7fd1ad; --done-soft:#173228; --warn:#e9bb6d; --warn-soft:#342810;
-      --mark-ink:#15132a;color-scheme:dark;
+      --canvas:#18121e; --ground:var(--canvas); --surface:#2b2431; --sunk:#372d3d;
+      --ink:#fff8ed; --muted:#c9bdc8; --line:#4b3e53;
+      --brand:#c7b5cf; --brand-ink:#33263a; --taro:#c7b5cf; --butter:#f0c75f; --butter-deep:#b6801e; --accent:#d8c6dc; --accent-soft:#3d3246;
+      --done:#91cfad; --done-soft:#1e3b31; --warn:#f1ca72; --warn-soft:#443315;
+      --mark-ink:#33263a;color-scheme:dark;
     }
     .top-right{display:flex;align-items:center;gap:14px}
     .theme-toggle{width:30px;height:30px;padding:0;border:1px solid var(--line);border-radius:9px;background:var(--sunk);
@@ -43,7 +44,8 @@
     .top{max-width:1060px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;padding-block:18px;
       border-bottom:1px solid var(--line);font-size:14px}
     .mark{display:flex;align-items:center;gap:10px;font-weight:600;text-decoration:none}
-    .mark i{width:28px;height:28px;border-radius:8px;background:var(--accent);color:var(--mark-ink);display:grid;place-items:center;font-style:normal;font-weight:700}
+    .mark-icon{width:28px;height:28px;display:grid;place-items:center;flex:none;border:1px solid var(--butter-deep);border-bottom-width:3px;border-radius:50%;background:var(--butter);box-shadow:0 3px 0 var(--butter-deep)}
+    .mark-icon svg{width:20px;height:20px}
     .top a.back{color:var(--muted);text-decoration:none}
     .top a.back:hover{color:var(--ink)}
 
@@ -145,7 +147,7 @@
 </head>
 <body>
   <header class="top">
-    <a class="mark" href="/"><i>f</i>Fecho</a>
+    <div class="mark"><span class="mark-icon" aria-hidden="true"><svg viewBox="0 0 200 200"><rect x="76" y="36" width="48" height="128" rx="14" fill="#fffdf9"/><rect x="36" y="76" width="128" height="48" rx="14" fill="#fffdf9"/></svg></span>Fecho</div>
     <div class="top-right"><a class="back" href="/">打开 Fecho →</a><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切换白天/黑夜模式" title="切换白天/黑夜模式"><svg class="i-moon" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M20.5 13.4A8.5 8.5 0 1 1 10.6 3.5a6.6 6.6 0 0 0 9.9 9.9z" fill="currentColor"/></svg><svg class="i-sun" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><circle cx="12" cy="12" r="4.2" fill="currentColor"/><path d="M12 2.5v2.3M12 19.2v2.3M2.5 12h2.3M19.2 12h2.3M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button></div>
   </header>
 

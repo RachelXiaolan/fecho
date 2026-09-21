@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Fecho · 紫色奶油风 UI 预览</title>
+  <!--
+    Preview only — production Dashboard remains unchanged.
+    Assumptions: desktop is the primary review surface; “今日” is Fecho's daily
+    home; content below is intentionally marked as sample data.
+  -->
+  <style>
+    :root{
+      --cream:#f5f0e7;
+      --cream-deep:#e9e1d2;
+      --paper:#fffdfa;
+      --paper-quiet:#faf7f1;
+      --ink:#28242d;
+      --ink-soft:#5f5965;
+      --ink-faint:#8b8590;
+      --line:#ded7cc;
+      --line-strong:#bdb2c8;
+      --violet-950:#241b38;
+      --violet-900:#30244b;
+      --violet-800:#4d3a74;
+      --violet-700:#65508f;
+      --violet-600:#765bc2;
+      --violet-500:#8870dc;
+      --violet-200:#d9cff7;
+      --violet-100:#eee9ff;
+      --violet-50:#f7f4ff;
+      --green:#35775d;
+      --green-soft:#e4f0e8;
+      --amber:#9b661b;
+      --amber-soft:#f8edd9;
+      --red:#a64c53;
+      --red-soft:#f8e7e7;
+      --shadow-button:0 3px 0 var(--violet-800);
+      --shadow-button-hover:0 4px 0 var(--violet-800);
+      --shadow-panel:0 10px 28px rgba(64,47,91,.06);
+      --sans:"Avenir Next", "SF Pro Display", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      --display:"Iowan Old Style", "Songti SC", "STSong", Georgia, serif;
+    }
+    *{box-sizing:border-box}
+    html{background:var(--cream)}
+    body{margin:0;min-width:320px;background:var(--cream);color:var(--ink);font:14px/1.5 var(--sans)}
+    button,input,textarea{font:inherit}
+    button{cursor:pointer}
+    button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid rgba(118,91,194,.3);outline-offset:2px}
+    .app{min-height:100vh;display:grid;grid-template-columns:238px minmax(0,1fr)}
+
+    /* Navigation: Superhuman's dark indigo becomes Fecho's stable work context. */
+    .sidebar{position:sticky;top:0;height:100vh;display:flex;flex-direction:column;padding:24px 14px 18px;background:var(--violet-950);color:#fbf9ff}
+    .brand{display:flex;align-items:center;gap:11px;padding:0 10px 28px;text-decoration:none;color:inherit}
+    .brand-mark{width:31px;height:31px;display:grid;place-items:center;border-radius:8px;background:var(--violet-200);color:var(--violet-950);font-size:18px;font-weight:780;letter-spacing:-1px}
+    .brand-copy{display:grid;gap:1px}
+    .brand-name{font-size:19px;font-weight:650;letter-spacing:-.45px}
+    .brand-note{display:block;color:#bcb2d6;font-size:9px;letter-spacing:.04em;white-space:nowrap}
+    .nav-label{padding:0 10px 8px;color:#9f94ba;font-size:10px;font-weight:750;letter-spacing:.12em}
+    .nav{display:grid;gap:4px}
+    .nav button{display:flex;align-items:center;gap:10px;width:100%;min-height:40px;padding:8px 10px;border:1px solid transparent;border-radius:7px;background:transparent;color:#c8c0d9;text-align:left;transition:background .16s ease,color .16s ease,border-color .16s ease}
+    .nav button:hover{background:rgba(255,255,255,.08);color:#fff}
+    .nav button.active{border-color:rgba(217,207,247,.23);background:rgba(217,207,247,.14);color:#fff}
+    .nav-icon{width:18px;height:18px;flex:none;opacity:.82}
+    .nav button.active .nav-icon{opacity:1}
+    .nav-count{margin-left:auto;min-width:22px;padding:1px 6px;border-radius:999px;background:rgba(255,255,255,.09);color:#cfc8dd;text-align:center;font-size:11px;font-weight:700}
+    .nav button.active .nav-count{background:var(--violet-200);color:var(--violet-950)}
+    .sidebar-bottom{margin-top:auto;padding:15px 10px 0;border-top:1px solid rgba(217,207,247,.18)}
+    .connection{display:flex;align-items:center;gap:8px;color:#bcb2d6;font-size:12px}
+    .pulse{width:7px;height:7px;border-radius:50%;background:#a5e2bd;box-shadow:0 0 0 4px rgba(165,226,189,.1)}
+    .guide{display:flex;align-items:center;gap:7px;margin-top:14px;color:#d8cff1;font-size:12px;text-decoration:none}
+
+    .workspace{min-width:0}
+    .topbar{min-height:74px;display:flex;align-items:center;justify-content:space-between;gap:20px;padding:14px 34px;border-bottom:1px solid var(--line);background:rgba(255,253,250,.78);backdrop-filter:blur(14px);position:sticky;top:0;z-index:5}
+    .crumb{display:flex;align-items:center;gap:8px;color:var(--ink-soft);font-size:12px}
+    .crumb strong{color:var(--ink);font-weight:680}
+    .crumb-dot{width:4px;height:4px;border-radius:99px;background:var(--violet-500)}
+    .top-actions{display:flex;align-items:center;gap:9px}
+    .avatar{width:31px;height:31px;border:1px solid var(--line-strong);border-radius:8px;background:#f0eaff;color:var(--violet-800);display:grid;place-items:center;font-size:12px;font-weight:750}
+    .icon-button{width:34px;height:34px;display:grid;place-items:center;border:1px solid var(--line);border-radius:7px;background:var(--paper);color:var(--ink-soft);transition:border-color .15s ease,background .15s ease}
+    .icon-button:hover{border-color:var(--line-strong);background:var(--violet-50);color:var(--violet-800)}
+
+    .page{max-width:1280px;margin:0 auto;padding:46px 34px 68px}
+    .intro{display:flex;align-items:end;justify-content:space-between;gap:28px;margin-bottom:30px}
+    .eyebrow{margin-bottom:8px;color:var(--violet-700);font-size:10px;font-weight:780;letter-spacing:.13em}
+    h1{max-width:760px;margin:0;color:var(--violet-950);font-family:var(--display);font-size:42px;font-weight:600;letter-spacing:-1.4px;line-height:1.03}
+    .intro-copy{max-width:660px;margin:12px 0 0;color:var(--ink-soft);font-size:15px}
+    .preview-chip{display:inline-flex;align-items:center;gap:7px;white-space:nowrap;padding:6px 10px;border:1px solid var(--line);border-radius:999px;background:var(--paper-quiet);color:var(--ink-soft);font-size:11px;font-weight:650}
+    .preview-chip i{width:7px;height:7px;border-radius:50%;background:var(--violet-500)}
+
+    /* Buttons: PostHog's physical feedback, translated to Fecho violet. */
+    .btn{min-height:39px;padding:8px 13px;border:1px solid var(--line-strong);border-radius:7px;background:var(--paper);color:var(--ink);font-size:12px;font-weight:720;line-height:1.2;transition:transform .12s ease,box-shadow .12s ease,background .12s ease,border-color .12s ease}
+    .btn:hover{border-color:var(--violet-700);background:var(--violet-50)}
+    .btn:active{transform:translateY(2px)}
+    .btn-primary{border-color:var(--violet-800);background:var(--violet-600);box-shadow:var(--shadow-button);color:#fff}
+    .btn-primary:hover{background:var(--violet-500);box-shadow:var(--shadow-button-hover)}
+    .btn-primary:active{box-shadow:0 1px 0 var(--violet-800)}
+    .btn-compact{min-height:32px;padding:6px 10px}
+    .button-with-key{display:inline-flex;align-items:center;gap:10px}
+    kbd{padding:2px 5px;border:1px solid rgba(255,255,255,.4);border-bottom-width:2px;border-radius:4px;color:#f7f3ff;font:10px/1 var(--sans)}
+
+    .daily-band{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(290px,.85fr);gap:16px;margin-bottom:30px}
+    .focus-card{position:relative;min-height:194px;overflow:hidden;padding:24px 26px;border:1px solid var(--violet-800);border-radius:10px;background:var(--violet-900);color:#fff}
+    .focus-card::after{content:"";position:absolute;right:28px;bottom:-22px;width:104px;height:104px;border:20px solid rgba(217,207,247,.18);border-radius:50%}
+    .focus-card > *{position:relative;z-index:1}
+    .focus-top{display:flex;align-items:center;justify-content:space-between;gap:16px;color:#cfc5e6;font-size:11px}
+    .focus-top span:last-child{color:#a5e2bd}
+    .focus-card h2{max-width:620px;margin:22px 0 8px;font-family:var(--display);font-size:25px;font-weight:600;letter-spacing:-.55px;line-height:1.16}
+    .focus-card p{max-width:520px;margin:0;color:#cfc5e6;font-size:13px}
+    .focus-card .btn{margin-top:18px}
+    .next-card{padding:22px;border:1px solid var(--line);border-radius:10px;background:var(--paper);box-shadow:var(--shadow-panel)}
+    .next-card-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+    .next-card h2{margin:0;font-size:14px;letter-spacing:-.1px}
+    .status{display:inline-flex;align-items:center;gap:6px;color:var(--green);font-size:11px;font-weight:700}
+    .status i{width:7px;height:7px;border-radius:50%;background:currentColor}
+    .next-list{display:grid;gap:12px;margin-top:16px}
+    .next-row{display:grid;grid-template-columns:28px 1fr;gap:10px;align-items:start}
+    .time{padding-top:1px;color:var(--ink-faint);font-size:11px;font-variant-numeric:tabular-nums}
+    .next-row strong{display:block;font-size:12px;font-weight:700}
+    .next-row span{display:block;margin-top:2px;color:var(--ink-soft);font-size:11px}
+
+    .content-grid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(290px,.85fr);gap:16px}
+    .section-head{display:flex;align-items:end;justify-content:space-between;gap:14px;margin:0 0 12px}
+    .section-title{margin:0;color:var(--violet-950);font-size:17px;letter-spacing:-.28px}
+    .section-caption{margin:3px 0 0;color:var(--ink-soft);font-size:12px}
+    .tabs{display:flex;gap:3px;padding:3px;border:1px solid var(--line);border-radius:8px;background:var(--paper-quiet)}
+    .tabs button{min-height:29px;padding:5px 9px;border:0;border-radius:5px;background:transparent;color:var(--ink-soft);font-size:11px;font-weight:700}
+    .tabs button.active{background:var(--paper);box-shadow:0 1px 2px rgba(52,37,79,.12);color:var(--violet-950)}
+    .panel{overflow:hidden;border:1px solid var(--line);border-radius:10px;background:var(--paper);box-shadow:var(--shadow-panel)}
+    .review-item{display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:12px;align-items:start;padding:17px 18px;border-top:1px solid var(--line)}
+    .review-item[hidden]{display:none}
+    .review-item:first-child{border-top:0}
+    .review-check{width:19px;height:19px;margin-top:1px;border:1.5px solid var(--line-strong);border-radius:5px;background:var(--paper-quiet);display:grid;place-items:center;color:transparent}
+    .review-check.ready{border-color:#71a88b;background:var(--green-soft);color:var(--green)}
+    .review-check svg{width:12px;height:12px}
+    .review-title{font-size:13px;font-weight:700;letter-spacing:-.05px}
+    .review-body{margin-top:4px;color:var(--ink-soft);font-size:12px;line-height:1.55}
+    .review-meta{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-top:8px;color:var(--ink-faint);font-size:10px}
+    .tag{display:inline-flex;align-items:center;min-height:20px;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:720}
+    .tag-violet{background:var(--violet-100);color:var(--violet-800)}
+    .tag-amber{background:var(--amber-soft);color:var(--amber)}
+    .tag-green{background:var(--green-soft);color:var(--green)}
+    .tag-red{background:var(--red-soft);color:var(--red)}
+    .item-action{white-space:nowrap}
+
+    .side-stack{display:grid;gap:16px}
+    .progress-panel{padding:20px}
+    .progress-panel h2{margin:0;font-size:14px}
+    .progress-panel p{margin:4px 0 16px;color:var(--ink-soft);font-size:11px}
+    .progress-line{display:grid;gap:9px}
+    .meter{height:8px;overflow:hidden;border:1px solid var(--line);border-radius:99px;background:var(--cream-deep)}
+    .meter i{display:block;width:72%;height:100%;border-radius:inherit;background:var(--violet-600)}
+    .progress-label{display:flex;justify-content:space-between;color:var(--ink-soft);font-size:11px}
+    .progress-label strong{color:var(--violet-800)}
+    .rule{height:1px;margin:18px 0;background:var(--line)}
+    .mini-list{display:grid;gap:10px}
+    .mini-row{display:flex;align-items:center;gap:9px;color:var(--ink-soft);font-size:12px}
+    .mini-icon{width:24px;height:24px;display:grid;place-items:center;border:1px solid var(--line);border-radius:6px;background:var(--paper-quiet);color:var(--violet-700)}
+    .insight{padding:19px 20px;border:1px solid #d5c8f4;border-radius:10px;background:var(--violet-100)}
+    .insight-top{display:flex;align-items:center;gap:8px;color:var(--violet-800);font-size:11px;font-weight:800;letter-spacing:.06em}
+    .spark{width:8px;height:8px;border-radius:2px;background:var(--violet-600);transform:rotate(45deg)}
+    .insight p{margin:9px 0 0;color:#554772;font-size:12px;line-height:1.58}
+    .insight button{margin:10px -4px -3px;padding:4px;border:0;background:transparent;color:var(--violet-800);font-size:11px;font-weight:750}
+
+    .toast{position:fixed;right:26px;bottom:24px;z-index:30;display:flex;align-items:center;gap:10px;max-width:360px;padding:11px 13px;border:1px solid rgba(255,255,255,.25);border-radius:8px;background:var(--violet-950);box-shadow:0 12px 26px rgba(36,27,56,.2);color:#fff;font-size:12px;opacity:0;transform:translateY(12px);pointer-events:none;transition:opacity .2s ease,transform .2s ease}
+    .toast.show{opacity:1;transform:translateY(0)}
+    .toast i{width:8px;height:8px;border-radius:50%;background:#a5e2bd}
+    dialog{width:min(490px,calc(100vw - 32px));padding:0;border:0;border-radius:12px;background:var(--paper);box-shadow:0 24px 72px rgba(27,20,44,.34)}
+    dialog::backdrop{background:rgba(36,27,56,.36);backdrop-filter:blur(3px)}
+    .dialog-head{display:flex;align-items:start;justify-content:space-between;gap:20px;padding:22px 22px 16px;border-bottom:1px solid var(--line)}
+    .dialog-head h2{margin:0;color:var(--violet-950);font-size:18px;letter-spacing:-.3px}
+    .dialog-head p{margin:4px 0 0;color:var(--ink-soft);font-size:12px}
+    .dialog-close{width:28px;height:28px;border:1px solid var(--line);border-radius:6px;background:var(--paper-quiet);color:var(--ink-soft)}
+    .dialog-body{padding:19px 22px 22px}
+    .field-label{display:block;margin-bottom:7px;color:var(--ink-soft);font-size:11px;font-weight:750}
+    textarea{width:100%;min-height:112px;resize:vertical;padding:10px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink);outline:none;font-size:13px}
+    textarea:focus{border-color:var(--violet-600);box-shadow:0 0 0 3px rgba(118,91,194,.1)}
+    .dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+
+    @media (max-width:980px){
+      .app{grid-template-columns:76px minmax(0,1fr)}
+      .sidebar{padding:18px 10px}.brand{justify-content:center;padding:0 0 25px}.brand-copy,.brand-name,.nav-label,.nav-text,.nav-count,.sidebar-bottom{display:none}
+      .nav button{justify-content:center;padding:8px}.nav-icon{width:19px;height:19px}
+      .daily-band,.content-grid{grid-template-columns:1fr}.focus-card{min-height:184px}.topbar{padding:14px 24px}.page{padding:38px 24px 60px}
+    }
+    @media (max-width:640px){
+      .app{display:block}.sidebar{position:fixed;inset:auto 0 0;z-index:10;height:61px;padding:7px 6px;background:var(--violet-950)}
+      .brand{display:none}.nav{grid-template-columns:repeat(4,1fr);gap:2px}.nav button{min-height:47px;gap:0}.nav button:nth-child(n+5){display:none}.nav-icon{width:18px;height:18px}.workspace{padding-bottom:61px}
+      .topbar{min-height:62px;padding:11px 16px}.crumb span:first-child,.icon-button{display:none}.page{padding:30px 16px 44px}.intro{align-items:start;flex-direction:column;margin-bottom:24px;gap:14px}h1{font-size:33px}.intro-copy{font-size:14px}.daily-band{gap:12px;margin-bottom:24px}.focus-card{padding:21px}.focus-card h2{font-size:22px}.content-grid{gap:24px}.section-head{align-items:start;flex-direction:column}.review-item{grid-template-columns:22px minmax(0,1fr);padding:15px}.item-action{grid-column:2}.tabs{align-self:stretch}.tabs button{flex:1}.next-card{padding:19px}
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" aria-label="主导航">
+      <a class="brand" href="#today" aria-label="Fecho 首页">
+        <span class="brand-mark">F</span>
+        <span class="brand-copy"><strong class="brand-name">Fecho</strong><span class="brand-note">WORK LOG, NOT MEMORY</span></span>
+      </a>
+      <div class="nav-label">WORKSPACE</div>
+      <nav class="nav">
+        <button class="active" type="button" data-view="today" aria-pressed="true">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 3v3m10-3v3M4.5 9h15M5.5 5.5h13a1 1 0 0 1 1 1V19a1 1 0 0 1-1 1h-13a1 1 0 0 1-1-1V6.5a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><span class="nav-text">今天</span><span class="nav-count">3</span>
+        </button>
+        <button type="button" data-view="review" aria-pressed="false">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m8.5 12.5 2.1 2.1 4.8-5.1M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="nav-text">复核</span><span class="nav-count">3</span>
+        </button>
+        <button type="button" data-view="tasks" aria-pressed="false">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 6h10M9 12h10M9 18h10M4.5 6h.1M4.5 12h.1M4.5 18h.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><span class="nav-text">任务</span><span class="nav-count">7</span>
+        </button>
+        <button type="button" data-view="reports" aria-pressed="false">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7l-4-4Zm0 0v4h4M9 13h6M9 17h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="nav-text">日报</span>
+        </button>
+      </nav>
+      <div class="sidebar-bottom"><div class="connection"><i class="pulse"></i>云端同步正常</div><a class="guide" href="#guide">查看接入指南 <span>↗</span></a></div>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar">
+        <div class="crumb"><span>Fecho</span><i class="crumb-dot"></i><strong id="view-name">今天</strong></div>
+        <div class="top-actions"><button class="icon-button" type="button" aria-label="查看通知" data-toast="今天没有新的提醒">⌕</button><div class="avatar" aria-label="Rachel">RX</div></div>
+      </header>
+
+      <div class="page" id="today">
+        <section class="intro" aria-labelledby="page-title">
+          <div><div class="eyebrow">MONDAY · 9月20日</div><h1 id="page-title">把今天做成的事，<br>清楚地留下来。</h1><p class="intro-copy" id="intro-copy">上午好，Rachel。还有 3 条 Agent 进展等待你确认归属；处理完，它们就会进入今天的日报。</p></div>
+          <button class="btn btn-primary button-with-key" type="button" id="record-button">记录进展 <kbd>⌘ J</kbd></button>
+        </section>
+
+        <section class="daily-band" aria-label="今日总览">
+          <article class="focus-card">
+            <div class="focus-top"><span>今日最重要的下一步</span><span>同步完成</span></div>
+            <h2>确认 Fecho 新界面的复核规则与优先级。</h2>
+            <p>先完成可验证的界面方向，再把确认过的结果回写到任务与日报。</p>
+            <button class="btn btn-primary" type="button" data-toast="已标记为当前焦点">设为当前焦点</button>
+          </article>
+          <article class="next-card">
+            <div class="next-card-header"><h2>今天的节奏</h2><span class="status"><i></i>进行中</span></div>
+            <div class="next-list">
+              <div class="next-row"><span class="time">09:40</span><div><strong>梳理界面方向</strong><span>UI 预览 · 进行中</span></div></div>
+              <div class="next-row"><span class="time">11:20</span><div><strong>复核待确认进展</strong><span>3 条需要人工判断</span></div></div>
+              <div class="next-row"><span class="time">17:30</span><div><strong>生成日报草稿</strong><span>基于已确认的工作记录</span></div></div>
+            </div>
+          </article>
+        </section>
+
+        <section class="content-grid">
+          <div>
+            <div class="section-head"><div><h2 class="section-title">等待你复核</h2><p class="section-caption">样例内容 · 这里只显示需要人来判断的记录。</p></div><div class="tabs" role="tablist" aria-label="复核过滤"><button class="active" type="button" data-filter="all">全部 3</button><button type="button" data-filter="high">优先处理</button></div></div>
+            <div class="panel" id="review-list">
+              <article class="review-item" data-priority="high"><span class="review-check"><svg viewBox="0 0 16 16" fill="none"><path d="m3 8 3 3 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><div class="review-title">更新 README，让云端版的安装方式更容易理解</div><div class="review-body">已完成文案更新与全套检查；需要确认该成果是否归入「Fecho 文档与接入」任务。</div><div class="review-meta"><span class="tag tag-violet">成果</span><span class="tag tag-amber">需要归属</span><span>来自 Codex · 10 分钟前</span></div></div><button class="btn btn-compact item-action" type="button" data-approve="这条进展">确认</button></article>
+              <article class="review-item" data-priority="high"><span class="review-check"><svg viewBox="0 0 16 16" fill="none"><path d="m3 8 3 3 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><div class="review-title">明确 UI 改版参考：紫色、白色与奶油色</div><div class="review-body">已提炼外部参考的色彩、按钮反馈与信息层级，等待转为 Fecho 的界面规范。</div><div class="review-meta"><span class="tag tag-violet">决策</span><span class="tag tag-amber">需要确认</span><span>来自 Codex · 刚刚</span></div></div><button class="btn btn-compact item-action" type="button" data-approve="这条决策">确认</button></article>
+              <article class="review-item" data-priority="normal"><span class="review-check ready"><svg viewBox="0 0 16 16" fill="none"><path d="m3 8 3 3 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><div class="review-title">日报编辑器的主题颜色需要和新界面统一</div><div class="review-body">该项已被记录为后续工作，暂不进入今天的日报。</div><div class="review-meta"><span class="tag tag-green">已判断</span><span>来自 Dashboard · 1 小时前</span></div></div><button class="btn btn-compact item-action" type="button" data-toast="已打开对应任务">查看任务</button></article>
+            </div>
+          </div>
+
+          <aside class="side-stack" aria-label="工作洞察">
+            <section class="panel progress-panel"><h2>今日进度</h2><p>完成的不是事项数，而是可复核的工作结果。</p><div class="progress-line"><div class="meter" aria-label="今日进度 72%"><i></i></div><div class="progress-label"><span>4 项已留痕</span><strong>72%</strong></div></div><div class="rule"></div><div class="mini-list"><div class="mini-row"><span class="mini-icon">✓</span><span>2 条成果已经确认</span></div><div class="mini-row"><span class="mini-icon">↗</span><span>1 个决策等待你判断</span></div><div class="mini-row"><span class="mini-icon">◌</span><span>日报将在 17:30 准备草稿</span></div></div></section>
+            <section class="insight"><div class="insight-top"><i class="spark"></i>FECHO 提示</div><p>你可以先确认“界面方向”这条决策。之后关联的设计工作会更容易被自动归到同一任务。</p><button type="button" data-toast="已将这条提示加入今天的复核列表">加入复核顺序 →</button></section>
+          </aside>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <dialog id="record-dialog" aria-labelledby="record-title">
+    <form method="dialog" id="record-form">
+      <div class="dialog-head"><div><h2 id="record-title">记录一条进展</h2><p>简短写下做成了什么；之后可以再归属到任务。</p></div><button class="dialog-close" value="cancel" aria-label="关闭">×</button></div>
+      <div class="dialog-body"><label class="field-label" for="progress-text">这次完成了什么？</label><textarea id="progress-text" placeholder="例如：完成紫色奶油风的 Dashboard 预览，并验证了按钮的按下反馈。"></textarea><div class="dialog-actions"><button class="btn" type="button" id="cancel-record">取消</button><button class="btn btn-primary" value="save">保存进展</button></div></div>
+    </form>
+  </dialog>
+  <div class="toast" id="toast" role="status" aria-live="polite"><i></i><span id="toast-copy"></span></div>
+
+  <script>
+    const $ = (selector, root = document) => root.querySelector(selector);
+    const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+    const toast = $('#toast');
+    let toastTimer;
+    const showToast = (message) => {
+      $('#toast-copy').textContent = message;
+      toast.classList.add('show');
+      window.clearTimeout(toastTimer);
+      toastTimer = window.setTimeout(() => toast.classList.remove('show'), 2800);
+    };
+
+    const viewCopy = {
+      today: ['今天', '把今天做成的事，清楚地留下来。', '上午好，Rachel。还有 3 条 Agent 进展等待你确认归属；处理完，它们就会进入今天的日报。'],
+      review: ['复核', '先判断，再沉淀。', 'Fecho 只把你确认过的事实，送进任务与日报。'],
+      tasks: ['任务', '每一项工作，都有连续的上下文。', '从成果、决策到踩坑，回看时能知道事情为什么走到这里。'],
+      reports: ['日报', '一天的工作，不必靠回忆重建。', '当记录足够清楚，日报只需要你最后确认。']
+    };
+    $$('.nav button').forEach((button) => button.addEventListener('click', () => {
+      $$('.nav button').forEach((item) => { item.classList.remove('active'); item.setAttribute('aria-pressed', 'false'); });
+      button.classList.add('active'); button.setAttribute('aria-pressed', 'true');
+      const [name, title, copy] = viewCopy[button.dataset.view];
+      $('#view-name').textContent = name; $('#page-title').innerHTML = title.replace('，', '，<br>'); $('#intro-copy').textContent = copy;
+      showToast(`已切换到「${name}」预览`);
+    }));
+
+    $$('.tabs button').forEach((button) => button.addEventListener('click', () => {
+      $$('.tabs button').forEach((item) => item.classList.remove('active'));
+      button.classList.add('active');
+      $$('.review-item').forEach((item) => { item.hidden = button.dataset.filter === 'high' && item.dataset.priority !== 'high'; });
+    }));
+
+    $$('[data-approve]').forEach((button) => button.addEventListener('click', () => {
+      const item = button.closest('.review-item');
+      $('.review-check', item).classList.add('ready');
+      button.textContent = '已确认'; button.disabled = true;
+      showToast(`${button.dataset.approve}已确认，会进入日报草稿。`);
+    }));
+    $$('[data-toast]').forEach((button) => button.addEventListener('click', () => showToast(button.dataset.toast)));
+
+    const dialog = $('#record-dialog');
+    $('#record-button').addEventListener('click', () => { dialog.showModal(); $('#progress-text').focus(); });
+    $('#cancel-record').addEventListener('click', () => dialog.close());
+    $('#record-form').addEventListener('submit', () => {
+      const text = $('#progress-text').value.trim();
+      if (!text) { showToast('先写下一句完成的事，再保存。'); return; }
+      showToast('预览已保存这条进展；真实数据没有被改动。');
+      $('#progress-text').value = '';
+    });
+    window.addEventListener('keydown', (event) => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'j') { event.preventDefault(); dialog.showModal(); $('#progress-text').focus(); } });
+  </script>
+</body>
+</html>

@@ -5,6 +5,8 @@ import unittest
 
 
 HTML = (Path(__file__).resolve().parents[1] / "fecho" / "presets" / "dashboard.html")
+PRESETS = HTML.parent
+MARK_URL = "/assets/fecho-mark.svg"
 
 
 class TestDashboardContract(unittest.TestCase):
@@ -29,11 +31,74 @@ class TestDashboardContract(unittest.TestCase):
         self.assertIn("https?:", inline, "链接只放行 http/https")
         self.assertNotIn("\x00", self.html, "不能夹原始控制字符")
 
+    def test_report_renderer_supports_ordered_tasks_and_nested_bullets(self):
+        """标准的 `1. [ ] 内容` 是主写法；旧的反序写法可继续兼容；编号项下的 - 必须有圆点。"""
+        renderer = self.html[self.html.index("function mdBlocks"):self.html.index("function enhanceMd")]
+        self.assertIn("const li=taskFirst?", renderer)
+        self.assertIn("const taskFirst=line.match(/^(\\s*)\\[(.)\\]\\s+(\\d+)\\.\\s*(.*)$/);", renderer)
+        self.assertIn("taskFirst?[taskFirst[0],taskFirst[1],taskFirst[3],`[${taskFirst[2]}] ${taskFirst[4]}`]", renderer)
+        self.assertIn(".report-paper li>ul{list-style:disc", self.html)
+
+    def test_parent_list_folds_its_direct_child_even_when_nested_items_are_folded(self):
+        """子项自己的折叠状态不能阻止父编号项收起整组子列表。"""
+        renderer = self.html[self.html.index("function enhanceMd"):self.html.index("// ---- 看日报时记住折叠状态")]
+        self.assertIn("function setListFold(host,folded)", renderer)
+        self.assertIn("child.hidden=folded", renderer)
+        self.assertIn("setListFold(host,!host.classList.contains('folded'))", self.html)
+
+    def test_editor_preview_renders_standard_ordered_task_before_legacy_variant(self):
+        """编辑器主路径要把 `1. [ ]` 显示成编号、勾选框、内容；旧写法只作兼容。"""
+        editor = (Path(__file__).resolve().parents[1] / "editor" / "entry.js").read_text(encoding="utf-8")
+        self.assertIn("else if ((m = /^(\\s*)([-*+]|\\d+[.)])(\\s+)\\[(.)\\]\\s?/.exec(text)))", editor)
+        self.assertIn("if (/^\\d/.test(m[2]))", editor)
+        self.assertIn("widget('num' + label", editor)
+        self.assertIn("const taskFirst=/^(\\s*)\\[(.)\\](\\s+)(\\d+[.)])(\\s+)(.*)$/", editor)
+
+    def test_editor_nested_list_guides_follow_every_ancestor_branch(self):
+        """模板规则：直接子项已有父项引导线；更深一层再叠加直接父项的线。"""
+        editor = (Path(__file__).resolve().parents[1] / "editor" / "entry.js").read_text(encoding="utf-8")
+        self.assertIn("function addIndentGuides(line, add)", editor)
+        self.assertIn("if (depth < 1 || !line.text.trim()) return", editor)
+        self.assertIn("className = 'md-indent-guides'", editor)
+        self.assertIn("for (let level = 0; level < depth; level++)", editor)
+        self.assertIn("'md-indent-guide'", editor)
+
+    def test_editor_fold_arrow_tracks_its_list_indent(self):
+        """折叠箭头锚在当前项标记前的 gutter，不能用固定页面坐标压住编号或正文。"""
+        editor = (Path(__file__).resolve().parents[1] / "editor" / "entry.js").read_text(encoding="utf-8")
+        self.assertIn("const markerFrom = line.from + (/^[\\t ]*/.exec(line.text) || [''])[0].length", editor)
+        self.assertIn("add(markerFrom, markerFrom, Decoration.widget", editor)
+        self.assertIn("marginLeft: '-20px'", editor)
+
     def test_dashboard_has_no_external_dependencies(self):
         """面板要能断网打开，所以不引任何 CDN。"""
         import re
         self.assertIsNone(re.search(r'<script[^>]+src="https?:', self.html))
         self.assertIsNone(re.search(r'<link[^>]+href="https?:', self.html))
+
+    def test_company_mark_is_used_for_the_sidebar_and_browser_tab(self):
+        """页面内的品牌按钮和浏览器紫色 favicon 要是两种各司其职的用法。"""
+        self.assertTrue((PRESETS / "assets" / "fecho-mark.svg").is_file())
+        self.assertIn('<button class="brand" type="button" aria-label="Fecho brand" data-i18n-aria="brand_aria">', self.html)
+        self.assertIn('class="brand-button"', self.html)
+        self.assertIn('FEED WORK. ECHO PROGRESS.', self.html)
+        self.assertIn('background:var(--butter)', self.html)
+        self.assertIn('border-radius:50%', self.html)
+        for page in ("dashboard.html", "login.html", "onboard.html", "guide.html"):
+            html = (PRESETS / page).read_text(encoding="utf-8")
+            self.assertIn('<link rel="icon" href="%s"' % MARK_URL, html, page)
+
+    def test_taro_milk_design_system_has_complete_light_and_dark_tokens(self):
+        """四个入口页必须共享奶油浅色和深葡萄紫黑夜模式，不能只改 Dashboard。"""
+        for page in ("dashboard.html", "login.html", "onboard.html", "guide.html"):
+            html = (PRESETS / page).read_text(encoding="utf-8")
+            self.assertIn('--canvas:#fff9ec', html, page)
+            self.assertIn(':root[data-theme="dark"]', html, page)
+            self.assertIn('--canvas:#18121e', html, page)
+            self.assertIn('"SF Pro Rounded"', html, page)
+        self.assertIn('--taro:#a99bb5', self.html)
+        self.assertIn('--butter:#f0c75f', self.html)
+        self.assertIn('--primary:#f0c75f', self.html)
 
     def test_has_five_product_views(self):
         for view in ("today", "review", "tasks", "reports", "system"):

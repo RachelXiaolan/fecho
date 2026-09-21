@@ -4,16 +4,17 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Fecho</title>
+  <link rel="icon" href="/assets/fecho-mark.svg" type="image/svg+xml">
   <script id="theme-boot">try{var s=localStorage.getItem('fecho-theme');document.documentElement.dataset.theme=s==='dark'||s==='light'?s:(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');}catch(_){document.documentElement.dataset.theme='light';}
   document.addEventListener('click',function(e){var b=e.target.closest&&e.target.closest('#theme-toggle');if(!b)return;var n=document.documentElement.dataset.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=n;try{localStorage.setItem('fecho-theme',n);}catch(_){}});</script>
   <style>
-    :root{--nav:#1b1938;--violet:#c9b4fa;--canvas:#f7f6f2;--ink:#292827;--muted:#73706d;
-      --line:#e5e2db;--soft:#f1f0eb;--success:#23634d;--success-bg:#e8f3ed;--danger:#9a3f3a;
-      --surface:#fff;--surface-alt:#FBFAF7;--primary:#1b1938;--link:#5b4fb0;color-scheme:light}
+    :root{--nav:#5d526b;--violet:#d8c6dc;--taro:#a99bb5;--butter:#f0c75f;--butter-light:#f7d97e;--butter-deep:#b6801e;
+      --canvas:#fff9ec;--ink:#3f3748;--muted:#6f6578;--line:#ddcfdd;--soft:#fff4e2;--success:#3e735e;--success-bg:#e7f1e9;--danger:#a34f58;
+      --surface:#fffdf9;--surface-alt:#fff8ed;--primary:#f0c75f;--primary-ink:#3f3748;--link:#796288;color-scheme:light}
     /* 黑夜模式：和 Fecho 面板同一套，记在 fecho-theme */
-    :root[data-theme="dark"]{--canvas:#131217;--ink:#e9e7e3;--muted:#a19e99;--line:#34323b;--soft:#26252d;
-      --success:#7fd1ad;--success-bg:#173228;--danger:#f1a39c;--surface:#1b1a21;--surface-alt:#1f1e25;
-      --primary:#6f5fc7;--link:#b3a6f2;color-scheme:dark}
+    :root[data-theme="dark"]{--canvas:#18121e;--nav:#302838;--violet:#d8c6dc;--taro:#c7b5cf;--butter:#f0c75f;--butter-light:#f7d97e;--butter-deep:#b6801e;
+      --ink:#fff8ed;--muted:#c9bdc8;--line:#4b3e53;--soft:#372d3d;--success:#91cfad;--success-bg:#1e3b31;--danger:#f1a5ad;--surface:#2b2431;--surface-alt:#322a38;
+      --primary:#f0c75f;--primary-ink:#33263a;--link:#d5bde0;color-scheme:dark}
     .corner{display:flex;gap:6px;align-items:center;flex:none}
     .theme-toggle{width:30px;height:30px;padding:0;border:1px solid var(--line);border-radius:9px;background:var(--soft);
       color:var(--muted);display:grid;place-items:center}
@@ -22,7 +23,7 @@
     :root[data-theme="dark"] .theme-toggle .i-sun{display:block}
     *{box-sizing:border-box}
     body{margin:0;min-height:100vh;background:var(--canvas);color:var(--ink);
-      font:15px/1.6 "Avenir Next","SF Pro Text","PingFang SC","Microsoft YaHei",sans-serif}
+      font:15px/1.6 "Avenir Next","SF Pro Rounded","SF Pro Text","PingFang SC","Microsoft YaHei",sans-serif}
     main{width:min(620px,92vw);margin:48px auto}
     .head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
     h1{font-size:24px;margin:0 0 4px;font-weight:650;letter-spacing:-.4px}
@@ -31,9 +32,9 @@
     .step h2{font-size:16px;margin:0 0 4px;font-weight:650}
     .step p{margin:0 0 14px;color:var(--muted);font-size:14px}
     .num{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;
-      background:var(--violet);color:var(--nav);font-size:12px;font-weight:700;margin-right:8px}
+      background:var(--taro);color:var(--ink);font-size:12px;font-weight:700;margin-right:8px}
     button{font:inherit;border:0;border-radius:9px;padding:10px 16px;font-weight:600;cursor:pointer;
-      background:var(--primary);color:#fff}
+      background:var(--primary);color:var(--primary-ink);border:1px solid var(--butter-deep);border-bottom-width:3px;box-shadow:0 2px 0 var(--butter-deep)}
     button.ghost{background:var(--surface);color:var(--ink);border:1px solid var(--line)}
     button:disabled{opacity:.55;cursor:wait}
     .token{display:none;margin-top:14px}

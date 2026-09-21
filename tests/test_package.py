@@ -14,6 +14,11 @@ class TestPackageContents(unittest.TestCase):
         package_data = pyproject.split("[tool.setuptools.package-data]", 1)[1]
         self.assertIn('"presets/skill/*.md"', package_data)
 
+    def test_brand_assets_are_declared_as_package_data(self):
+        pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        package_data = pyproject.split("[tool.setuptools.package-data]", 1)[1]
+        self.assertIn('"presets/assets/*.svg"', package_data)
+
     def test_every_page_is_shipped(self):
         """presets 下的每个页面和说明都要进安装包。
 

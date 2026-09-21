@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Fecho · 香芋牛奶 UI 预览</title>
+  <link rel="icon" href="../../fecho/presets/assets/fecho-mark.svg" type="image/svg+xml">
+  <!-- Preview only. It does not change the product Dashboard. -->
+  <style>
+    :root{
+      --taro-700:#5d526b;
+      --taro-600:#756384;
+      --taro-500:#a99bb5;
+      --taro-300:#c5b5d0;
+      --taro-200:#d8c6dc;
+      --taro-100:#f5eff6;
+      --canvas:#fff9ec;
+      --milk:#fffdf9;
+      --milk-soft:#fff8ed;
+      --butter:#ffedbf;
+      --butter-strong:#f0c75f;
+      --butter-deep:#b6801e;
+      --ink:#3f3748;
+      --ink-soft:#6f6578;
+      --ink-faint:#9b91a5;
+      --line:#ddcfdd;
+      --success:#71977e;
+      --success-soft:#edf5ed;
+      --warning:#a5742b;
+      --warning-soft:#fff3d9;
+      --danger:#a86069;
+      --danger-soft:#faecee;
+      --shadow:0 14px 34px rgba(91,74,103,.10);
+      --display:"Avenir Next", "SF Pro Display", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      --sans:"Avenir Next", "SF Pro Rounded", "SF Pro Text", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    }
+    *{box-sizing:border-box}
+    body{min-width:320px;margin:0;background:var(--canvas);color:var(--ink);font:14px/1.55 var(--sans)}
+    button{font:inherit;cursor:pointer} button:focus-visible{outline:3px solid rgba(169,155,181,.45);outline-offset:3px}
+    .app{min-height:100vh;display:grid;grid-template-columns:242px minmax(0,1fr)}
+    .sidebar{display:flex;min-height:100vh;flex-direction:column;padding:24px 14px 17px;background:var(--taro-700);color:#fffafc}
+    .brand{display:flex;align-items:center;gap:12px;padding:0 8px 30px;border:0;background:transparent;color:inherit;font:inherit;text-align:left}
+    .brand-badge{display:grid;width:44px;height:44px;place-items:center;flex:none;border:1px solid var(--butter-deep);border-bottom-width:4px;border-radius:50%;background:var(--butter-strong);box-shadow:0 4px 0 var(--butter-deep);transition:transform .13s ease,box-shadow .13s ease}
+    .brand:hover .brand-badge{background:#f7d97e;box-shadow:0 5px 0 var(--butter-deep)}.brand:active .brand-badge{transform:translateY(2px);border-bottom-width:2px;box-shadow:0 1px 0 var(--butter-deep)}
+    .brand-mark{width:31px;height:31px}.brand-copy{display:grid;gap:3px}.brand-name{color:#fffdf9;font-size:22px;font-weight:800;letter-spacing:-.7px;line-height:1;text-shadow:0 1px 0 rgba(45,31,54,.24)}.brand-note{color:#fff0c8;font-size:8px;font-weight:400;letter-spacing:.06em;line-height:1.2;white-space:nowrap}
+    .nav-label{padding:0 10px 8px;color:#c4b7cb;font-size:10px;font-weight:800;letter-spacing:.14em}.nav{display:grid;gap:4px}
+    .nav button{display:flex;align-items:center;gap:10px;min-height:41px;padding:8px 10px;border:1px solid transparent;border-radius:10px;background:transparent;color:#ece5ed;font-weight:650;letter-spacing:-.12px;text-align:left;transition:.16s ease}
+    .nav button:hover{background:rgba(255,255,255,.09)}.nav button.active{background:rgba(255,253,250,.15);border-color:rgba(255,253,250,.13);color:#fff}
+    .nav-icon{width:17px;height:17px;opacity:.83}.nav-count{min-width:21px;margin-left:auto;padding:1px 6px;border-radius:999px;background:rgba(255,255,255,.11);color:#efe8f0;text-align:center;font-size:10px;font-weight:800}.nav button.active .nav-count{background:var(--butter);color:var(--taro-700)}
+    .side-footer{display:grid;gap:12px;margin-top:auto;padding:17px 10px 0;border-top:1px solid rgba(255,255,255,.16);color:#e3d9e5;font-size:11px}.connection{display:flex;align-items:center;gap:8px}.dot{width:7px;height:7px;border-radius:50%;background:#b9d7b6;box-shadow:0 0 0 4px rgba(185,215,182,.12)}.guide{color:#fff1cc;text-decoration:none}
+    .workspace{min-width:0}.topbar{position:sticky;top:0;z-index:4;display:flex;min-height:70px;align-items:center;justify-content:space-between;gap:18px;padding:13px 34px;border-bottom:1px solid rgba(226,217,227,.8);background:rgba(255,253,250,.82);backdrop-filter:blur(15px)}
+    .crumb{display:flex;align-items:center;gap:8px;color:var(--ink-soft);font-size:12px}.crumb strong{color:var(--ink);font-weight:750}.crumb i{width:4px;height:4px;border-radius:50%;background:var(--butter-strong)}.top-actions{display:flex;align-items:center;gap:8px}
+    .chip,.icon-btn{border:1px solid var(--line);background:var(--milk);color:var(--ink-soft)}.chip{padding:7px 10px;border-radius:999px;font-size:11px;font-weight:750}.icon-btn{width:34px;height:34px;border-radius:10px}.avatar{display:grid;width:32px;height:32px;place-items:center;border-radius:10px;background:var(--taro-200);color:var(--taro-700);font-size:11px;font-weight:800}
+    .page{max-width:1290px;margin:0 auto;padding:42px 34px 68px}.intro{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin-bottom:26px}.eyebrow{margin:0 0 8px;color:var(--taro-600);font-size:10px;font-weight:850;letter-spacing:.14em}h1{margin:0;color:var(--ink);font-family:var(--display);font-size:43px;font-weight:600;letter-spacing:-1.5px;line-height:1.05}.intro-copy{max-width:620px;margin:10px 0 0;color:var(--ink-soft);font-size:15px}
+    .btn{min-height:39px;padding:8px 13px;border:1px solid var(--taro-300);border-bottom-width:3px;border-radius:10px;background:var(--milk);color:var(--ink);font-size:12px;font-weight:780;transition:transform .13s ease,box-shadow .13s ease,background .13s ease}.btn:hover{background:var(--milk-soft);border-color:var(--taro-500)}.btn:active{transform:translateY(2px);border-bottom-width:1px}.btn-primary{border-color:var(--butter-deep);background:var(--butter-strong);box-shadow:0 3px 0 var(--butter-deep);color:var(--ink)}.btn-primary:hover{background:#f7d97e;box-shadow:0 4px 0 var(--butter-deep)}.btn-primary:active{box-shadow:0 1px 0 var(--butter-deep)}.btn-small{min-height:31px;padding:5px 10px;font-size:11px}
+    .summary{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(285px,.85fr);gap:16px;margin-bottom:29px}.focus{position:relative;overflow:hidden;min-height:206px;padding:25px 27px;border:1px solid var(--taro-500);border-radius:16px;background:var(--taro-200)}.focus:after{position:absolute;right:-42px;bottom:-70px;width:245px;height:160px;border-radius:50%;background:var(--butter);content:""}.focus>*{position:relative;z-index:1}.focus-top{display:flex;justify-content:space-between;color:var(--taro-700);font-size:11px;font-weight:750}.focus-top b{color:var(--success)}.focus h2{max-width:550px;margin:22px 0 7px;font-family:var(--display);font-size:27px;font-weight:600;letter-spacing:-.7px;line-height:1.15}.focus p{max-width:500px;margin:0;color:#584f61;font-size:13px}.focus .btn{margin-top:18px}
+    .rhythm{padding:20px;border:1px solid var(--line);border-radius:16px;background:var(--milk);box-shadow:var(--shadow)}.card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:12px;border-bottom:1px solid var(--line)}.card-head h2{margin:0;font-size:14px}.live{display:flex;align-items:center;gap:6px;color:var(--success);font-size:11px;font-weight:800}.live i{width:7px;height:7px;border-radius:50%;background:currentColor}.timeline{display:grid;gap:12px;margin-top:15px}.timeline div{display:grid;grid-template-columns:31px 1fr;gap:9px}.timeline time{color:var(--ink-faint);font-size:10px}.timeline strong{display:block;font-size:12px}.timeline span{display:block;margin-top:1px;color:var(--ink-soft);font-size:11px}
+    .content{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(285px,.85fr);gap:16px}.section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;margin:0 0 11px}.section-head h2{margin:0;font-size:17px;letter-spacing:-.35px}.section-head p{margin:3px 0 0;color:var(--ink-soft);font-size:12px}.filter{display:flex;padding:3px;border:1px solid var(--line);border-radius:10px;background:var(--milk-soft)}.filter button{padding:5px 9px;border:0;border-radius:7px;background:transparent;color:var(--ink-soft);font-size:10px;font-weight:800}.filter button.active{background:var(--milk);box-shadow:0 1px 2px rgba(75,54,90,.12);color:var(--taro-700)}
+    .panel{overflow:hidden;border:1px solid var(--line);border-radius:16px;background:var(--milk);box-shadow:var(--shadow)}.entry{display:grid;grid-template-columns:24px 1fr auto;gap:12px;align-items:start;padding:16px 18px;border-top:1px solid var(--line)}.entry:first-child{border-top:0}.entry[hidden]{display:none}.check{display:grid;width:19px;height:19px;place-items:center;margin-top:1px;border:1.5px solid var(--taro-300);border-radius:6px;background:var(--milk-soft);color:transparent}.check.ready{border-color:var(--success);background:var(--success-soft);color:var(--success)}.check svg{width:12px}.entry-title{font-size:13px;font-weight:800}.entry-body{margin-top:4px;color:var(--ink-soft);font-size:12px}.meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;color:var(--ink-faint);font-size:10px}.tag{padding:2px 7px;border-radius:999px;font-size:10px;font-weight:800}.tag-taro{background:var(--taro-100);color:var(--taro-700)}.tag-butter{background:var(--warning-soft);color:var(--warning)}.tag-green{background:var(--success-soft);color:var(--success)}
+    .right{display:grid;align-content:start;gap:16px}.progress{padding:20px}.progress h2{margin:0;font-size:14px}.progress p{margin:4px 0 16px;color:var(--ink-soft);font-size:11px}.meter{height:8px;overflow:hidden;border-radius:999px;background:var(--butter)}.meter i{display:block;width:72%;height:100%;border-radius:inherit;background:var(--taro-500)}.progress-number{display:flex;justify-content:space-between;margin-top:8px;color:var(--ink-soft);font-size:11px}.progress-number b{color:var(--taro-700)}.rule{height:1px;margin:17px 0;background:var(--line)}.mini{display:grid;gap:9px}.mini div{display:flex;align-items:center;gap:8px;color:var(--ink-soft);font-size:11px}.mini i{display:grid;width:23px;height:23px;place-items:center;border-radius:7px;background:var(--butter);color:var(--taro-700);font-style:normal;font-weight:800}
+    .palette{padding:19px 20px;border:1px solid #e6c66d;border-radius:16px;background:var(--butter)}.palette-top{display:flex;justify-content:space-between;align-items:center;color:var(--taro-700);font-size:11px;font-weight:850;letter-spacing:.08em}.palette p{margin:8px 0 13px;color:#655b6b;font-size:12px}.swatches{display:flex;gap:8px}.swatch{display:grid;gap:4px;color:var(--ink-faint);font-size:8px;font-weight:750;letter-spacing:.02em}.swatch i{display:block;width:33px;height:33px;border:1px solid rgba(93,82,107,.08);border-radius:50%}.s1{background:#a99bb5}.s2{background:#d8c6dc}.s3{background:#f0c75f}.s4{background:#fff9ec}
+    .toast{position:fixed;right:24px;bottom:23px;z-index:10;display:flex;align-items:center;gap:9px;max-width:330px;padding:11px 13px;border:1px solid rgba(255,255,255,.55);border-radius:11px;background:var(--taro-700);box-shadow:0 14px 34px rgba(68,51,78,.22);color:white;font-size:12px;opacity:0;transform:translateY(12px);transition:.2s ease;pointer-events:none}.toast.show{opacity:1;transform:none}.toast i{width:8px;height:8px;border-radius:50%;background:var(--butter-strong)}
+    @media(max-width:970px){.app{grid-template-columns:74px 1fr}.sidebar{padding:17px 9px}.brand{justify-content:center;padding:0 0 24px}.brand-copy,.nav-label,.nav-text,.nav-count,.side-footer{display:none}.nav button{justify-content:center;padding:8px}.summary,.content{grid-template-columns:1fr}.topbar{padding:13px 23px}.page{padding:36px 23px 60px}}
+    @media(max-width:640px){.app{display:block}.sidebar{position:fixed;z-index:9;inset:auto 0 0;min-height:61px;height:61px;padding:7px 6px}.brand{display:none}.nav{grid-template-columns:repeat(4,1fr);gap:2px}.nav button{min-height:47px}.nav button:nth-child(n+5){display:none}.workspace{padding-bottom:61px}.topbar{min-height:62px;padding:10px 16px}.chip{display:none}.page{padding:28px 16px 43px}.intro{align-items:flex-start;flex-direction:column;margin-bottom:22px;gap:14px}h1{font-size:33px}.intro-copy{font-size:14px}.summary{gap:12px;margin-bottom:24px}.focus{min-height:190px;padding:21px}.focus h2{font-size:23px}.content{gap:23px}.section-head{align-items:flex-start;flex-direction:column}.entry{grid-template-columns:22px 1fr;padding:15px}.entry .btn{grid-column:2;justify-self:start}.filter{width:100%}.filter button{flex:1}.rhythm{padding:18px}}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" aria-label="Fecho 主导航">
+      <button class="brand" type="button" aria-label="Fecho 品牌标识"><span class="brand-badge" aria-hidden="true"><svg class="brand-mark" viewBox="0 0 200 200"><rect x="76" y="36" width="48" height="128" rx="14" fill="#fffdf9"/><rect x="36" y="76" width="128" height="48" rx="14" fill="#fffdf9"/></svg></span><span class="brand-copy"><b class="brand-name">Fecho</b><span class="brand-note">FEED WORK. ECHO PROGRESS.</span></span></button>
+      <div class="nav-label">WORKSPACE</div>
+      <nav class="nav">
+        <button class="active" data-view="today" aria-pressed="true"><svg class="nav-icon" viewBox="0 0 24 24" fill="none"><path d="M7 3v3m10-3v3M4.5 9h15M5.5 5.5h13a1 1 0 0 1 1 1V19a1 1 0 0 1-1 1h-13a1 1 0 0 1-1-1V6.5a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><span class="nav-text">今天</span><span class="nav-count">3</span></button>
+        <button data-view="review" aria-pressed="false"><svg class="nav-icon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.7"/><path d="m8.5 12.3 2.1 2.1 4.8-5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="nav-text">复核</span><span class="nav-count">3</span></button>
+        <button data-view="tasks" aria-pressed="false"><svg class="nav-icon" viewBox="0 0 24 24" fill="none"><path d="M9 6h10M9 12h10M9 18h10M4.5 6h.1M4.5 12h.1M4.5 18h.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><span class="nav-text">任务</span><span class="nav-count">7</span></button>
+        <button data-view="reports" aria-pressed="false"><svg class="nav-icon" viewBox="0 0 24 24" fill="none"><path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7l-4-4Zm0 0v4h4M9 13h6M9 17h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="nav-text">日报</span></button>
+      </nav>
+      <div class="side-footer"><span class="connection"><i class="dot"></i>云端同步正常</span><a class="guide" href="#guide">查看接入指南 →</a></div>
+    </aside>
+    <main class="workspace">
+      <header class="topbar"><div class="crumb"><span>Fecho</span><i></i><strong id="view-name">今天</strong></div><div class="top-actions"><span class="chip">香芋牛奶 · 预览</span><button class="icon-btn" data-toast="预览没有新提醒" aria-label="通知">⌕</button><span class="avatar">RX</span></div></header>
+      <div class="page" id="today">
+        <section class="intro"><div><p class="eyebrow">MONDAY · 9 月 21 日</p><h1 id="page-title">把今天做成的事，<br>温柔地留下来。</h1><p class="intro-copy" id="intro-copy">上午好，Rachel。还有 3 条 Agent 进展等待你确认归属；处理完，它们就会进入今天的日报。</p></div><button class="btn btn-primary" id="record">记录进展 <span aria-hidden="true">⌘ J</span></button></section>
+        <section class="summary"><article class="focus"><div class="focus-top"><span>今日最重要的下一步</span><b>同步完成</b></div><h2>先确认界面方向，<br>再把工作慢慢收拢。</h2><p>让每一条被确认的记录，都能安静地进入任务和日报。</p><button class="btn btn-primary" data-toast="已标记为当前焦点">设为当前焦点</button></article><article class="rhythm"><div class="card-head"><h2>今天的节奏</h2><span class="live"><i></i>进行中</span></div><div class="timeline"><div><time>09:40</time><p><strong>梳理界面方向</strong><span>UI 预览 · 进行中</span></p></div><div><time>11:20</time><p><strong>复核待确认进展</strong><span>3 条需要人工判断</span></p></div><div><time>17:30</time><p><strong>生成日报草稿</strong><span>基于已确认的工作记录</span></p></div></div></article></section>
+        <section class="content"><div><div class="section-head"><div><h2>等待你复核</h2><p>样例内容 · 只显示此刻需要判断的工作记录。</p></div><div class="filter"><button class="active" data-filter="all">全部 3</button><button data-filter="high">优先处理</button></div></div><div class="panel" id="entries"><article class="entry" data-priority="high"><span class="check"><svg viewBox="0 0 16 16" fill="none"><path d="m3 8 3 3 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span><div><b class="entry-title">更新 README，让云端版的安装方式更容易理解</b><p class="entry-body">已完成文案更新与全套检查；需要确认该成果是否归入「Fecho 文档与接入」任务。</p><div class="meta"><span class="tag tag-taro">成果</span><span class="tag tag-butter">需要归属</span><span>来自 Codex · 10 分钟前</span></div></div><button class="btn btn-small" data-approve>确认</button></article><article class="entry" data-priority="high"><span class="check"><svg viewBox="0 0 16 16" fill="none"><path d="m3 8 3 3 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span><div><b class="entry-title">明确 Fecho 的香芋紫与奶油黄界面方向</b><p class="entry-body">低饱和紫色组织信息，奶油黄给动作和进度留出一点温度。</p><div class="meta"><span class="tag tag-taro">决策</span><span class="tag tag-butter">需要确认</span><span>来自 Codex · 刚刚</span></div></div><button class="btn btn-small" data-approve>确认</button></article><article class="entry" data-priority="normal"><span class="check ready"><svg viewBox="0 0 16 16" fill="none"><path d="m3 8 3 3 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span><div><b class="entry-title">日报编辑器的主题颜色需要和新界面统一</b><p class="entry-body">该项已被记录为后续工作，暂不进入今天的日报。</p><div class="meta"><span class="tag tag-green">已判断</span><span>来自 Dashboard · 1 小时前</span></div></div><button class="btn btn-small" data-toast="已打开对应任务">查看</button></article></div></div>
+          <aside class="right"><section class="panel progress"><h2>今日进度</h2><p>完成的不是事项数，而是可复核的工作结果。</p><div class="meter"><i></i></div><div class="progress-number"><span>4 项已留痕</span><b>72%</b></div><div class="rule"></div><div class="mini"><div><i>✓</i>2 条成果已经确认</div><div><i>↗</i>1 个决策等待你判断</div><div><i>◌</i>日报将在 17:30 准备草稿</div></div></section><section class="palette"><div class="palette-top"><span>香芋牛奶 · 色彩方案</span><span>01</span></div><p>柔白为阅读留白；香芋紫稳住结构；奶油黄只轻轻点亮动作与进度。</p><div class="swatches"><span class="swatch"><i class="s1"></i>Taro</span><span class="swatch"><i class="s2"></i>Milk</span><span class="swatch"><i class="s3"></i>Butter</span><span class="swatch"><i class="s4"></i>Paper</span></div></section></aside>
+        </section>
+      </div>
+    </main>
+  </div>
+  <div class="toast" id="toast" role="status"><i></i><span></span></div>
+  <script>
+    const $$=(s,r=document)=>[...r.querySelectorAll(s)], $=(s,r=document)=>r.querySelector(s); let timer;
+    function toast(message){const t=$('#toast');$('span',t).textContent=message;t.classList.add('show');clearTimeout(timer);timer=setTimeout(()=>t.classList.remove('show'),2500)}
+    const copies={today:['今天','把今天做成的事，<br>温柔地留下来。','上午好，Rachel。还有 3 条 Agent 进展等待你确认归属；处理完，它们就会进入今天的日报。'],review:['复核','先判断，<br>再慢慢沉淀。','Fecho 只把你确认过的事实，送进任务与日报。'],tasks:['任务','每一项工作，<br>都有连续的上下文。','从成果、决策到踩坑，回看时能知道事情为什么走到这里。'],reports:['日报','一天的工作，<br>不必靠回忆重建。','当记录足够清楚，日报只需要你最后确认。']};
+    $$('.nav button').forEach(b=>b.addEventListener('click',()=>{ $$('.nav button').forEach(x=>{x.classList.remove('active');x.setAttribute('aria-pressed','false')});b.classList.add('active');b.setAttribute('aria-pressed','true');const [name,title,copy]=copies[b.dataset.view];$('#view-name').textContent=name;$('#page-title').innerHTML=title;$('#intro-copy').textContent=copy;toast(`已切换到「${name}」预览`) }));
+    $$('.filter button').forEach(b=>b.addEventListener('click',()=>{$$('.filter button').forEach(x=>x.classList.remove('active'));b.classList.add('active');$$('.entry').forEach(x=>x.hidden=b.dataset.filter==='high'&&x.dataset.priority!=='high')}));
+    $$('[data-approve]').forEach(b=>b.addEventListener('click',()=>{const e=b.closest('.entry');$('.check',e).classList.add('ready');b.textContent='已确认';b.disabled=true;toast('已确认；这只是预览，不会改变真实记录。')}));
+    $$('[data-toast]').forEach(b=>b.addEventListener('click',()=>toast(b.dataset.toast))); $('#record').addEventListener('click',()=>toast('记录窗口会沿用这颗奶油黄主按钮。')); window.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='j'){e.preventDefault();toast('记录窗口会沿用这颗奶油黄主按钮。')}});
+  </script>
+</body>
+</html>

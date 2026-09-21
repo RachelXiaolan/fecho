@@ -37,6 +37,33 @@ class Widget extends WidgetType {
 }
 const widget = (key, build, opts = {}) => Decoration.replace({widget: new Widget(build, key), ...opts})
 
+// 日报的一个缩进层级固定是两个空格。竖线属于祖先分支：直接子项从父项列起画一条，
+// 再往里一层便保留父线、并在直接父项的列再叠一条。
+function indentationDepth(text) {
+  const leading = (/^[\t ]*/.exec(text) || [''])[0]
+  return Math.floor(leading.replace(/\t/g, '    ').length / 2)
+}
+
+function addIndentGuides(line, add) {
+  const depth = indentationDepth(line.text)
+  if (depth < 1 || !line.text.trim()) return
+  add(line.from, line.from, Decoration.widget({
+    side: -2,
+    widget: new Widget(() => {
+      const guides = document.createElement('span')
+      guides.className = 'md-indent-guides'
+      // 当前在第 2 层时，给顶层和一级父项各留一条线；线落在祖先的起点。
+      for (let level = 0; level < depth; level++) {
+        const guide = document.createElement('span')
+        guide.className = 'md-indent-guide'
+        guide.style.left = (level * 2) + 'ch'
+        guides.appendChild(guide)
+      }
+      return guides
+    }, 'indent-guides-' + depth),
+  }))
+}
+
 // ---------- 行首标记：标题 / 项目符号 / 序号 / 勾选框 / 引用 ----------
 function blockDecorations(view, active, add) {
   const {state} = view
@@ -46,11 +73,33 @@ function blockDecorations(view, active, add) {
       const line = state.doc.lineAt(pos)
       const text = line.text
       const on = active.has(line.number)      // 光标在这一行：露出原始标记
+      addIndentGuides(line, add)
       let m
       if ((m = /^(#{1,6})\s+/.exec(text))) {
         add(line.from, line.from, Decoration.line({class: 'md-h md-h' + m[1].length}))
         if (!on) add(line.from, line.from + m[0].length, Decoration.replace({}))
-      } else if ((m = /^(\s*)([-*+]|\d+[.)])(\s+)\[(.)\]\s?/.exec(text))) {
+      } else {
+        // 也接受 `[ ] 1. 内容`：虽然不是 CommonMark 的惯用顺序，但日报里已经有这种写法，
+        // 编辑时照样显示成「编号 + 勾选框」，光标移进来才露出原文。
+        const taskFirst=/^(\s*)\[(.)\](\s+)(\d+[.)])(\s+)(.*)$/.exec(text)
+        if (taskFirst) {
+          const mark = taskFirst[2]
+          const done = /^[xX]$/.test(mark), checked = mark !== ' '
+          add(line.from, line.from, Decoration.line({class: 'md-task'}))
+          const bodyFrom = line.from + taskFirst[0].length
+          if (done && !on && bodyFrom < line.to) add(bodyFrom, line.to, Decoration.mark({class: 'md-task-done'}))
+          if (!on) {
+            const indent = line.from + taskFirst[1].length, label = taskFirst[4]
+            add(indent, bodyFrom, widget('numcb' + label + mark, () => {
+              const wrap = document.createElement('span')
+              const num = document.createElement('span'); num.className = 'md-num'; num.textContent = label
+              const box = document.createElement('span')
+              box.className = 'md-checkbox' + (checked ? ' on' : '') + (done ? ' done' : '')
+              box.dataset.pos = String(indent); box.textContent = checked ? '✓' : ''
+              wrap.appendChild(num); wrap.appendChild(box); return wrap
+            }))
+          }
+        } else if ((m = /^(\s*)([-*+]|\d+[.)])(\s+)\[(.)\]\s?/.exec(text))) {
         // 待办：无序 `- [ ]` 和有序 `1. [x]` 都算。有序的要既显示序号又显示勾选框
         const mark = m[4]
         const done = /^[xX]$/.test(mark), checked = mark !== ' '
@@ -79,24 +128,25 @@ function blockDecorations(view, active, add) {
             return box
           }))
         }
-      } else if ((m = /^(\s*)([-*+])(\s+)/.exec(text))) {
+        } else if ((m = /^(\s*)([-*+])(\s+)/.exec(text))) {
         if (!on) {
           const start = line.from + m[1].length
           add(start, start + m[2].length + m[3].length,
               widget('bullet', () => { const s = document.createElement('span'); s.className = 'md-bullet'; s.textContent = '•'; return s }))
         }
-      } else if ((m = /^(\s*)(\d+)([.)])(\s+)/.exec(text))) {
+        } else if ((m = /^(\s*)(\d+)([.)])(\s+)/.exec(text))) {
         if (!on) {
           const start = line.from + m[1].length
           const label = m[2] + m[3]
           add(start, start + label.length + m[4].length,
               widget('num' + label, () => { const s = document.createElement('span'); s.className = 'md-num'; s.textContent = label; return s }))
         }
-      } else if ((m = /^(\s*)(>\s?)/.exec(text))) {
+        } else if ((m = /^(\s*)(>\s?)/.exec(text))) {
         add(line.from, line.from, Decoration.line({class: 'md-quote'}))
         if (!on) add(line.from + m[1].length, line.from + m[0].length, Decoration.replace({}))
-      } else if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(text) && text.trim()) {
+        } else if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(text) && text.trim()) {
         if (!on) add(line.from, line.to, widget('hr', () => { const s = document.createElement('span'); s.className = 'md-hr'; return s }))
+        }
       }
       if (line.to + 1 > to) break
       pos = line.to + 1
@@ -440,7 +490,7 @@ const foldRule = foldService.of((state, lineStart, lineEnd) => {
     }
     return line.number < state.doc.lines ? {from: lineEnd, to: state.doc.length} : null
   }
-  const li = /^(\s*)(?:[-*+]|\d+[.)])\s/.exec(line.text)
+  const li = /^(\s*)(?:\[(.)\]\s+\d+[.)]|[-*+]|\d+[.)])\s/.exec(line.text)
   if (li) {
     const indent = li[1].length
     let end = null
@@ -455,7 +505,7 @@ const foldRule = foldService.of((state, lineStart, lineEnd) => {
   return null
 })
 
-// 折叠箭头跟在行首，悬停才出现；不单独占一栏
+// 箭头锚在当前项的标记前；编号宽度、字体或缩进变化时都不会压进正文。
 function foldArrows(view, add) {
   const {state} = view
   const folded = foldedRanges(state)
@@ -467,7 +517,8 @@ function foldArrows(view, add) {
       if (range) {
         let isFolded = false
         folded.between(range.from, range.to, () => { isFolded = true })
-        add(line.from, line.from, Decoration.widget({
+        const markerFrom = line.from + (/^[\t ]*/.exec(line.text) || [''])[0].length
+        add(markerFrom, markerFrom, Decoration.widget({
           side: -1,
           widget: new Widget(() => {
             const b = document.createElement('span')
@@ -475,7 +526,7 @@ function foldArrows(view, add) {
             b.dataset.line = String(line.from)
             b.textContent = '▾'
             return b
-          }, 'fold' + line.from + isFolded),
+          }, 'fold' + markerFrom + isFolded),
         }))
       }
       if (line.to + 1 > to) break
@@ -513,9 +564,11 @@ const clicks = EditorView.domEventHandlers({
       if (at == null) { event.preventDefault(); return true }
       const line = view.state.doc.lineAt(at)
       // 无序的 `- [ ]` 和有序的 `2. [ ]` 都要能点
-      const m = /^(\s*)([-*+]|\d+[.)])(\s+)\[(.)\]/.exec(line.text)
+      const taskFirst = /^(\s*)\[(.)\](\s+)(\d+[.)])(\s+)/.exec(line.text)
+      const m = taskFirst || /^(\s*)([-*+]|\d+[.)])(\s+)\[(.)\]/.exec(line.text)
       if (m) {
-        const markPos = line.from + m[1].length + m[2].length + m[3].length + 1
+        const markPos = taskFirst ? line.from + taskFirst[1].length + 1
+          : line.from + m[1].length + m[2].length + m[3].length + 1
         const now = view.state.doc.sliceString(markPos, markPos + 1)
         // 点一下默认勾成 [a]：打勾但不划掉。已经勾上的再点回 [ ]
         view.dispatch({changes: {from: markPos, to: markPos + 1, insert: now === ' ' ? 'a' : ' '}})
@@ -705,7 +758,7 @@ const theme = EditorView.theme({
     fontFamily: 'inherit'},
   '.cm-scroller': {fontFamily: 'inherit'},
   '&.cm-focused': {outline: 'none'},
-  '.cm-line': {padding: '1px 0'},
+  '.cm-line': {padding: '1px 0', position: 'relative'},
   '.cm-activeLine': {backgroundColor: 'var(--ed-active)'},
   '.cm-selectionBackground, ::selection': {backgroundColor: 'var(--ed-sel) !important'},
   '.cm-cursor': {borderLeftColor: 'var(--primary)'},
@@ -745,8 +798,12 @@ const theme = EditorView.theme({
   '.md-table:hover .md-col-grip::after, .md-table:hover .md-row-grip::after': {opacity: '.35'},
   '.md-col-grip:hover::after, .md-row-grip:hover::after': {opacity: '1'},
   '.md-table.sizing': {userSelect: 'none'},
-  '.md-fold': {position: 'absolute', left: '4px', color: 'var(--muted)', cursor: 'pointer',
-    opacity: '0', transition: 'opacity .12s', fontSize: '15px', lineHeight: '1.2'},
+  '.md-indent-guides': {position: 'absolute', inset: '0', pointerEvents: 'none'},
+  '.md-indent-guide': {position: 'absolute', top: '-1px', bottom: '-1px', width: '1px',
+    background: 'color-mix(in srgb, var(--muted) 32%, transparent)'},
+  '.md-fold': {display: 'inline-block', width: '12px', marginLeft: '-20px', marginRight: '8px',
+    color: 'var(--muted)', cursor: 'pointer', opacity: '0', transition: 'opacity .12s',
+    fontSize: '15px', lineHeight: '1.2', verticalAlign: '-1px'},
   '.cm-line:hover .md-fold, .md-fold.folded': {opacity: '1'},
   '.md-strong': {fontWeight: '700'},        // 不定颜色：链接里的加粗要保持链接色
   '.md-em': {fontStyle: 'italic'},

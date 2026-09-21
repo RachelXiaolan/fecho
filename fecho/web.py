@@ -269,6 +269,9 @@ def build_app():
     vendor_dir = Path(__file__).resolve().parent / "presets" / "vendor"
     if vendor_dir.is_dir():
         app.mount("/vendor", StaticFiles(directory=vendor_dir), name="vendor")
+    assets_dir = Path(__file__).resolve().parent / "presets" / "assets"
+    if assets_dir.is_dir():
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
     @app.exception_handler(ValueError)
     async def value_error_handler(_request: Request, exc: ValueError):

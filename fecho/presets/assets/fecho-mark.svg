@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-labelledby="title">
+  <title id="title">Fecho</title>
+  <circle cx="100" cy="100" r="77" fill="#7B6A85"/>
+  <rect x="85" y="48" width="26" height="104" rx="10" fill="#fff"/>
+  <rect x="48" y="85" width="104" height="26" rx="10" fill="#fff"/>
+</svg>
