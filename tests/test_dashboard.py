@@ -120,6 +120,13 @@ class TestDashboardContract(unittest.TestCase):
         self.assertIn('.filter-menu{position:absolute', self.html)
         self.assertIn('#reload-day{align-self:end', self.html)
 
+    def test_dashboard_toolbar_reflows_before_mobile_breakpoint(self):
+        """641–1100px 仍是桌面时，筛选器必须重排，不能挤出横向滚动条。"""
+        self.assertIn('@media(max-width:1100px) and (min-width:641px){', self.html)
+        self.assertIn('.topbar-actions{flex:1 1 520px;display:grid;grid-template-columns:minmax(0,1fr) auto auto;', self.html)
+        self.assertIn('.toolbar,.shell.sidebar-expanded .toolbar{grid-column:1/-1;grid-template-columns:repeat(2,minmax(0,1fr));', self.html)
+        self.assertIn('.toolbar .field:first-child{grid-column:1/-1}', self.html)
+
     def test_global_filters_use_custom_listboxes_but_keep_native_select_values(self):
         """菜单面板可控，筛选值仍由原有 select 和 change 事件提供。"""
         for ident in ("agent-filter", "source-filter", "status-filter"):

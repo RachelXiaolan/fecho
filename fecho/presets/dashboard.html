@@ -418,6 +418,14 @@
       main{padding:24px 22px 64px}.two-col,.report-layout{grid-template-columns:1fr}.report-nav{border-right:0;border-bottom:1px solid var(--line);display:flex;overflow:auto}.report-nav button{width:auto;white-space:nowrap}
       .review-grid{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}
     }
+    /* 桌面窄窗口还没到手机导航时，先把筛选区折成两行，避免固定五列挤出页面。 */
+    @media(max-width:1100px) and (min-width:641px){
+      .topbar{padding:17px 22px;align-items:flex-start}
+      .topbar-actions{flex:1 1 520px;display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:end}
+      .toolbar,.shell.sidebar-expanded .toolbar{grid-column:1/-1;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:100%}
+      .toolbar .field:first-child{grid-column:1/-1}
+      .toolbar #reload-day{width:100%}
+    }
     @media(max-width:640px){
       .shell{display:block}.sidebar{position:fixed;z-index:20;top:auto;bottom:0;width:100%;height:62px;padding:7px 8px;background:var(--nav-deep)}
       .brand-row,.nav-label,.sidebar-foot,.sidebar-toggle{display:none}.nav{grid-auto-flow:column;grid-auto-columns:1fr;gap:2px}.nav button{padding:6px 3px;display:grid;place-items:center;gap:2px;font-size:10px}.nav button .nav-text{display:block}.nav .count{font-size:9px;min-width:18px;padding:0 4px}
