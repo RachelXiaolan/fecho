@@ -122,7 +122,7 @@
     .filter-select-trigger{position:relative;border-radius:7px;cursor:pointer;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .filter-select-trigger::after{content:"";position:absolute;right:12px;top:14px;width:7px;height:7px;border-right:1.5px solid var(--muted);border-bottom:1.5px solid var(--muted);transform:rotate(45deg);transition:transform .14s ease}
     .filter-select.open .filter-select-trigger::after{transform:translateY(3px) rotate(225deg);border-color:var(--muted)}
-    .filter-menu{position:absolute;z-index:30;top:calc(100% + 7px);right:0;width:max(100%,172px);max-width:calc(100vw - 32px);padding:5px;border:1px solid color-mix(in srgb,var(--line) 72%,var(--taro));border-radius:10px;background:var(--surface-alt);box-shadow:0 14px 30px rgba(0,0,0,.34);display:grid;gap:2px;transform-origin:top right;animation:menu-in .14s ease both}
+    .filter-menu{position:absolute;z-index:30;top:calc(100% + 7px);left:0;width:max(100%,172px);max-width:calc(100vw - 32px);padding:5px;border:1px solid color-mix(in srgb,var(--line) 72%,var(--taro));border-radius:10px;background:var(--surface-alt);box-shadow:0 14px 30px rgba(0,0,0,.34);display:grid;gap:2px;transform-origin:top left;animation:menu-in .14s ease both}
     @keyframes menu-in{from{opacity:0;transform:translateY(-3px) scale(.98)}to{opacity:1;transform:none}}
     .filter-option{width:100%;min-height:34px;padding:7px 9px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--ink);display:grid;grid-template-columns:14px minmax(0,1fr);gap:7px;align-items:center;text-align:left;font-size:12px;line-height:1.25}
     .filter-option:hover{background:var(--hover-bg)}.filter-option[aria-selected="true"]{background:color-mix(in srgb,var(--butter) 17%,var(--surface-alt));color:var(--ink)}
@@ -468,9 +468,9 @@
       <div class="topbar-actions">
         <div class="toolbar" data-i18n-aria="filters_aria">
           <div class="field"><label for="work-date" data-i18n="filter_date"></label><input id="work-date" type="date"></div>
-          <div class="field filter-select" data-filter-select="agent-filter"><label id="agent-filter-label" for="agent-filter-trigger" data-i18n="filter_agent"></label><select id="agent-filter" class="filter-select-native" aria-hidden="true" tabindex="-1"><option value=""></option></select><button class="filter-select-trigger" id="agent-filter-trigger" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="agent-filter-menu" aria-labelledby="agent-filter-label" data-filter-trigger="agent-filter"></button><div class="filter-menu" id="agent-filter-menu" role="listbox" aria-labelledby="agent-filter-label" hidden></div></div>
-          <div class="field filter-select" data-filter-select="source-filter"><label id="source-filter-label" for="source-filter-trigger" data-i18n="filter_source"></label><select id="source-filter" class="filter-select-native" aria-hidden="true" tabindex="-1"><option value=""></option></select><button class="filter-select-trigger" id="source-filter-trigger" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="source-filter-menu" aria-labelledby="source-filter-label" data-filter-trigger="source-filter"></button><div class="filter-menu" id="source-filter-menu" role="listbox" aria-labelledby="source-filter-label" hidden></div></div>
-          <div class="field filter-select" data-filter-select="status-filter"><label id="status-filter-label" for="status-filter-trigger" data-i18n="filter_status"></label><select id="status-filter" class="filter-select-native" aria-hidden="true" tabindex="-1"><option value=""></option></select><button class="filter-select-trigger" id="status-filter-trigger" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="status-filter-menu" aria-labelledby="status-filter-label" data-filter-trigger="status-filter"></button><div class="filter-menu" id="status-filter-menu" role="listbox" aria-labelledby="status-filter-label" hidden></div></div>
+          <div class="field filter-select" data-filter-select="agent-filter"><label id="agent-filter-label" for="agent-filter-trigger" data-i18n="filter_agent"></label><select id="agent-filter" class="filter-select-native" aria-hidden="true" tabindex="-1"><option value=""></option></select><button class="filter-select-trigger" id="agent-filter-trigger" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="agent-filter-menu" aria-labelledby="agent-filter-label" data-filter-trigger="agent-filter" disabled></button><div class="filter-menu" id="agent-filter-menu" role="listbox" aria-labelledby="agent-filter-label" hidden></div></div>
+          <div class="field filter-select" data-filter-select="source-filter"><label id="source-filter-label" for="source-filter-trigger" data-i18n="filter_source"></label><select id="source-filter" class="filter-select-native" aria-hidden="true" tabindex="-1"><option value=""></option></select><button class="filter-select-trigger" id="source-filter-trigger" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="source-filter-menu" aria-labelledby="source-filter-label" data-filter-trigger="source-filter" disabled></button><div class="filter-menu" id="source-filter-menu" role="listbox" aria-labelledby="source-filter-label" hidden></div></div>
+          <div class="field filter-select" data-filter-select="status-filter"><label id="status-filter-label" for="status-filter-trigger" data-i18n="filter_status"></label><select id="status-filter" class="filter-select-native" aria-hidden="true" tabindex="-1"><option value=""></option></select><button class="filter-select-trigger" id="status-filter-trigger" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="status-filter-menu" aria-labelledby="status-filter-label" data-filter-trigger="status-filter" disabled></button><div class="filter-menu" id="status-filter-menu" role="listbox" aria-labelledby="status-filter-label" hidden></div></div>
           <button class="btn" id="reload-day" type="button" data-i18n="reload"></button>
         </div>
         <button class="lang-switch" id="lang-toggle" type="button" data-i18n-aria="lang_aria"></button>
@@ -936,6 +936,13 @@
     fillSelect($('#source-filter'), data.filters.ingestion_methods, t('all'));
     const statusLabels=Object.fromEntries(['done','wip','blocked','unknown'].map(s=>[s,t('status_'+s)]));
     fillSelect($('#status-filter'), data.filters.completion_statuses, t('all'), statusLabels);
+    setFilterControlsReady(true);
+  }
+  function setFilterControlsReady(ready){
+    $$('[data-filter-trigger]').forEach(trigger=>{
+      trigger.disabled=!ready;
+      trigger.setAttribute('aria-disabled',String(!ready));
+    });
   }
   function fillSelect(select, values, first, labels={}){
     const current=select.value; select.innerHTML=`<option value="">${esc(first)}</option>`+
@@ -971,6 +978,7 @@
   function openFilterMenu(select){
     if(state.filterMenu.open&&state.filterMenu.open!==select.id) closeFilterMenu();
     const {field,trigger,menu}=filterParts(select); if(!field||!trigger||!menu) return;
+    if(trigger.disabled) return;
     syncFilterMenu(select); menu.hidden=false; field.classList.add('open'); trigger.setAttribute('aria-expanded','true');
     state.filterMenu.open=select.id; updateFilterMenuActive(select,Math.max(0,select.selectedIndex));
   }
@@ -1868,6 +1876,7 @@
   })();
 
   applyStatic();
+  setFilterControlsReady(false);
   switchView('today',{scroll:false});
   loadMe();
   loadDashboard();

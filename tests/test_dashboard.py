@@ -141,6 +141,16 @@ class TestDashboardContract(unittest.TestCase):
         self.assertIn("event.key==='Escape'", self.html)
         self.assertIn("!event.target.closest('.filter-select')", self.html)
 
+    def test_filter_menus_wait_for_dashboard_options_and_align_to_their_field(self):
+        """数据尚未回来时不能打开空菜单；菜单始终从触发器左边缘展开。"""
+        for ident in ("agent-filter", "source-filter", "status-filter"):
+            self.assertIn('data-filter-trigger="%s" disabled' % ident, self.html)
+        self.assertIn('function setFilterControlsReady(ready)', self.html)
+        self.assertIn('trigger.disabled=!ready', self.html)
+        self.assertIn('setFilterControlsReady(false)', self.html)
+        self.assertIn('setFilterControlsReady(true)', self.html)
+        self.assertIn('.filter-menu{position:absolute;z-index:30;top:calc(100% + 7px);left:0;', self.html)
+
     def test_custom_filter_triggers_keep_the_date_field_shape(self):
         """自定义筛选按钮沿用日期控件的圆角与紫色描边，展开时不变成黄边。"""
         self.assertIn('.filter-select-trigger{position:relative;border-radius:7px;', self.html)
