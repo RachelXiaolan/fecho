@@ -330,10 +330,10 @@
     .guide-icon{font-size:15px;line-height:1}
     .guide-link:hover{background:rgba(255,255,255,.06);color:#fff}
     .topbar-actions{display:flex;align-items:flex-end;gap:10px 12px;flex-wrap:wrap;justify-content:flex-end;min-width:0}
-    .lang-switch{align-self:center;width:34px;height:34px;padding:0;border:1px solid var(--line);border-radius:9px;
+    .lang-switch{align-self:end;width:34px;height:34px;padding:0;border:1px solid var(--line);border-radius:9px;
       background:var(--surface-soft);color:var(--muted);display:grid;place-items:center;font-size:11px;font-weight:700;line-height:1}
     .lang-switch:hover{color:var(--ink)}
-    .theme-toggle{align-self:center;width:34px;height:34px;padding:0;border:1px solid var(--line);border-radius:9px;
+    .theme-toggle{align-self:end;width:34px;height:34px;padding:0;border:1px solid var(--line);border-radius:9px;
       background:var(--surface-soft);color:var(--muted);display:grid;place-items:center}
     .theme-toggle:hover{color:var(--ink)}
     .theme-toggle .i-sun,:root[data-theme="dark"] .theme-toggle .i-moon{display:none}
@@ -926,7 +926,7 @@
       // 等回来的时候人可能已经切到别的日期了：存下来，但别画到页面上
       if(data.date!==($('#work-date').value||localDate())){ (state.cache||(state.cache={}))[cacheKey(data.date)]=data; return; }
       state.data=data; hydrateFilters(); renderAll();
-    }catch(error){ showError(error.message); }
+    }catch(error){ resetFilterControls(); showError(error.message); }
     finally{ $('#loading').classList.remove('show'); }
   }
 
@@ -936,6 +936,14 @@
     fillSelect($('#source-filter'), data.filters.ingestion_methods, t('all'));
     const statusLabels=Object.fromEntries(['done','wip','blocked','unknown'].map(s=>[s,t('status_'+s)]));
     fillSelect($('#status-filter'), data.filters.completion_statuses, t('all'), statusLabels);
+    setFilterControlsReady(true);
+  }
+  function resetFilterControls(){
+    // 接口失败时仍保留可见的“全部”项和错误提示，
+    // 不能把三个控件冻成没有文字的紫色方块，让人以为下拉菜单自身坏了。
+    fillSelect($('#agent-filter'), [], t('all'));
+    fillSelect($('#source-filter'), [], t('all'));
+    fillSelect($('#status-filter'), [], t('all'));
     setFilterControlsReady(true);
   }
   function setFilterControlsReady(ready){

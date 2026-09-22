@@ -151,6 +151,22 @@ class TestDashboardContract(unittest.TestCase):
         self.assertIn('setFilterControlsReady(true)', self.html)
         self.assertIn('.filter-menu{position:absolute;z-index:30;top:calc(100% + 7px);left:0;', self.html)
 
+    def test_filter_request_failure_leaves_visible_retryable_filter_controls(self):
+        """接口失败时，筛选器不能停在空白禁用态，让人误以为下拉菜单坏了。"""
+        loader = self.html[self.html.index('async function loadDashboard'):self.html.index('function hydrateFilters')]
+        self.assertIn('resetFilterControls()', loader)
+        self.assertLess(loader.index('catch(error)'), loader.index('resetFilterControls()'))
+        fallback = self.html[self.html.index('function resetFilterControls'):self.html.index('function fillSelect')]
+        self.assertIn("fillSelect($('#agent-filter'), [], t('all'))", fallback)
+        self.assertIn("fillSelect($('#source-filter'), [], t('all'))", fallback)
+        self.assertIn("fillSelect($('#status-filter'), [], t('all'))", fallback)
+        self.assertIn('setFilterControlsReady(true)', fallback)
+
+    def test_topbar_icon_buttons_bottom_align_with_the_toolbar_fields(self):
+        """语言和主题按钮应和输入框、刷新按钮的底边对齐。"""
+        self.assertIn('.lang-switch{align-self:end;', self.html)
+        self.assertIn('.theme-toggle{align-self:end;', self.html)
+
     def test_custom_filter_triggers_keep_the_date_field_shape(self):
         """自定义筛选按钮沿用日期控件的圆角与紫色描边，展开时不变成黄边。"""
         self.assertIn('.filter-select-trigger{position:relative;border-radius:7px;', self.html)
