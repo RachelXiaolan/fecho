@@ -9,7 +9,7 @@
   <style>
     :root{
       --nav:#5d526b;--nav-deep:#4b4057;--nav-text:#fffdf9;--violet:#d8c6dc;
-      --taro:#a99bb5;--taro-soft:#f5eff6;--butter:#f0c75f;--butter-light:#f7d97e;--butter-deep:#b6801e;
+      --taro:#a99bb5;--taro-deep:#796288;--taro-soft:#f5eff6;--butter:#f0c75f;--butter-light:#f7d97e;--butter-deep:#b6801e;
       --teal:#315f5b;--canvas:#fff9ec;--surface:#fffdf9;--surface-soft:#fff4e2;
       --ink:#3f3748;--muted:#6f6578;--faint:#9b91a5;--line:#ddcfdd;
       --success:#3e735e;--success-bg:#e7f1e9;--warning:#9a6815;--warning-bg:#fff0c7;
@@ -24,7 +24,7 @@
     /* 黑夜模式：只换颜色变量，版式一点不动 */
     :root[data-theme="dark"]{
       --nav:#302838;--nav-deep:#211a28;--nav-text:#fff8ed;--violet:#d8c6dc;
-      --taro:#c7b5cf;--taro-soft:#3d3246;--butter:#f0c75f;--butter-light:#f7d97e;--butter-deep:#b6801e;
+      --taro:#c7b5cf;--taro-deep:#8e7798;--taro-soft:#3d3246;--butter:#f0c75f;--butter-light:#f7d97e;--butter-deep:#b6801e;
       --teal:#78b7ab;--canvas:#18121e;--surface:#2b2431;--surface-soft:#372d3d;--surface-alt:#322a38;
       --ink:#fff8ed;--ink-soft:#ded3dc;--muted:#c9bdc8;--faint:#9e91a1;--line:#4b3e53;
       --success:#91cfad;--success-bg:#1e3b31;--warning:#f1ca72;--warning-bg:#443315;--danger:#f1a5ad;--danger-bg:#49252c;
@@ -106,13 +106,36 @@
       align-items:center;justify-content:space-between;gap:24px;position:sticky;top:0;z-index:10}
     .page-title h1{font-size:24px;line-height:1.08;letter-spacing:-.6px;margin:0;font-weight:600}
     .page-title p{margin:5px 0 0;color:var(--muted);font-size:12px}
-    .toolbar{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;justify-content:flex-end}
-    .field{display:grid;gap:4px}
-    .field label{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.5px}
+    .toolbar{display:grid;grid-template-columns:136px 108px 142px 96px 62px;gap:8px;align-items:end;max-width:100%}
+    .toolbar .field{display:grid;gap:5px;min-width:0}
+    .toolbar .field label{min-height:14px;line-height:14px;font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.5px;white-space:nowrap}
     input,select,textarea{border:1px solid var(--line);background:var(--surface);border-radius:7px;
       min-height:38px;padding:7px 10px;outline:none}
     input:focus,select:focus,textarea:focus{border-color:var(--taro);box-shadow:0 0 0 3px color-mix(in srgb,var(--taro) 24%,transparent)}
-    .toolbar select{max-width:142px}
+    .toolbar input,.filter-select-trigger{width:100%;min-width:0;height:38px;min-height:38px;padding:7px 30px 7px 11px;
+      border-color:color-mix(in srgb,var(--line) 86%,var(--taro));background-color:var(--surface);
+      box-shadow:inset 0 1px 0 color-mix(in srgb,var(--surface) 80%,white 20%);transition:border-color .14s ease,box-shadow .14s ease,background-color .14s ease}
+    .toolbar input:hover,.filter-select-trigger:hover{border-color:color-mix(in srgb,var(--taro) 58%,var(--line));background-color:var(--surface-alt)}
+    .toolbar input:focus{border-color:var(--butter-deep);box-shadow:0 0 0 3px color-mix(in srgb,var(--butter) 25%,transparent),inset 0 1px 0 color-mix(in srgb,var(--surface) 80%,white 20%)}
+    .filter-select-trigger:focus,.filter-select.open .filter-select-trigger{border-color:var(--taro);box-shadow:0 0 0 3px color-mix(in srgb,var(--taro) 24%,transparent),inset 0 1px 0 color-mix(in srgb,var(--surface) 80%,white 20%)}
+    .filter-select{position:relative}.filter-select.open{z-index:3}.filter-select-native{display:none}
+    .filter-select-trigger{position:relative;border-radius:7px;cursor:pointer;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .filter-select-trigger::after{content:"";position:absolute;right:12px;top:14px;width:7px;height:7px;border-right:1.5px solid var(--muted);border-bottom:1.5px solid var(--muted);transform:rotate(45deg);transition:transform .14s ease}
+    .filter-select.open .filter-select-trigger::after{transform:translateY(3px) rotate(225deg);border-color:var(--muted)}
+    .filter-menu{position:absolute;z-index:30;top:calc(100% + 7px);left:0;width:max(100%,172px);max-width:calc(100vw - 32px);padding:5px;border:1px solid color-mix(in srgb,var(--line) 72%,var(--taro));border-radius:10px;background:var(--surface-alt);box-shadow:0 14px 30px rgba(0,0,0,.34);display:grid;gap:2px;transform-origin:top left;animation:menu-in .14s ease both}
+    @keyframes menu-in{from{opacity:0;transform:translateY(-3px) scale(.98)}to{opacity:1;transform:none}}
+    .filter-option{width:100%;min-height:34px;padding:7px 9px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--ink);display:grid;grid-template-columns:14px minmax(0,1fr);gap:7px;align-items:center;text-align:left;font-size:12px;line-height:1.25}
+    .filter-option:hover{background:var(--hover-bg)}.filter-option[aria-selected="true"]{background:color-mix(in srgb,var(--butter) 17%,var(--surface-alt));color:var(--ink)}
+    .filter-option.active{border-color:color-mix(in srgb,var(--taro) 72%,var(--line));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--taro) 18%,transparent)}
+    .filter-option-mark{color:var(--butter);font-size:12px;font-weight:800;opacity:0}.filter-option[aria-selected="true"] .filter-option-mark{opacity:1}
+    .toolbar input[type="date"]{accent-color:var(--butter);font-variant-numeric:tabular-nums}
+    .toolbar input[type="date"]::-webkit-calendar-picker-indicator{cursor:pointer;opacity:.72}.toolbar input[type="date"]::-webkit-calendar-picker-indicator:hover{opacity:1}
+    #reload-day{align-self:end;height:38px;min-height:38px;padding:7px 10px;border-color:color-mix(in srgb,var(--line) 78%,var(--taro));background:var(--surface-soft);color:var(--muted);white-space:nowrap;box-shadow:none}
+    #reload-day:hover{border-color:var(--taro);background:var(--hover-bg);color:var(--ink)}
+    .topbar .toolbar input,.topbar .filter-select-trigger,.topbar #reload-day,.topbar .lang-switch,.topbar .theme-toggle{border-color:var(--taro-deep);background:var(--taro);color:var(--primary-ink);box-shadow:0 2px 0 var(--taro-deep)}
+    .topbar .toolbar input:hover,.topbar .filter-select-trigger:hover,.topbar #reload-day:hover,.topbar .lang-switch:hover,.topbar .theme-toggle:hover{border-color:var(--taro-deep);background:color-mix(in srgb,var(--taro) 82%,white 18%);color:var(--primary-ink)}
+    .topbar .toolbar input:focus,.topbar .filter-select-trigger:focus,.topbar .filter-select.open .filter-select-trigger{border-color:var(--taro-deep);box-shadow:0 2px 0 var(--taro-deep),0 0 0 3px color-mix(in srgb,var(--taro) 28%,transparent)}
+    .topbar .toolbar input:active,.topbar .filter-select-trigger:active,.topbar #reload-day:active,.topbar .lang-switch:active,.topbar .theme-toggle:active{transform:translateY(2px);box-shadow:0 0 0 var(--taro-deep)}
     main{max-width:1240px;margin:0 auto;padding:30px 34px 72px}
     .view{display:none}.view.active{display:block;animation:enter .24s ease both}
     @keyframes enter{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
@@ -306,11 +329,11 @@
       border-radius:8px;color:#bcbac9;text-decoration:none;font-size:13px}
     .guide-icon{font-size:15px;line-height:1}
     .guide-link:hover{background:rgba(255,255,255,.06);color:#fff}
-    .topbar-actions{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;justify-content:flex-end}
-    .lang-switch{display:flex;gap:2px;background:var(--surface-soft);padding:3px;border-radius:9px;align-self:center}
-    .lang-switch button{border:0;background:transparent;padding:6px 10px;border-radius:7px;font-size:11px;font-weight:700;color:var(--muted)}
-    .lang-switch button.active{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
-    .theme-toggle{align-self:center;width:34px;height:34px;padding:0;border:1px solid var(--line);border-radius:9px;
+    .topbar-actions{display:flex;align-items:flex-end;gap:10px 12px;flex-wrap:wrap;justify-content:flex-end;min-width:0}
+    .lang-switch{align-self:end;width:34px;height:34px;padding:0;border:1px solid var(--line);border-radius:9px;
+      background:var(--surface-soft);color:var(--muted);display:grid;place-items:center;font-size:11px;font-weight:700;line-height:1}
+    .lang-switch:hover{color:var(--ink)}
+    .theme-toggle{align-self:end;width:34px;height:34px;padding:0;border:1px solid var(--line);border-radius:9px;
       background:var(--surface-soft);color:var(--muted);display:grid;place-items:center}
     .theme-toggle:hover{color:var(--ink)}
     .theme-toggle .i-sun,:root[data-theme="dark"] .theme-toggle .i-moon{display:none}
@@ -391,14 +414,22 @@
       .shell:not(.sidebar-expanded) .nav button{justify-content:center;min-height:44px}
       .shell:not(.sidebar-expanded) .nav button .count{display:none}
       .shell.sidebar-expanded{grid-template-columns:232px minmax(0,1fr)}
-      .shell.sidebar-expanded .sidebar{padding:26px 18px 20px}.topbar{padding:17px 22px;align-items:flex-start}.toolbar{max-width:480px}
+      .shell.sidebar-expanded .sidebar{padding:26px 18px 20px}.topbar{padding:17px 22px;align-items:flex-start}.toolbar{grid-template-columns:132px 102px 132px 92px 62px;gap:7px}
       main{padding:24px 22px 64px}.two-col,.report-layout{grid-template-columns:1fr}.report-nav{border-right:0;border-bottom:1px solid var(--line);display:flex;overflow:auto}.report-nav button{width:auto;white-space:nowrap}
       .review-grid{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}
+    }
+    /* 桌面窄窗口还没到手机导航时，先把筛选区折成两行，避免固定五列挤出页面。 */
+    @media(max-width:1100px) and (min-width:641px){
+      .topbar{padding:17px 22px;align-items:flex-start}
+      .topbar-actions{flex:1 1 520px;display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:end}
+      .toolbar,.shell.sidebar-expanded .toolbar{grid-column:1/-1;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:100%}
+      .toolbar .field:first-child{grid-column:1/-1}
+      .toolbar #reload-day{width:100%}
     }
     @media(max-width:640px){
       .shell{display:block}.sidebar{position:fixed;z-index:20;top:auto;bottom:0;width:100%;height:62px;padding:7px 8px;background:var(--nav-deep)}
       .brand-row,.nav-label,.sidebar-foot,.sidebar-toggle{display:none}.nav{grid-auto-flow:column;grid-auto-columns:1fr;gap:2px}.nav button{padding:6px 3px;display:grid;place-items:center;gap:2px;font-size:10px}.nav button .nav-text{display:block}.nav .count{font-size:9px;min-width:18px;padding:0 4px}
-      .topbar{position:static;display:block;padding:18px 16px}.toolbar{margin-top:15px;display:grid;grid-template-columns:1fr 1fr}.toolbar .field:first-child{grid-column:1/-1}.toolbar input,.toolbar select{width:100%;max-width:none}
+      .topbar{position:static;display:block;padding:18px 16px}.topbar-actions{margin-top:15px;display:grid;grid-template-columns:1fr auto auto;align-items:end}.toolbar{grid-column:1/-1;margin:0;grid-template-columns:1fr 1fr;gap:10px}.toolbar .field:first-child{grid-column:1/-1}.toolbar input,.filter-select-trigger{width:100%;max-width:none}.toolbar #reload-day{width:100%;padding-left:12px;padding-right:12px}
       main{padding:20px 14px 92px}.hero{padding:23px 21px}.hero h2{font-size:25px}.hero .hero-action{position:static;margin-top:18px}.metrics{gap:8px}.metric{padding:14px}.metric strong{font-size:23px}
       .two-col{display:block}.two-col>div+div{margin-top:18px}.task-row{grid-template-columns:1fr}.task-actions{justify-content:flex-start}.report-paper{padding:22px 18px}.toast{left:14px;right:14px;bottom:76px}
     }
@@ -437,12 +468,12 @@
       <div class="topbar-actions">
         <div class="toolbar" data-i18n-aria="filters_aria">
           <div class="field"><label for="work-date" data-i18n="filter_date"></label><input id="work-date" type="date"></div>
-          <div class="field"><label for="agent-filter" data-i18n="filter_agent"></label><select id="agent-filter"><option value=""></option></select></div>
-          <div class="field"><label for="source-filter" data-i18n="filter_source"></label><select id="source-filter"><option value=""></option></select></div>
-          <div class="field"><label for="status-filter" data-i18n="filter_status"></label><select id="status-filter"><option value=""></option></select></div>
+          <div class="field filter-select" data-filter-select="agent-filter"><label id="agent-filter-label" for="agent-filter-trigger" data-i18n="filter_agent"></label><select id="agent-filter" class="filter-select-native" aria-hidden="true" tabindex="-1"><option value=""></option></select><button class="filter-select-trigger" id="agent-filter-trigger" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="agent-filter-menu" aria-labelledby="agent-filter-label" data-filter-trigger="agent-filter" disabled></button><div class="filter-menu" id="agent-filter-menu" role="listbox" aria-labelledby="agent-filter-label" hidden></div></div>
+          <div class="field filter-select" data-filter-select="source-filter"><label id="source-filter-label" for="source-filter-trigger" data-i18n="filter_source"></label><select id="source-filter" class="filter-select-native" aria-hidden="true" tabindex="-1"><option value=""></option></select><button class="filter-select-trigger" id="source-filter-trigger" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="source-filter-menu" aria-labelledby="source-filter-label" data-filter-trigger="source-filter" disabled></button><div class="filter-menu" id="source-filter-menu" role="listbox" aria-labelledby="source-filter-label" hidden></div></div>
+          <div class="field filter-select" data-filter-select="status-filter"><label id="status-filter-label" for="status-filter-trigger" data-i18n="filter_status"></label><select id="status-filter" class="filter-select-native" aria-hidden="true" tabindex="-1"><option value=""></option></select><button class="filter-select-trigger" id="status-filter-trigger" type="button" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="status-filter-menu" aria-labelledby="status-filter-label" data-filter-trigger="status-filter" disabled></button><div class="filter-menu" id="status-filter-menu" role="listbox" aria-labelledby="status-filter-label" hidden></div></div>
           <button class="btn" id="reload-day" type="button" data-i18n="reload"></button>
         </div>
-        <div class="lang-switch" role="group" data-i18n-aria="lang_aria"><button data-lang="zh">中文</button><button data-lang="en">EN</button></div>
+        <button class="lang-switch" id="lang-toggle" type="button" data-i18n-aria="lang_aria"></button>
         <button class="theme-toggle" id="theme-toggle" type="button" data-i18n-aria="theme_aria"><svg class="i-moon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M20.5 13.4A8.5 8.5 0 1 1 10.6 3.5a6.6 6.6 0 0 0 9.9 9.9z" fill="currentColor"/></svg><svg class="i-sun" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="12" cy="12" r="4.2" fill="currentColor"/><path d="M12 2.5v2.3M12 19.2v2.3M2.5 12h2.3M19.2 12h2.3M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
       </div>
     </header>
@@ -829,7 +860,7 @@
   const esc = value => String(value == null ? '' : value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
   const state = {data:null, view:'today', taskStatus:'all', reportTab:'daily', undo:null, toastTimer:null,
     me:null, viewAs:null, editing:false, settings:{agents:[], folders:[]}, admin:null, style:null,
-    prevView:null, feedback:{images:[], mine:[], all:null}};
+    prevView:null, feedback:{images:[], mine:[], all:null}, filterMenu:{open:null,active:0}};
 
   // ---- 界面语言 ----
   // 记在浏览器里，登录页、onboard 页、面板共用同一个 key。默认中文。
@@ -846,7 +877,7 @@
     $$('[data-i18n]').forEach(el=>{ el.textContent=t(el.dataset.i18n); });
     $$('[data-i18n-placeholder]').forEach(el=>{ el.placeholder=t(el.dataset.i18nPlaceholder); });
     $$('[data-i18n-aria]').forEach(el=>{ el.setAttribute('aria-label',t(el.dataset.i18nAria)); });
-    $$('[data-lang]').forEach(b=>b.classList.toggle('active',b.dataset.lang===lang));
+    const langToggle=$('#lang-toggle'); if(langToggle){ langToggle.textContent=lang==='en'?'EN':'中'; langToggle.setAttribute('aria-pressed',String(lang==='en')); langToggle.title=t('lang_aria'); }
     const shell=$('.shell');
     if(shell&&typeof applySidebar==='function') applySidebar(shell.classList.contains('sidebar-collapsed'),{persist:false});
   }
@@ -895,7 +926,7 @@
       // 等回来的时候人可能已经切到别的日期了：存下来，但别画到页面上
       if(data.date!==($('#work-date').value||localDate())){ (state.cache||(state.cache={}))[cacheKey(data.date)]=data; return; }
       state.data=data; hydrateFilters(); renderAll();
-    }catch(error){ showError(error.message); }
+    }catch(error){ resetFilterControls(); showError(error.message); }
     finally{ $('#loading').classList.remove('show'); }
   }
 
@@ -905,11 +936,68 @@
     fillSelect($('#source-filter'), data.filters.ingestion_methods, t('all'));
     const statusLabels=Object.fromEntries(['done','wip','blocked','unknown'].map(s=>[s,t('status_'+s)]));
     fillSelect($('#status-filter'), data.filters.completion_statuses, t('all'), statusLabels);
+    setFilterControlsReady(true);
+  }
+  function resetFilterControls(){
+    // 接口失败时仍保留可见的“全部”项和错误提示，
+    // 不能把三个控件冻成没有文字的紫色方块，让人以为下拉菜单自身坏了。
+    fillSelect($('#agent-filter'), [], t('all'));
+    fillSelect($('#source-filter'), [], t('all'));
+    fillSelect($('#status-filter'), [], t('all'));
+    setFilterControlsReady(true);
+  }
+  function setFilterControlsReady(ready){
+    $$('[data-filter-trigger]').forEach(trigger=>{
+      trigger.disabled=!ready;
+      trigger.setAttribute('aria-disabled',String(!ready));
+    });
   }
   function fillSelect(select, values, first, labels={}){
     const current=select.value; select.innerHTML=`<option value="">${esc(first)}</option>`+
       values.map(v=>`<option value="${esc(v)}">${esc(labels[v]||v)}</option>`).join('');
     if(values.includes(current)) select.value=current;
+    syncFilterMenu(select);
+  }
+  function filterParts(select){
+    return {field:select.closest('[data-filter-select]'),trigger:$('#'+select.id+'-trigger'),menu:$('#'+select.id+'-menu')};
+  }
+  function syncFilterMenu(select){
+    const {trigger,menu}=filterParts(select); if(!trigger||!menu) return;
+    const options=[...select.options], selectedIndex=Math.max(0,select.selectedIndex);
+    trigger.textContent=(options[selectedIndex]||{}).textContent||'';
+    menu.innerHTML=options.map((option,index)=>`<button class="filter-option" id="${select.id}-option-${index}" type="button" role="option" aria-selected="${index===selectedIndex}" data-filter-option="${select.id}" data-filter-index="${index}"><span class="filter-option-mark" aria-hidden="true">✓</span><span>${esc(option.textContent)}</span></button>`).join('');
+    if(state.filterMenu.open===select.id) updateFilterMenuActive(select,state.filterMenu.active);
+    else trigger.removeAttribute('aria-activedescendant');
+  }
+  function updateFilterMenuActive(select,index){
+    const {trigger,menu}=filterParts(select), count=select.options.length; if(!trigger||!menu||!count) return;
+    const next=(index+count)%count; state.filterMenu.active=next;
+    $$('.filter-option',menu).forEach((option,i)=>option.classList.toggle('active',i===next));
+    trigger.setAttribute('aria-activedescendant',select.id+'-option-'+next);
+  }
+  function closeFilterMenu({focus=false}={}){
+    const id=state.filterMenu.open; if(!id) return;
+    const select=$('#'+id); if(!select){ state.filterMenu.open=null; return; }
+    const {field,trigger,menu}=filterParts(select);
+    menu.hidden=true; field.classList.remove('open'); trigger.setAttribute('aria-expanded','false'); trigger.removeAttribute('aria-activedescendant');
+    state.filterMenu.open=null; state.filterMenu.active=0;
+    if(focus) trigger.focus();
+  }
+  function openFilterMenu(select){
+    if(state.filterMenu.open&&state.filterMenu.open!==select.id) closeFilterMenu();
+    const {field,trigger,menu}=filterParts(select); if(!field||!trigger||!menu) return;
+    if(trigger.disabled) return;
+    syncFilterMenu(select); menu.hidden=false; field.classList.add('open'); trigger.setAttribute('aria-expanded','true');
+    state.filterMenu.open=select.id; updateFilterMenuActive(select,Math.max(0,select.selectedIndex));
+  }
+  function chooseFilterOption(select,index){
+    if(!select.options[index]) return;
+    select.selectedIndex=index;
+    select.dispatchEvent(new Event('change',{bubbles:true}));
+    syncFilterMenu(select); closeFilterMenu({focus:true});
+  }
+  function moveFilterMenu(select,step){
+    updateFilterMenuActive(select,state.filterMenu.active+step);
   }
   function matches(update){
     const agent=$('#agent-filter').value, source=$('#source-filter').value, status=$('#status-filter').value;
@@ -1319,6 +1407,10 @@
   }
 
   document.addEventListener('click', async event=>{
+    const filterOption=event.target.closest('[data-filter-option]'), filterTrigger=event.target.closest('[data-filter-trigger]');
+    if(!filterOption&&!filterTrigger&&!event.target.closest('.filter-select')) closeFilterMenu();
+    if(filterOption){ const select=$('#'+filterOption.dataset.filterOption); if(select) chooseFilterOption(select,+filterOption.dataset.filterIndex); return; }
+    if(filterTrigger){ const select=$('#'+filterTrigger.dataset.filterTrigger); if(select){ state.filterMenu.open===select.id?closeFilterMenu({focus:true}):openFilterMenu(select); } return; }
     const help=$('#quick-api-help-text');
     if(help&&!event.target.closest('.quick-api-entry')) help.hidden=true;
     const group=event.target.closest('[data-group]');
@@ -1359,7 +1451,7 @@
     if(event.target.closest('#sidebar-toggle')){
       applySidebar(!$('.shell').classList.contains('sidebar-collapsed')); return;
     }
-    const langButton=event.target.closest('[data-lang]'); if(langButton){ if(langButton.dataset.lang!==lang) setLang(langButton.dataset.lang); return; }
+    if(event.target.closest('#lang-toggle')){ setLang(lang==='zh'?'en':'zh'); return; }
     const nav=event.target.closest('[data-view]'); if(nav){switchView(nav.dataset.view);return;}
     const go=event.target.closest('[data-go]'); if(go){switchView(go.dataset.go);return;}
     const viewAs=event.target.closest('[data-view-as]'); if(viewAs){setViewAs(viewAs.dataset.viewAs,viewAs.dataset.name);return;}
@@ -1702,6 +1794,19 @@
 
   // 改日报的键盘行为（回车续写列表、Tab 缩进、编号重排）和贴图都在编辑器里做，见 editor/entry.js
   document.addEventListener('keydown',event=>{
+    const filterTrigger=event.target.closest('[data-filter-trigger]');
+    if(event.key==='Escape'&&state.filterMenu.open){ event.preventDefault(); closeFilterMenu({focus:true}); return; }
+    if(filterTrigger){
+      const select=$('#'+filterTrigger.dataset.filterTrigger); if(!select) return;
+      if(event.key==='ArrowDown'||event.key==='ArrowUp'){
+        event.preventDefault(); if(state.filterMenu.open!==select.id) openFilterMenu(select);
+        moveFilterMenu(select,event.key==='ArrowDown'?1:-1); return;
+      }
+      if(event.key==='Enter'||event.key===' '){
+        event.preventDefault(); if(state.filterMenu.open===select.id) chooseFilterOption(select,state.filterMenu.active); else openFilterMenu(select); return;
+      }
+      if(event.key==='Tab') closeFilterMenu();
+    }
     if(event.key!=='Escape') return;
     closeLightbox();
     const help=$('#quick-api-help-text'); if(help) help.hidden=true;
@@ -1779,6 +1884,7 @@
   })();
 
   applyStatic();
+  setFilterControlsReady(false);
   switchView('today',{scroll:false});
   loadMe();
   loadDashboard();
