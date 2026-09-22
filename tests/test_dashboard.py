@@ -105,9 +105,55 @@ class TestDashboardContract(unittest.TestCase):
             self.assertIn('data-view="%s"' % view, self.html)
 
     def test_has_date_and_filter_controls_with_accessible_labels(self):
-        for ident in ("work-date", "agent-filter", "source-filter", "status-filter"):
+        self.assertIn('id="work-date"', self.html)
+        self.assertIn('for="work-date"', self.html)
+        for ident in ("agent-filter", "source-filter", "status-filter"):
             self.assertIn('id="%s"' % ident, self.html)
-            self.assertIn('for="%s"' % ident, self.html)
+            self.assertIn('for="%s-trigger"' % ident, self.html)
+
+    def test_topbar_filters_have_a_scoped_visual_contract(self):
+        """顶部筛选保持等高网格、暖黄焦点和次级刷新操作，不能影响页面上的其他表单。"""
+        self.assertIn('.toolbar{display:grid;', self.html)
+        self.assertIn('grid-template-columns:136px 108px 142px 96px 62px', self.html)
+        self.assertIn('.toolbar input,.filter-select-trigger{', self.html)
+        self.assertIn('accent-color:var(--butter)', self.html)
+        self.assertIn('.filter-menu{position:absolute', self.html)
+        self.assertIn('#reload-day{align-self:end', self.html)
+
+    def test_global_filters_use_custom_listboxes_but_keep_native_select_values(self):
+        """菜单面板可控，筛选值仍由原有 select 和 change 事件提供。"""
+        for ident in ("agent-filter", "source-filter", "status-filter"):
+            self.assertIn('data-filter-select="%s"' % ident, self.html)
+            self.assertIn('id="%s-trigger"' % ident, self.html)
+            self.assertIn('id="%s-menu"' % ident, self.html)
+        self.assertIn('role="listbox"', self.html)
+        self.assertIn('aria-haspopup="listbox"', self.html)
+        self.assertIn('function syncFilterMenu(select)', self.html)
+        self.assertIn("select.dispatchEvent(new Event('change',{bubbles:true}))", self.html)
+        self.assertIn("event.key==='ArrowDown'", self.html)
+        self.assertIn("event.key==='Escape'", self.html)
+        self.assertIn("!event.target.closest('.filter-select')", self.html)
+
+    def test_custom_filter_triggers_keep_the_date_field_shape(self):
+        """自定义筛选按钮沿用日期控件的圆角与紫色描边，展开时不变成黄边。"""
+        self.assertIn('.filter-select-trigger{position:relative;border-radius:7px;', self.html)
+        self.assertIn('.filter-select-trigger:focus,.filter-select.open .filter-select-trigger{border-color:var(--taro)', self.html)
+        self.assertIn('filter-select.open .filter-select-trigger::after{transform:translateY(3px) rotate(225deg);border-color:var(--muted)', self.html)
+
+    def test_topbar_controls_share_the_purple_pressed_surface(self):
+        """顶部控件采用主按钮的压边质感，但保持芋紫而非暖黄色。"""
+        self.assertIn('--taro-deep:#796288', self.html)
+        self.assertIn('--taro-deep:#8e7798', self.html)
+        self.assertIn('.topbar .toolbar input,.topbar .filter-select-trigger,.topbar #reload-day,.topbar .lang-switch,.topbar .theme-toggle{', self.html)
+        self.assertIn('background:var(--taro);color:var(--primary-ink);box-shadow:0 2px 0 var(--taro-deep)', self.html)
+        self.assertIn('.topbar .toolbar input:active,.topbar .filter-select-trigger:active,.topbar #reload-day:active,.topbar .lang-switch:active,.topbar .theme-toggle:active{transform:translateY(2px);box-shadow:0 0 0 var(--taro-deep)}', self.html)
+
+    def test_dashboard_language_switch_is_a_single_compact_toggle(self):
+        """Dashboard 只保留一个与主题开关同尺寸的语言按钮。"""
+        self.assertIn('<button class="lang-switch" id="lang-toggle" type="button"', self.html)
+        self.assertIn("langToggle.textContent=lang==='en'?'EN':'中'", self.html)
+        self.assertIn("event.target.closest('#lang-toggle')", self.html)
+        self.assertNotIn('<div class="lang-switch" role="group"', self.html)
 
     def test_has_loading_error_and_live_feedback_regions(self):
         self.assertIn('id="loading"', self.html)

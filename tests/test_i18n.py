@@ -80,7 +80,7 @@ class TestDictionaries(unittest.TestCase):
 class TestNoHardcodedChinese(unittest.TestCase):
     def test_markup_and_scripts_go_through_the_dictionary(self):
         # 允许的例外：语言按钮自己的名字「中文」；服务器给的检查项名字（按中文名去找那一项）
-        allowed = ("中文", "每日自动整理")
+        allowed = ("中文", "中", "每日自动整理")
         for name in PAGES:
             html, _ = load(name)
             body = body_without_dictionary(html)
@@ -98,8 +98,13 @@ class TestNoHardcodedChinese(unittest.TestCase):
             html, _ = load(name)
             self.assertIn("'fecho-lang'", html, name)
             self.assertIn("=== 'en' ? 'en' : 'zh'" if name != "dashboard.html" else "==='en'?'en':'zh'", html, name)
-            self.assertIn('data-lang="zh"', html)
-            self.assertIn('data-lang="en"', html)
+            if name == "dashboard.html":
+                self.assertIn('id="lang-toggle"', html)
+                self.assertNotIn('data-lang="zh"', html)
+                self.assertNotIn('data-lang="en"', html)
+            else:
+                self.assertIn('data-lang="zh"', html)
+                self.assertIn('data-lang="en"', html)
 
 
 if __name__ == "__main__":
