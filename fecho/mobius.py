@@ -60,21 +60,63 @@ def _rpc(method: str, params: Optional[Dict[str, Any]] = None,
     return data.get("result", {})
 
 
-def fetch_open_issues(assignee: str, token: Optional[str] = None) -> List[Dict[str, Any]]:
-    """拉某人名下"在办 + 待办"的 issue —— 配对只可能配到这些上面。"""
-    out: Dict[str, Dict[str, Any]] = {}
-    for state in ("started", "unstarted"):
-        res = _rpc("tools/call", {
-            "name": "list_issues",
-            "arguments": {"assigneeEmail": assignee, "stateType": state, "limit": 100},
-        }, token=token)
+# 同步范围里的状态分组。backlog 以前不同步——排进 backlog 的票照样会有人在做
+_OPEN_BUCKETS = ("backlog", "unstarted", "started")
+_CLOSED_BUCKETS = ("completed", "canceled")
+RECENTLY_CLOSED_DAYS = 7         # 关了几天之内的还同步：收尾的进展要能归上去
+TOUCHED_DAYS = 30                # Fecho 里最近这么多天归过进展的 issue 算「参与中」
+TOUCHED_MAX = 40                 # 这类要一个个查，封个顶
+# 查单个 issue 时只拿得到状态名，拿不到分组。分组靠同一轮列表查询学来，学不到再按名字猜
+_CLOSED_NAMES = {"done", "completed", "canceled", "cancelled", "duplicate", "closed"}
+
+
+def _list_issues(args: Dict[str, Any], token: Optional[str], pages: int = 5) -> List[Dict[str, Any]]:
+    """list_issues 翻页拉全。一次最多 100 条，封顶几页，免得一个人名下几千张票拖死同步。"""
+    out: List[Dict[str, Any]] = []
+    cursor = None
+    for _ in range(pages):
+        a = dict(args, limit=100)
+        if cursor:
+            a["cursor"] = cursor
+        res = _rpc("tools/call", {"name": "list_issues", "arguments": a}, token=token)
         content = res.get("content") or []
         if not content:
-            continue
+            break
         payload = json.loads(content[0]["text"])
-        for issue in payload.get("issues", []):
-            out[issue["identifier"]] = issue
+        out.extend(payload.get("issues", []))
+        cursor = payload.get("nextCursor")
+        if not payload.get("hasMore") or not cursor:
+            break
+    return out
+
+
+def fetch_open_issues(assignee: str, token: Optional[str] = None) -> List[Dict[str, Any]]:
+    """某人名下还开着的 issue（含 backlog），每条带上它的状态分组 `_bucket`。"""
+    out: Dict[str, Dict[str, Any]] = {}
+    for bucket in _OPEN_BUCKETS:
+        for issue in _list_issues({"assigneeEmail": assignee, "stateType": bucket}, token):
+            out[issue["identifier"]] = dict(issue, _bucket=bucket)
     return list(out.values())
+
+
+def _days_ago_iso(days: int) -> str:
+    from datetime import datetime, timedelta, timezone
+    return (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _touched_keys(author: str) -> List[str]:
+    """这个人在 Fecho 里最近归过进展的 issue，新的在前。
+
+    Mobius 没有「参与中」这种查询，而人实际在做的票常常不在自己名下：
+    别人的票帮着做、没人认领的票先做了、刚关掉还在收尾。归过进展就说明在参与。
+    """
+    since = _days_ago_iso(TOUCHED_DAYS)
+    with db.cursor() as conn:
+        rows = conn.execute(
+            "SELECT issue_key, MAX(last_update) lu FROM tasks WHERE author=? AND issue_key IS NOT NULL"
+            " AND status<>'merged' AND last_update>=? GROUP BY issue_key ORDER BY lu DESC",
+            (author, since)).fetchall()
+    return [r["issue_key"] for r in rows][:TOUCHED_MAX]
 
 
 def token_for(author: str) -> Optional[str]:
@@ -139,15 +181,53 @@ def ensure_issue(author: str, issue_key: str) -> Dict[str, Any]:
 
 def sync(author: str, assignee: Optional[str] = None,
          token: Optional[str] = None) -> Dict[str, Any]:
-    """把某人的 issue 同步进本地缓存。cron 或开工时调。"""
+    """把这个人「参与中」的 issue 同步进本地缓存。出日报前、或人手动同步时调。
+
+    Mobius 没有「参与中」的查询，这里拼出来：
+      1. 指派给他、还开着的（backlog / 待开始 / 进行中都算）
+      2. 指派给他、最近 7 天关掉的——收尾的进展还要能归上去
+      3. 他在 Fecho 里最近归过进展的，不管指派给谁、有没有人认领；关了超过 7 天的不要
+    整份替换：不在这一轮里的（关了很久、早就不碰了的）就从缓存里拿掉。
+    """
     assignee = assignee or config.MOBIUS_ASSIGNEE
     if not assignee:
         raise MobiusError("不知道要同步谁的 issue：设置 FECHO_MOBIUS_ASSIGNEE 或传 assignee")
-    issues = fetch_open_issues(assignee, token=token)
+    found: Dict[str, Dict[str, Any]] = {i["identifier"]: dict(i, _via="assigned")
+                                        for i in fetch_open_issues(assignee, token=token)}
+    since = _days_ago_iso(RECENTLY_CLOSED_DAYS)
+    for bucket in _CLOSED_BUCKETS:
+        for i in _list_issues({"assigneeEmail": assignee, "stateType": bucket,
+                               "updatedAfter": since}, token):
+            found.setdefault(i["identifier"], dict(i, _bucket=bucket, _via="assigned"))
+
+    bucket_of = {(i.get("state") or "").lower(): i["_bucket"] for i in found.values()}
+    touched = 0
+    for key in _touched_keys(author):
+        if key in found:
+            continue
+        try:
+            res = _rpc("tools/call", {"name": "get_issue", "arguments": {"identifier": key}},
+                       token=token)
+            payload = json.loads((res.get("content") or [{}])[0].get("text") or "{}")
+        except (MobiusError, ValueError, KeyError, IndexError):
+            continue                      # 查不到（删了、没权限）就不算，不挡着别的
+        issue = payload.get("issue", payload)
+        if issue.get("identifier") != key:
+            continue
+        name = (issue.get("state") or "").lower()
+        bucket = bucket_of.get(name) or ("completed" if name in _CLOSED_NAMES else "started")
+        if bucket in _CLOSED_BUCKETS and (issue.get("updatedAt") or "") < since:
+            continue
+        issue.pop("description", None)    # 描述可能很长，缓存里先不存
+        issue.pop("comments", None)
+        issue.pop("activity", None)
+        found[key] = dict(issue, _bucket=bucket, _via="touched")
+        touched += 1
+
     now = store.now_iso()
     with db.cursor() as conn:
         conn.execute("DELETE FROM mobius_issues WHERE author=?", (author,))
-        for i in issues:
+        for i in found.values():
             conn.execute(
                 "INSERT INTO mobius_issues"
                 " (issue_key, author, title, state, url, updated_at, synced_at, raw)"
@@ -156,15 +236,49 @@ def sync(author: str, assignee: Optional[str] = None,
                  i.get("url", ""), i.get("updatedAt", ""), now,
                  json.dumps(i, ensure_ascii=False)),
             )
-    return {"author": author, "assignee": assignee, "count": len(issues), "synced_at": now}
+    return {"author": author, "assignee": assignee, "count": len(found),
+            "touched": touched, "synced_at": now}
+
+
+PRIORITY_NAMES = {1: "紧急", 2: "高", 3: "中", 4: "低"}
+
+
+def priority_rank(priority: Any) -> int:
+    """排序用：紧急 1 → 低 4，没设优先级（0 / 空）排最后。"""
+    try:
+        p = int(priority or 0)
+    except (TypeError, ValueError):
+        p = 0
+    return p if 1 <= p <= 4 else 5
+
+
+def _decorate(row: Dict[str, Any]) -> Dict[str, Any]:
+    """把 raw 里的优先级、状态分组、来源摊开。不加列：省一次线上改表。"""
+    try:
+        raw = json.loads(row.get("raw") or "{}") or {}
+    except ValueError:
+        raw = {}
+    row["priority"] = raw.get("priority") or 0
+    row["state_type"] = raw.get("_bucket") or ""
+    row["closed"] = row["state_type"] in _CLOSED_BUCKETS
+    row["via"] = raw.get("_via") or "assigned"
+    return row
 
 
 def cached_issues(author: str) -> List[Dict[str, Any]]:
+    """开着的在前，其次按优先级，同级新动过的在前。"""
     with db.cursor() as conn:
         rows = conn.execute(
             "SELECT * FROM mobius_issues WHERE author=? ORDER BY updated_at DESC", (author,)
         ).fetchall()
-    return [dict(r) for r in rows]
+    out = [_decorate(dict(r)) for r in rows]
+    out.sort(key=lambda i: (i["closed"], priority_rank(i["priority"])))   # 稳定排序，保留时间先后
+    return out
+
+
+def priorities(author: str) -> Dict[str, int]:
+    """issue 号 → 优先级，出日报排序用。"""
+    return {i["issue_key"]: i["priority"] for i in cached_issues(author)}
 
 
 def cache_age(author: str) -> Optional[str]:

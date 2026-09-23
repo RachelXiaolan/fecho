@@ -19,7 +19,7 @@ from . import config, db, llm, personas, pto, store
 
 
 REPORT_PROMPT_VERSION = "daily-v2-status-fields"
-VERIFY_PROMPT_VERSION = "assignment-v2-cache-safe"
+VERIFY_PROMPT_VERSION = "assignment-v3-closed-hint"
 
 
 def _cjk_len(text: str) -> int:
@@ -512,7 +512,9 @@ def verify_assignments(author: str, date: str) -> Dict[str, Any]:
         return out
 
     listing = ("候选 issue（只能从这里选）：\n"
-               + "\n".join("- %s：%s" % (i["issue_key"], i["title"]) for i in issues)
+               + "\n".join("- %s：%s%s" % (i["issue_key"], i["title"],
+                                             "（最近已关闭）" if i.get("closed") else "")
+                            for i in issues)
                ) if issues else "（当前没有在办的 issue，全部写 `-`）"
     body = "\n".join("%d | %s" % (n, r["content_md"].strip().replace("\n", " "))
                       for n, r in enumerate(rows, 1))
@@ -579,6 +581,16 @@ def persona_for(author: str, persona_name: Optional[str] = None) -> Dict[str, An
     return persona
 
 
+def by_priority(author: str, tasks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """日报里的任务按 Mobius 优先级排：紧急 → 高 → 中 → 低 → 没设的，自由任务最后。
+    同一档里保持原来的顺序（当天进展多的在前）。"""
+    from . import mobius
+
+    prio = mobius.priorities(author)
+    return sorted(tasks, key=lambda t: (
+        not t.get("issue_key"), mobius.priority_rank(prio.get(t.get("issue_key") or "", 0))))
+
+
 def generate(author: str, date: str, force: bool = False,
              persona_name: Optional[str] = None, keep_human: bool = True) -> Dict[str, Any]:
     """出一天的日报和口播稿。
@@ -596,6 +608,8 @@ def generate(author: str, date: str, force: bool = False,
     n_updates = sum(len(t["updates"]) for t in tasks)
     pto_status = pto.status(author, date)
     fp = fingerprint(tasks, persona, pto_status)
+    # 排序放在算指纹之后：只改呈现顺序，不该让所有旧日报都被判成「输入变了」
+    tasks = by_priority(author, tasks)
 
     existing = db.get_report(author, date, "daily")
     # 人写的或改过的日报不覆盖。事实有变时照样出一版自动的，但只放进历史版本给人对照；

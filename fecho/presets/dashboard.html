@@ -720,7 +720,7 @@
     "toast_requested": "申请已提交，等 admin 审批", "toast_unchanged": "没有改动",
     "toast_edit_saved": "已保存。旧版本在历史版本里；口播稿和写作偏好在后台更新",
     "toast_confirmed": "进展已确认并锁定", "toast_undo_assign": "已撤销归属修改", "toast_restored": "进展已恢复",
-    "toast_completed": "任务已完成", "toast_reopened": "任务已重新打开", "toast_pick_merge": "请先选择合并目标", "toast_merged": "任务已合并", "toast_attached": "已归到 {key}", "toast_merge_unknown": "没认出合并目标：从列表里选，或者直接输入 issue 编号",
+    "toast_completed": "任务已完成", "toast_reopened": "任务已重新打开", "toast_pick_merge": "请先选择合并目标", "toast_merged": "任务已合并", "toast_attached": "已归到 {key}", "issue_closed": "已关闭", "toast_merge_unknown": "没认出合并目标：从列表里选，或者直接输入 issue 编号",
     "toast_generating": "正在调用模型整理日报…", "toast_queued": "已排队，几分钟后刷新就能看到新的日报", "toast_generated": "日报和口播稿已更新",
     "toast_nothing_to_generate": "这天没有任何记录，生成不出日报。先让 agent 记几条进展，或等每晚扫描上传。",
     "toast_time_saved": "已保存：每天 {time} 出日报", "toast_scan_on": "以后每晚扫它的对话", "toast_scan_off": "不再扫它的对话",
@@ -863,7 +863,7 @@
     "toast_requested": "Request sent — waiting for an admin", "toast_unchanged": "No changes",
     "toast_edit_saved": "Saved. The old version is in History; the voice script and writing style update in the background",
     "toast_confirmed": "Update confirmed and locked", "toast_undo_assign": "Assignment change undone", "toast_restored": "Update restored",
-    "toast_completed": "Task completed", "toast_reopened": "Task reopened", "toast_pick_merge": "Pick a task to merge into first", "toast_merged": "Tasks merged", "toast_attached": "Moved to {key}", "toast_merge_unknown": "Couldn't tell where to merge: pick from the list or type an issue key",
+    "toast_completed": "Task completed", "toast_reopened": "Task reopened", "toast_pick_merge": "Pick a task to merge into first", "toast_merged": "Tasks merged", "toast_attached": "Moved to {key}", "issue_closed": "closed", "toast_merge_unknown": "Couldn't tell where to merge: pick from the list or type an issue key",
     "toast_generating": "Asking the model to write the report…", "toast_queued": "Queued — refresh in a few minutes to see the new report", "toast_generated": "Report and voice script updated",
     "toast_nothing_to_generate": "Nothing was recorded for this day, so there's no report to generate. Log some progress with your agent, or wait for the nightly scan.",
     "toast_time_saved": "Saved: report at {time} every day", "toast_scan_on": "Its conversations will be scanned nightly", "toast_scan_off": "Its conversations won't be scanned",
@@ -1076,8 +1076,10 @@
   // 只要是 issue 编号，服务器会现去 Mobius 查。以前只列已有任务，issue 没进展就选不到
   function mergeTargets(){
     const live=state.data.tasks.items.filter(x=>x.status!=='merged'), seen=new Set(), out=[];
+    // 同步来的 issue 服务器已经按「开着的在前、优先级高的在前」排好；有任务短名的用短名
+    const alias={}; live.filter(x=>x.issue_key).forEach(x=>{ if(!alias[x.issue_key]) alias[x.issue_key]=x.alias||x.title; });
+    (state.data.issues.items||[]).forEach(i=>{ if(seen.has(i.issue_key))return; seen.add(i.issue_key); out.push({label:`${i.issue_key} · ${alias[i.issue_key]||i.title}${i.closed?` (${t('issue_closed')})`:''}`,issue:i.issue_key}); });
     live.filter(x=>x.issue_key).forEach(x=>{ if(seen.has(x.issue_key))return; seen.add(x.issue_key); out.push({label:`${x.issue_key} · ${x.alias||x.title}`,issue:x.issue_key}); });
-    (state.data.issues.items||[]).forEach(i=>{ if(seen.has(i.issue_key))return; seen.add(i.issue_key); out.push({label:`${i.issue_key} · ${i.title}`,issue:i.issue_key}); });
     const labels=new Set(out.map(o=>o.label));
     live.filter(x=>!x.issue_key).sort((a,b)=>(b.last_update||'').localeCompare(a.last_update||'')).forEach(x=>{
       let label=`${x.alias||x.title} · ${t('freeform')}`;
