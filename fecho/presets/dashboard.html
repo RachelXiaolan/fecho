@@ -207,6 +207,17 @@
     .review-actions{display:grid;gap:8px}.review-actions select,.review-actions textarea{width:100%}
     .review-actions textarea{min-height:76px;resize:vertical}
     .button-row{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+    .snap-group{position:relative;display:inline-flex}.snap-group[hidden]{display:none}
+    #snap-report{display:inline-flex;align-items:center;gap:6px;border-top-right-radius:0;border-bottom-right-radius:0}
+    .snap-more{min-width:30px;padding:0 8px;margin-left:-1px;border-top-left-radius:0;border-bottom-left-radius:0}
+    .snap-popover{position:absolute;z-index:30;top:calc(100% + 8px);right:0;width:300px;padding:14px;border:1px solid var(--line);border-radius:12px;
+      background:var(--surface);box-shadow:0 14px 32px rgba(40,30,50,.18);font-size:13px;color:var(--ink)}
+    .snap-popover h4{margin:0 0 10px;font-size:13px}
+    .snap-popover label{display:flex;gap:8px;align-items:flex-start;padding:6px 0;cursor:pointer}
+    .snap-popover label input{min-height:0;margin-top:3px}
+    .snap-folder{display:flex;align-items:center;gap:8px;margin:2px 0 6px 24px;color:var(--muted)}
+    .snap-folder b{color:var(--ink);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px}
+    .snap-note{margin:8px 0 0;color:var(--muted);font-size:12px;line-height:1.5}
     .task-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:18px;align-items:center;padding:17px 18px;border-top:1px solid var(--line)}
     .task-row:first-child{border-top:0}.task-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
     .task-actions select{max-width:210px}.task-actions .merge-input{width:240px;max-width:100%}
@@ -539,7 +550,7 @@
       </section>
 
       <section class="view" data-page="reports" aria-labelledby="reports-heading">
-        <div class="section-head"><div><h2 id="reports-heading" data-i18n="reports_heading"></h2></div><div class="button-row"><button class="btn" id="edit-report" hidden data-i18n="edit"></button><button class="btn primary" id="regenerate" data-i18n="regenerate"></button></div></div>
+        <div class="section-head"><div><h2 id="reports-heading" data-i18n="reports_heading"></h2></div><div class="button-row"><div class="snap-group" id="snap-group" hidden><button class="btn" id="snap-report" type="button"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h1.6l1.3-2h5.2l1.3 2h1.6A2.5 2.5 0 0 1 20 8.5v8a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 16.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="12.3" r="3.3" fill="none" stroke="currentColor" stroke-width="1.8"/></svg><span data-i18n="snap"></span></button><button class="btn snap-more" id="snap-settings" type="button" aria-haspopup="dialog" aria-expanded="false" data-i18n-aria="snap_settings"><svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="m7 10 5 5 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="snap-popover" id="snap-popover" role="dialog" hidden></div></div><button class="btn" id="edit-report" hidden data-i18n="edit"></button><button class="btn primary" id="regenerate" data-i18n="regenerate"></button></div></div>
         <div id="report-dirty" class="dirty"><span id="report-dirty-copy"></span><button class="btn small" id="dirty-regenerate" data-i18n="regenerate_now"></button></div>
         <div class="panel report-layout"><div class="report-nav" id="report-tabs"><button class="active" data-report-tab="daily" data-i18n="tab_daily"></button><button data-report-tab="voice" data-i18n="tab_voice"></button><button data-report-tab="history" data-i18n="tab_history"></button><button data-report-tab="warnings" data-i18n="tab_warnings"></button><div class="quick-api-entry"><div class="quick-api-row"><button id="quick-api-open" type="button"><span data-i18n="quick_api"></span></button><button id="quick-api-help" type="button" data-i18n-aria="quick_api_help_label">?</button></div><div id="quick-api-help-text" class="quick-api-help-text" hidden></div></div></div><div class="report-paper" id="report-content" data-i18n="not_generated"></div></div>
       </section>
@@ -658,6 +669,11 @@
     "status_done": "已完成", "status_wip": "进行中", "status_blocked": "受阻", "status_unknown": "未标注",
     "reports_heading": "日报",
     "edit": "修改", "regenerate": "重新生成", "regenerate_now": "现在生成",
+    "snap": "截图", "snap_settings": "截图保存设置", "snap_title": "截图存到哪里", "snap_ask": "每次询问保存位置",
+    "snap_folder": "固定存到一个文件夹", "snap_pick": "选择文件夹…", "snap_change": "更换…", "snap_no_folder": "还没选",
+    "snap_name": "文件名：{name}", "snap_only_download": "这个浏览器不支持选位置，截图会存进「下载」文件夹。要选位置请用 Chrome 或 Edge。",
+    "snap_working": "正在截图…", "snap_saved_folder": "已存到 {folder}/{name}", "snap_saved": "已保存 {name}",
+    "snap_downloaded": "已下载 {name}（在「下载」文件夹）", "snap_failed": "截图失败：{error}", "snap_denied": "没有这个文件夹的写入权限，请重新选择",
     "dirty_llm": "进展或归属已经变化，这份报告需要重新生成。",
     "dirty_human": "有新的进展或归属变化。这份日报是你写的，不会被自动覆盖——自动生成的新版本会放进「历史版本」；点「现在生成」会换成自动版（你的版本留在历史版本里）。",
     "tab_daily": "日报", "tab_voice": "口播稿", "tab_history": "历史版本", "tab_warnings": "生成提示",
@@ -801,6 +817,11 @@
     "status_done": "Done", "status_wip": "In progress", "status_blocked": "Blocked", "status_unknown": "Unknown",
     "reports_heading": "Reports",
     "edit": "Edit", "regenerate": "Regenerate", "regenerate_now": "Regenerate now",
+    "snap": "Screenshot", "snap_settings": "Screenshot settings", "snap_title": "Save screenshots to", "snap_ask": "Ask where every time",
+    "snap_folder": "Always this folder", "snap_pick": "Choose folder…", "snap_change": "Change…", "snap_no_folder": "none yet",
+    "snap_name": "File name: {name}", "snap_only_download": "This browser can't pick a location; screenshots go to Downloads. Use Chrome or Edge to choose one.",
+    "snap_working": "Taking screenshot…", "snap_saved_folder": "Saved to {folder}/{name}", "snap_saved": "Saved {name}",
+    "snap_downloaded": "Downloaded {name}", "snap_failed": "Screenshot failed: {error}", "snap_denied": "No permission to write to that folder; choose it again",
     "dirty_llm": "Progress or assignments changed; this report should be regenerated.",
     "dirty_human": "There are new updates or assignment changes. You wrote this report, so it won't be replaced automatically — new automatic versions go to History. \"Regenerate now\" switches to the automatic version (yours stays in History).",
     "tab_daily": "Daily report", "tab_voice": "Voice script", "tab_history": "History", "tab_warnings": "Notes",
@@ -1449,11 +1470,122 @@
     finally{ if(button) button.disabled=false; }
   }
 
+  // ---------- 日报截图 ----------
+  // 每天要把日报截图贴进频道，长日报不好长截图。点一下把渲染好的日报整块画成 PNG，
+  // 文件名按「0923_worklog_Rachel.png」起好。存哪：每次弹系统的保存框，或者固定存到一个文件夹。
+  // 两种都要 Chrome / Edge 的文件系统接口；Safari、Firefox 只能退回普通下载。
+  const SNAPSHOT_SRC='/vendor/snapshot/snapshot.min.js';
+  const canPickFile=typeof window.showSaveFilePicker==='function', canPickDir=typeof window.showDirectoryPicker==='function';
+  function snapMode(){ try{ return localStorage.getItem('fecho-snap-mode')==='folder'&&canPickDir?'folder':'ask'; }catch(_){ return 'ask'; } }
+  function setSnapMode(mode){ try{ localStorage.setItem('fecho-snap-mode',mode); }catch(_){} }
+  // 文件夹的句柄只能存在浏览器的 IndexedDB 里（存不进 localStorage，也不该上服务器）
+  function snapDb(){ return new Promise((ok,fail)=>{ const r=indexedDB.open('fecho-snap',1); r.onupgradeneeded=()=>r.result.createObjectStore('kv'); r.onsuccess=()=>ok(r.result); r.onerror=()=>fail(r.error); }); }
+  async function snapDir(value){
+    try{
+      const db=await snapDb(), tx=db.transaction('kv',value===undefined?'readonly':'readwrite'), store=tx.objectStore('kv');
+      if(value!==undefined){ store.put(value,'dir'); return new Promise(ok=>{ tx.oncomplete=()=>ok(value); tx.onerror=()=>ok(null); }); }
+      return await new Promise(ok=>{ const g=store.get('dir'); g.onsuccess=()=>ok(g.result||null); g.onerror=()=>ok(null); });
+    }catch(_){ return null; }
+  }
+  function snapFileName(){
+    const d=(state.data&&state.data.date)||localDate(), me=state.me||{};
+    let name=(me.display_name||me.author||'').trim();
+    if(name.includes('@')) name=name.split('@')[0].split(/[._-]/)[0];
+    name=(name.split(/\s+/)[0]||'me').replace(/[\\/:*?"<>|]/g,'');
+    name=name.charAt(0).toUpperCase()+name.slice(1);
+    return `${d.slice(5,7)}${d.slice(8,10)}_worklog_${name}.png`;
+  }
+  let snapshotLib=null;
+  function loadSnapshotLib(){
+    if(window.FechoSnapshot) return Promise.resolve(window.FechoSnapshot);
+    if(!snapshotLib) snapshotLib=new Promise((ok,fail)=>{ const el=document.createElement('script'); el.src=SNAPSHOT_SRC; el.onload=()=>ok(window.FechoSnapshot); el.onerror=()=>{ snapshotLib=null; fail(new Error('snapshot.min.js')); }; document.head.appendChild(el); });
+    return snapshotLib;
+  }
+  // 日报正文自己没底色，颜色来自外面那层面板；不往上找就截出一张透明底的图，贴到深色频道里字都看不清
+  function paintedBackground(el){
+    for(;el&&el.nodeType===1;el=el.parentElement){
+      const bg=getComputedStyle(el).backgroundColor;
+      if(bg&&bg!=='transparent'&&!/rgba\([^)]*,\s*0\)$/.test(bg)) return bg;
+    }
+    return getComputedStyle(document.body).backgroundColor||'#fff';
+  }
+  async function captureReport(){
+    const node=$('#report-content'), lib=await loadSnapshotLib();
+    return lib.toPng(node,{background:paintedBackground(node),
+      skip:el=>el.classList&&(el.classList.contains('fold')||el.classList.contains('fold-more'))});
+  }
+  async function writeTo(handle,blob){ const w=await handle.createWritable(); await w.write(blob); await w.close(); }
+  async function chooseSnapDir(){
+    const dir=await window.showDirectoryPicker({id:'fecho-snap',mode:'readwrite'});
+    await snapDir(dir); setSnapMode('folder'); return dir;
+  }
+  // 先定好存哪，再截图：保存框、选文件夹、授权都得在点击的那一下里弹出来，
+  // 隔了一次长截图再弹，浏览器会以「不是用户操作」拒绝。
+  async function snapTarget(name){
+    if(snapMode()==='folder'){
+      let dir=await snapDir();
+      if(!dir) dir=await chooseSnapDir();
+      // 重开浏览器后权限可能要再点一次「允许」；不给就让人重选
+      if((await dir.queryPermission({mode:'readwrite'}))!=='granted'&&(await dir.requestPermission({mode:'readwrite'}))!=='granted') throw new Error(t('snap_denied'));
+      return async blob=>{ await writeTo(await dir.getFileHandle(name,{create:true}),blob); return t('snap_saved_folder',{folder:dir.name,name}); };  // 同名覆盖：同一天重截就是要最新那张
+    }
+    if(canPickFile){
+      const handle=await window.showSaveFilePicker({id:'fecho-snap',suggestedName:name,types:[{description:'PNG',accept:{'image/png':['.png']}}]});
+      return async blob=>{ await writeTo(handle,blob); return t('snap_saved',{name:handle.name}); };
+    }
+    return async blob=>{
+      const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(a.href),10000);
+      return t('snap_downloaded',{name});
+    };
+  }
+  async function takeSnapshot(){
+    const button=$('#snap-report'); button.disabled=true;
+    try{
+      const save=await snapTarget(snapFileName());
+      toast(t('snap_working'));
+      toast(await save(await captureReport()));
+    }catch(error){
+      if(error&&error.name==='AbortError') return;          // 人自己在保存框里点了取消
+      toast(t('snap_failed',{error:error.message||String(error)}),null,true);
+    }finally{ button.disabled=false; }
+  }
+  async function renderSnapPopover(){
+    const pop=$('#snap-popover'), mode=snapMode(), dir=canPickDir?await snapDir():null;
+    pop.innerHTML=`<h4>${esc(t('snap_title'))}</h4>`+(canPickFile||canPickDir?
+      `<label><input type="radio" name="snap-mode" value="ask" ${mode==='ask'?'checked':''}><span>${esc(t('snap_ask'))}</span></label>`+
+      (canPickDir?`<label><input type="radio" name="snap-mode" value="folder" ${mode==='folder'?'checked':''}><span>${esc(t('snap_folder'))}</span></label>
+        <div class="snap-folder"><b>${esc(dir?dir.name:t('snap_no_folder'))}</b><button class="btn small" type="button" id="snap-pick-dir">${esc(t(dir?'snap_change':'snap_pick'))}</button></div>`:'')
+      :`<p class="snap-note">${esc(t('snap_only_download'))}</p>`)+
+      `<p class="snap-note">${esc(t('snap_name',{name:snapFileName()}))}</p>`;
+  }
+  function toggleSnapPopover(open){
+    const pop=$('#snap-popover'); open=open===undefined?pop.hidden:open;
+    pop.hidden=!open; $('#snap-settings').setAttribute('aria-expanded',String(open));
+    if(open) renderSnapPopover();
+  }
+  $('#snap-report').addEventListener('click',takeSnapshot);
+  $('#snap-settings').addEventListener('click',event=>{ event.stopPropagation(); toggleSnapPopover(); });
+  $('#snap-popover').addEventListener('change',async event=>{
+    const r=event.target.closest('input[name="snap-mode"]'); if(!r) return;
+    if(r.value==='folder'&&!(await snapDir())){ try{ await chooseSnapDir(); }catch(_){ setSnapMode('ask'); } }
+    else setSnapMode(r.value);
+    renderSnapPopover();
+  });
+  $('#snap-popover').addEventListener('click',async event=>{
+    if(!event.target.closest('#snap-pick-dir')) return;
+    try{ await chooseSnapDir(); }catch(_){}
+    renderSnapPopover();
+  });
+  document.addEventListener('click',event=>{ const pop=$('#snap-popover'); if(!pop.hidden&&!event.target.closest('.snap-group')) toggleSnapPopover(false); });
+  document.addEventListener('keydown',event=>{ if(event.key==='Escape'&&!$('#snap-popover').hidden) toggleSnapPopover(false); });
+
   function renderReports(){
     const report=state.data.reports; $('#report-dirty').classList.toggle('show',report.dirty);
     $('#report-dirty-copy').textContent=report.generator==='human' ? t('dirty_human') : t('dirty_llm');
     // 还没生成也能先手写：按钮从「修改」变成「手动写日报」
     $('#edit-report').hidden=!!state.viewAs||state.editing;
+    $('#snap-group').hidden=state.editing||state.reportTab!=='daily'||!report.daily;
     $('#edit-report').textContent=t(report.daily?'edit':'write_report');
     // 正在改的时候，每分钟的自动刷新不能把编辑框重画掉——写了一半的字会没
     if(state.editing&&state.reportTab==='daily'&&$('#report-editor')) return;

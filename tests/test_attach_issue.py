@@ -132,3 +132,28 @@ class TestMergePicker(unittest.TestCase):
         self.assertIn("state.data.issues.items||[]", self.html,
                       "候选里要有同步来的 issue，不只是已有任务")
         self.assertIn("/attach`", self.html, "选中 issue 走 attach，能现建任务")
+
+
+class TestReportSnapshot(unittest.TestCase):
+    """日报截图：每天要把日报贴进频道，长日报不好长截图。"""
+    root = Path(__file__).resolve().parents[1]
+    html = (root / "fecho" / "presets" / "dashboard.html").read_text(encoding="utf-8")
+
+    def test_bundle_is_shipped_and_cache_busted(self):
+        import inspect
+        from fecho import web
+        self.assertTrue((self.root / "fecho" / "presets" / "vendor" / "snapshot" / "snapshot.min.js").is_file(),
+                        "产物要提交进仓库，部署不需要 node")
+        self.assertIn("/vendor/snapshot/snapshot.min.js?v=", inspect.getsource(web.build_app))
+
+    def test_file_is_named_like_0923_worklog_rachel(self):
+        self.assertIn("_worklog_${name}.png", self.html)
+
+    def test_save_location_is_settled_before_the_capture(self):
+        """保存框、选文件夹都得在点击那一下里弹；隔了一次截图再弹，浏览器会拒绝。"""
+        body = self.html[self.html.index("async function takeSnapshot"):]
+        self.assertLess(body.index("snapTarget("), body.index("captureReport()"))
+
+    def test_fold_arrows_are_left_out_and_background_is_painted(self):
+        self.assertIn("contains('fold')", self.html)
+        self.assertIn("paintedBackground(node)", self.html, "正文自己没底色，不往上找会截出透明底")

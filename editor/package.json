@@ -12,7 +12,8 @@
     "@codemirror/language": "^6.12.4",
     "@codemirror/state": "^6.7.5",
     "@codemirror/view": "^6.43.12",
-    "@lezer/markdown": "^1.7.2"
+    "@lezer/markdown": "^1.7.2",
+    "html-to-image": "^1.11.13"
   },
   "private": true
 }

@@ -1269,8 +1269,10 @@ def build_app():
         if config.CLOUD and not _signed_in(request):
             return RedirectResponse("/login", status_code=302)
         html = (Path(__file__).resolve().parent / "presets" / "dashboard.html").read_text(encoding="utf-8")
-        return html.replace("/vendor/cm6/editor.min.js",
-                            "/vendor/cm6/editor.min.js?v=" + _editor_tag())
+        return (html.replace("/vendor/cm6/editor.min.js",
+                             "/vendor/cm6/editor.min.js?v=" + _editor_tag())
+                    .replace("/vendor/snapshot/snapshot.min.js",
+                             "/vendor/snapshot/snapshot.min.js?v=" + __version__))
 
     return app
 
