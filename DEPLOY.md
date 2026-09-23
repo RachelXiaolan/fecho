@@ -59,8 +59,18 @@
 漏了会怎样：线上一走到那张表或那一列就 500。0.8.1 上线后「保存日报」就是这么坏的——
 0.7.0 加了 `report_images` 表和 `report_history.fingerprint` 列，但没在线上跑建表。
 
-**0.9.0 新增 `quick_api_keys` 表、0.9.1 给 `work_folders` 加了 `dismissed` 列，上线后记得跑。**
-漏了的话「快速 API」会 500、设置页的工作文件夹会打不开。
+**0.9.0 新增 `quick_api_keys` 表、0.9.1 给 `work_folders` 加了 `dismissed` 列、0.10.2 给 `jobs` 加了
+`progress` 列，上线前记得跑。** 漏了的话「快速 API」会 500、设置页的工作文件夹会打不开、
+lu2 出日报时写不了进度（不影响出日报本身）、日报页查进度会 500。
+
+### lu2 要跟着更新（每次都要做）
+
+出日报、同步 issue、交叉验证都跑在 lu2 上。只推 Vercel 的话这些改动不会生效——
+0.8.5 到 0.9.3 就是这样，lu2 一直停在 0.8.4 没人发现。推完代码就更新：
+
+```bash
+ssh ubuntu@hermesrachel.techmob.net 'curl -fsSL https://raw.githubusercontent.com/RachelXiaolan/fecho/cloud/scripts/install_worker.sh -o /tmp/iw.sh && bash /tmp/iw.sh --update'
+```
 
 > 有人提过让缺表的功能自己在请求里 `CREATE TABLE IF NOT EXISTS` 兜底。没有采纳：
 > 并发冷启动会互相打架，而且线上少了哪张表就再也没人知道了——宁可响一次，也不要悄悄补。
