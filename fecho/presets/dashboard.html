@@ -210,23 +210,33 @@
     .snap-group{position:relative;display:inline-flex}.snap-group[hidden]{display:none}
     #snap-report{display:inline-flex;align-items:center;gap:6px;border-top-right-radius:0;border-bottom-right-radius:0}
     .snap-more{min-width:30px;padding:0 8px;margin-left:-1px;border-top-left-radius:0;border-bottom-left-radius:0}
-    .snap-popover{position:absolute;z-index:30;top:calc(100% + 8px);right:0;width:300px;padding:14px;border:1px solid var(--line);border-radius:12px;
-      background:var(--surface);box-shadow:0 14px 32px rgba(40,30,50,.18);font-size:13px;color:var(--ink)}
-    .snap-popover h4{margin:0 0 10px;font-size:13px}
-    .snap-popover label{display:flex;gap:8px;align-items:flex-start;padding:6px 0;cursor:pointer}
-    .snap-popover label input{min-height:0;margin-top:3px}
-    .snap-folder{display:flex;align-items:center;gap:8px;margin:2px 0 6px 24px;color:var(--muted)}
+    /* 和左下角账号菜单同一套弹层 */
+    .snap-popover{position:absolute;z-index:30;top:calc(100% + 8px);right:0;width:300px;padding:12px 12px 10px;
+      border:1px solid color-mix(in srgb,var(--line) 70%,var(--taro));border-radius:12px;background:var(--surface-alt);
+      box-shadow:0 16px 34px rgba(23,17,27,.3);font-size:12px;color:var(--ink);transform-origin:top right;animation:menu-in .14s ease both}
+    .snap-popover h4{margin:0 0 6px;padding:0 4px;font-size:10px;font-weight:700;letter-spacing:.5px;color:var(--muted)}
+    .snap-popover label{display:flex;gap:9px;align-items:center;min-height:34px;padding:6px 8px;border-radius:8px;cursor:pointer}
+    .snap-popover label:hover{background:var(--hover-bg)}
+    .snap-popover input[type=radio]{appearance:none;width:15px;height:15px;min-height:0;margin:0;padding:0;flex:none;border:1.5px solid var(--faint);
+      border-radius:50%;background:var(--surface);box-shadow:none;cursor:pointer}
+    .snap-popover input[type=radio]:checked{border-color:var(--taro-deep);background:var(--taro-deep);box-shadow:inset 0 0 0 3px var(--surface)}
+    .snap-popover input[type=radio]:focus-visible{outline:2px solid color-mix(in srgb,var(--taro) 55%,transparent);outline-offset:2px}
+    .snap-folder{display:flex;align-items:center;gap:8px;margin:0 0 4px 32px;color:var(--muted)}
     .snap-folder b{color:var(--ink);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px}
-    .snap-note{margin:8px 0 0;color:var(--muted);font-size:12px;line-height:1.5}
+    .snap-note{margin:6px 4px 0;padding-top:8px;border-top:1px solid var(--line);color:var(--muted);font-size:11px;line-height:1.5}
     .task-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:18px;align-items:center;padding:17px 18px;border-top:1px solid var(--line)}
     .task-row:first-child{border-top:0}.task-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
     .task-actions select{max-width:210px}.task-actions .merge-input{width:240px;max-width:100%}
     .merge-box{position:relative;display:inline-flex;max-width:100%}
-    .merge-menu{position:absolute;z-index:30;top:calc(100% + 6px);left:0;width:max(100%,320px);max-height:300px;overflow-y:auto;padding:5px;
-      border:1px solid var(--line);border-radius:10px;background:var(--surface);box-shadow:0 14px 32px rgba(40,30,50,.18)}
-    .merge-option{display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:7px;font-size:13px;color:var(--ink);cursor:pointer;white-space:nowrap}
-    .merge-option span{overflow:hidden;text-overflow:ellipsis}
-    .merge-option.active{background:var(--hover-bg)}
+    /* 和顶部筛选的下拉同一套：边框、底色、阴影、弹出动画、键盘选中的描边都一样 */
+    .merge-menu{position:absolute;z-index:30;top:calc(100% + 7px);right:0;width:max(100%,320px);max-width:calc(100vw - 32px);max-height:300px;overflow-y:auto;padding:5px;
+      border:1px solid color-mix(in srgb,var(--line) 72%,var(--taro));border-radius:10px;background:var(--surface-alt);box-shadow:0 14px 30px rgba(0,0,0,.34);
+      display:grid;gap:2px;transform-origin:top right;animation:menu-in .14s ease both;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+    .merge-option{min-height:34px;padding:7px 9px;border:1px solid transparent;border-radius:7px;display:flex;align-items:center;gap:8px;
+      font-size:12px;line-height:1.25;color:var(--ink);cursor:pointer;white-space:nowrap}
+    .merge-option span{min-width:0;overflow:hidden;text-overflow:ellipsis}
+    .merge-option:hover{background:var(--hover-bg)}
+    .merge-option.active{border-color:color-mix(in srgb,var(--taro) 72%,var(--line));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--taro) 18%,transparent)}
     .status-icon{flex:none}
     .status-backlog,.status-canceled,.status-duplicate,.status-free{color:var(--faint)}.status-todo{color:var(--muted)}
     .status-progress{color:var(--butter-deep)}.status-review{color:var(--success)}.status-done{color:var(--taro-deep)}
