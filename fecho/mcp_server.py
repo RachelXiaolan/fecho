@@ -221,6 +221,7 @@ _METHOD_LABEL = {
     "mobius-auto": "自动配到 Mobius issue",
     "task-continue": "接着已有任务",
     "session-group": "同一场对话归到一起",
+    "session-issue": "跟着同一场对话里已确认的 issue",
     "new-task": "新立了自由任务",
 }
 

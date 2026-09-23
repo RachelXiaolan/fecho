@@ -40,6 +40,7 @@ class FakeMobius:
 class TestSyncScope(unittest.TestCase):
     def setUp(self):
         reset()
+        self.addCleanup(reset)   # 合并会留下 task_events，别的测试文件清表时不认它
 
     def _sync(self, fake):
         with mock.patch.object(mobius, "_rpc", side_effect=fake):
@@ -92,6 +93,7 @@ class TestSyncScope(unittest.TestCase):
 class TestDailyOrder(unittest.TestCase):
     def setUp(self):
         reset()
+        self.addCleanup(reset)   # 合并会留下 task_events，别的测试文件清表时不认它
         with db.cursor() as c:
             for key, prio in (("AI-2541", 4), ("AI-2460", 1), ("AI-2539", 0)):
                 c.execute("UPDATE mobius_issues SET raw=? WHERE author='t' AND issue_key=?",

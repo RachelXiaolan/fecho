@@ -19,7 +19,7 @@ from . import config, db, llm, personas, pto, store
 
 
 REPORT_PROMPT_VERSION = "daily-v2-status-fields"
-VERIFY_PROMPT_VERSION = "assignment-v3-closed-hint"
+VERIFY_PROMPT_VERSION = "assignment-v4-learned-hints"
 
 
 def _cjk_len(text: str) -> int:
@@ -482,6 +482,65 @@ def _cache_verification(author: str, date: str, fp: str) -> None:
         )
 
 
+HINT_EXAMPLES = 3     # 每个 issue 最多带几条「人确认过归到这里」的进展
+HINT_CHARS = 40
+
+
+def issue_hints(author: str, keys: List[str]) -> Dict[str, Dict[str, List[str]]]:
+    """从人的纠正里学：每个 issue 叫过什么名字、人确认过哪些进展属于它。
+
+    - 短名：日报里给这个 issue 起的名字（「Bug Hunter」）
+    - 并进来的任务名：人把哪些自由任务合并进了它
+    - 确认过的进展：人锁定归到它的几条，新的在前
+    纠正一次，下次模型就认得——不用每天在同一个地方再纠一遍。
+    """
+    if not keys:
+        return {}
+    out: Dict[str, Dict[str, List[str]]] = {k: {"names": [], "examples": []} for k in keys}
+    with db.cursor() as conn:
+        for r in conn.execute("SELECT task_key, alias FROM task_aliases WHERE author=?",
+                              (author,)).fetchall():
+            if r["task_key"] in out:
+                out[r["task_key"]]["names"].append(r["alias"])
+        merged = conn.execute(
+            "SELECT e.from_task_id, t.issue_key FROM task_events e JOIN tasks t ON t.task_id=e.to_task_id"
+            " WHERE e.author=? AND e.event_type='merge' AND e.actor='human' AND t.issue_key IS NOT NULL"
+            " ORDER BY e.created_at DESC", (author,)).fetchall()
+        aliases = {r["task_key"]: r["alias"] for r in conn.execute(
+            "SELECT task_key, alias FROM task_aliases WHERE author=? AND task_key LIKE 'task:%'",
+            (author,)).fetchall()}
+        for r in merged:
+            slot = out.get(r["issue_key"])
+            src = db.get_task(r["from_task_id"])
+            if slot is None or not src or src.get("issue_key"):
+                continue
+            name = aliases.get("task:%s" % src["task_id"]) or src["title"]
+            if name and name not in slot["names"] and len(slot["names"]) < 4:
+                slot["names"].append(name)
+        rows = conn.execute(
+            "SELECT t.issue_key, u.content_md FROM updates u JOIN tasks t ON t.task_id=u.task_id"
+            " WHERE u.author=? AND u.assignment_locked=1 AND u.status='active'"
+            " AND t.issue_key IS NOT NULL ORDER BY u.created_at DESC LIMIT 300", (author,)).fetchall()
+    for r in rows:
+        slot = out.get(r["issue_key"])
+        if slot is not None and len(slot["examples"]) < HINT_EXAMPLES:
+            slot["examples"].append(r["content_md"].strip().replace("\n", " ")[:HINT_CHARS])
+    return out
+
+
+def _issue_line(issue: Dict[str, Any], hint: Optional[Dict[str, List[str]]]) -> str:
+    line = "- %s：%s%s" % (issue["issue_key"], issue["title"],
+                          "（最近已关闭）" if issue.get("closed") else "")
+    extra = []
+    if hint and hint["names"]:
+        extra.append("也叫：" + "、".join(hint["names"]))
+    if issue.get("desc"):
+        extra.append("描述：" + issue["desc"])
+    if hint and hint["examples"]:
+        extra.append("人确认过属于它的进展：" + "；".join("「%s」" % e for e in hint["examples"]))
+    return line + "".join("\n    " + e for e in extra)
+
+
 def verify_assignments(author: str, date: str) -> Dict[str, Any]:
     """把当天所有进展的归属重判一次，不管它当初是怎么归的。
 
@@ -511,10 +570,9 @@ def verify_assignments(author: str, date: str) -> Dict[str, Any]:
         out["cached"] = True
         return out
 
+    hints = issue_hints(author, [i["issue_key"] for i in issues])
     listing = ("候选 issue（只能从这里选）：\n"
-               + "\n".join("- %s：%s%s" % (i["issue_key"], i["title"],
-                                             "（最近已关闭）" if i.get("closed") else "")
-                            for i in issues)
+               + "\n".join(_issue_line(i, hints.get(i["issue_key"])) for i in issues)
                ) if issues else "（当前没有在办的 issue，全部写 `-`）"
     body = "\n".join("%d | %s" % (n, r["content_md"].strip().replace("\n", " "))
                       for n, r in enumerate(rows, 1))

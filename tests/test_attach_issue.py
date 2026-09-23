@@ -16,6 +16,7 @@ from fecho import config, db, mobius, service, store
 class TestAttachToIssue(unittest.TestCase):
     def setUp(self):
         reset()
+        self.addCleanup(reset)   # 合并会留下 task_events，别的测试文件清表时不认它
 
     def test_issue_without_a_task_yet_gets_one_and_takes_the_progress(self):
         free = store.record_progress("t", "Bug Hunter 框架部署到 Cloudflare", date=D, freeform=True)
@@ -85,6 +86,7 @@ class TestAttachToIssue(unittest.TestCase):
 class TestAttachEndpoint(unittest.TestCase):
     def setUp(self):
         reset()
+        self.addCleanup(reset)   # 合并会留下 task_events，别的测试文件清表时不认它
         try:
             from fastapi.testclient import TestClient
         except ImportError:

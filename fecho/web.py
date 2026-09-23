@@ -62,7 +62,7 @@ def review_queue(author: str, date: str) -> List[Dict[str, Any]]:
     最后是验证改过的（多半对了，但值得确认）。明确写了 issue 号又没被改过的
     不在这里——那种没什么可复核的。
     """
-    rank = {"task-continue": 0, "new-task": 1, "session-group": 1, "verified": 2,
+    rank = {"task-continue": 0, "new-task": 1, "session-group": 1, "session-issue": 1, "verified": 2,
             "explicit": 3, "explicit-freeform": 3, "project-bound": 4}
     with db.cursor() as conn:
         rows = conn.execute(
@@ -85,7 +85,7 @@ def review_queue(author: str, date: str) -> List[Dict[str, Any]]:
                     "completion_status": r["completion_status"],
                     "content_kind": r["content_kind"],
                     "confidence": "low" if m == "task-continue" else
-                                  ("medium" if m in ("new-task", "session-group", "verified")
+                                  ("medium" if m in ("new-task", "session-group", "session-issue", "verified")
                                    else "high")})
     out.sort(key=lambda x: x["rank"])
     return out

@@ -99,6 +99,24 @@ def fetch_open_issues(assignee: str, token: Optional[str] = None) -> List[Dict[s
     return list(out.values())
 
 
+DESC_CHARS = 160      # 描述摘要多长：够模型认出是哪件事，又不把候选列表撑爆
+DESC_FETCH_MAX = 40   # 一轮同步最多为补描述查几次
+
+
+def snippet(description: Optional[str]) -> str:
+    """描述压成一句摘要：去掉 HTML 注释标记、标题行、Markdown 符号，合并空白。
+
+    标题常常是黑话（「9.18 RSI 带练项目自进化检查节点」），光看标题认不出
+    Bug Hunter 就是它；描述里通常有人话。
+    """
+    import re
+    text = re.sub(r"<!--.*?-->", " ", description or "", flags=re.S)
+    lines = [ln for ln in text.splitlines() if not ln.lstrip().startswith("#")]
+    text = re.sub(r"[*_`>|\[\]]+", " ", " ".join(lines))
+    text = re.sub(r"\s+", " ", text).strip()
+    return text[:DESC_CHARS]
+
+
 def _days_ago_iso(days: int) -> str:
     from datetime import datetime, timedelta, timezone
     return (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -218,12 +236,13 @@ def sync(author: str, assignee: Optional[str] = None,
         bucket = bucket_of.get(name) or ("completed" if name in _CLOSED_NAMES else "started")
         if bucket in _CLOSED_BUCKETS and (issue.get("updatedAt") or "") < since:
             continue
-        issue.pop("description", None)    # 描述可能很长，缓存里先不存
+        issue["_desc"] = snippet(issue.pop("description", None))   # 原文可能很长，只存摘要
         issue.pop("comments", None)
         issue.pop("activity", None)
         found[key] = dict(issue, _bucket=bucket, _via="touched")
         touched += 1
 
+    _fill_descriptions(author, found, token)
     now = store.now_iso()
     with db.cursor() as conn:
         conn.execute("DELETE FROM mobius_issues WHERE author=?", (author,))
@@ -238,6 +257,36 @@ def sync(author: str, assignee: Optional[str] = None,
             )
     return {"author": author, "assignee": assignee, "count": len(found),
             "touched": touched, "synced_at": now}
+
+
+def _fill_descriptions(author: str, found: Dict[str, Dict[str, Any]], token: Optional[str]) -> None:
+    """列表接口不带描述。上一轮存过、issue 之后没改过的直接复用，其余逐个补查。"""
+    with db.cursor() as conn:
+        old = {r["issue_key"]: r for r in conn.execute(
+            "SELECT issue_key, updated_at, raw FROM mobius_issues WHERE author=?", (author,)).fetchall()}
+    fetched = 0
+    for key, issue in found.items():
+        if "_desc" in issue:
+            continue
+        prev = old.get(key)
+        if prev and prev["updated_at"] == issue.get("updatedAt"):
+            try:
+                desc = json.loads(prev["raw"] or "{}").get("_desc")
+            except ValueError:
+                desc = None
+            if desc is not None:
+                issue["_desc"] = desc
+                continue
+        if fetched >= DESC_FETCH_MAX:
+            continue
+        fetched += 1
+        try:
+            res = _rpc("tools/call", {"name": "get_issue", "arguments": {"identifier": key}},
+                       token=token)
+            payload = json.loads((res.get("content") or [{}])[0].get("text") or "{}")
+            issue["_desc"] = snippet(payload.get("issue", payload).get("description"))
+        except (MobiusError, ValueError, KeyError, IndexError, AttributeError):
+            continue                      # 补不上就没有摘要，不挡着同步
 
 
 PRIORITY_NAMES = {1: "紧急", 2: "高", 3: "中", 4: "低"}
@@ -262,6 +311,7 @@ def _decorate(row: Dict[str, Any]) -> Dict[str, Any]:
     row["state_type"] = raw.get("_bucket") or ""
     row["closed"] = row["state_type"] in _CLOSED_BUCKETS
     row["via"] = raw.get("_via") or "assigned"
+    row["desc"] = raw.get("_desc") or ""
     return row
 
 

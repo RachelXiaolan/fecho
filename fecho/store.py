@@ -74,6 +74,33 @@ def _conversation_task(author: str, date: str, session_id: Optional[str]) -> Opt
     return row["task_id"] if row else None
 
 
+# 这些归属算「已确认」：人确认过，或者看过一整天的交叉验证判过。
+# 正文里写了 issue 号（explicit）不算——扫描是批量抽取，一条顺嘴提到 AI-2541，
+# 同场对话后面不相干的整片跟进去，这事真出过（test_scan_entry_does_not_inherit_session_task）。
+# 工作目录绑了 issue 的不用这条：同目录的每一条本来就直接归过去了。
+_TRUSTED_METHODS = ("verified", "human-merged")
+
+
+def _conversation_issue_task(author: str, date: str, session_id: Optional[str]) -> Optional[str]:
+    """同一天、同一场对话里最近一条可靠地归到了 issue 的进展，它所在的任务。
+
+    只认可靠的：会话里跟过去的（session-issue）不算，免得一条跟错一路传下去。
+    """
+    if not session_id:
+        return None
+    marks = ",".join("?" * len(_TRUSTED_METHODS))
+    with db.cursor() as conn:
+        row = conn.execute(
+            "SELECT u.task_id FROM updates u JOIN tasks t ON t.task_id=u.task_id"
+            " WHERE u.author=? AND u.date=? AND u.session_id=? AND t.issue_key IS NOT NULL"
+            " AND t.status='open' AND u.status='active'"
+            " AND (u.assignment_locked=1 OR u.match_method IN (" + marks + "))"
+            " ORDER BY u.created_at DESC, u.update_id DESC LIMIT 1",
+            (author, date, session_id) + _TRUSTED_METHODS,
+        ).fetchone()
+    return row["task_id"] if row else None
+
+
 def _mark_if_empty(conn: Any, task_id: str) -> None:
     """自由任务上的进展全挪走了，就收起来（status=empty），不在任务列表里占位。
 
@@ -218,6 +245,7 @@ def record_progress(
     tasks = db.list_tasks(author=author, status="open")
     is_scan = ingestion_method == "transcript-scan"
     conversation = _conversation_task(author, date, session_id) if is_scan else None
+    conversation_issue = _conversation_issue_task(author, date, session_id) if is_scan else None
     if freeform:
         decision = {"method": "explicit-freeform", "score": 1.0,
                     "confidence": "high", "via": "caller"}
@@ -234,6 +262,7 @@ def record_progress(
             allow_session_fallback=not is_scan,
             # 但同一场对话里都没写 issue 号的，归到一个自由任务里，别拆碎
             conversation_task_id=conversation,
+            conversation_issue_task_id=conversation_issue,
         )
 
     if decision.get("task_id"):
@@ -322,7 +351,7 @@ def _assignment_source(method: str) -> str:
         return "agent"
     if method == "project-bound":
         return "project"
-    if method in ("task-continue", "session-group"):
+    if method in ("task-continue", "session-group", "session-issue"):
         return "session"
     return "system"
 
