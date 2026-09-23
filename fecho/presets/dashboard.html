@@ -209,7 +209,7 @@
     .button-row{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
     .task-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:18px;align-items:center;padding:17px 18px;border-top:1px solid var(--line)}
     .task-row:first-child{border-top:0}.task-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
-    .task-actions select{max-width:210px}
+    .task-actions select{max-width:210px}.task-actions .merge-input{width:240px;max-width:100%}
     .segmented{display:flex;gap:3px;background:var(--surface-soft);padding:3px;border-radius:9px;width:max-content}
     .segmented button{border:0;background:transparent;padding:7px 11px;border-radius:7px;color:var(--muted);font-size:11px;font-weight:700}
     .segmented button.active{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
@@ -526,7 +526,7 @@
       <section class="view" data-page="tasks" aria-labelledby="tasks-heading">
         <div class="section-head"><div><h2 id="tasks-heading" data-i18n="tasks_heading"></h2><p data-i18n="tasks_sub"></p></div>
           <div class="segmented" id="task-tabs"><button class="active" data-task-status="all" data-i18n="tab_all"></button><button data-task-status="open" data-i18n="tab_open"></button><button data-task-status="done" data-i18n="tab_done"></button><button data-task-status="merged" data-i18n="tab_merged"></button></div></div>
-        <div class="panel" id="task-list"></div>
+        <datalist id="merge-targets"></datalist><div class="panel" id="task-list"></div>
       </section>
 
       <section class="view" data-page="reports" aria-labelledby="reports-heading">
@@ -644,7 +644,7 @@
     "tab_all": "全部", "tab_open": "进行中", "tab_done": "已完成", "tab_merged": "已合并",
     "task_status_open": "进行中", "task_status_done": "已完成", "task_status_merged": "已合并",
     "complete": "完成", "reopen": "重开", "no_progress": "暂无进展", "last_updated": "最后更新 {time}",
-    "merge_aria": "合并目标", "merge_into": "合并到…", "merge": "合并",
+    "merge_aria": "合并目标：选任务或 issue，也可以直接输入 issue 编号", "merge_into": "合并到…（可输 issue 号）", "merge": "合并",
     "empty_tasks": "这个分组没有任务", "empty_tasks_sub": "切换上方状态查看其他任务。",
     "status_done": "已完成", "status_wip": "进行中", "status_blocked": "受阻", "status_unknown": "未标注",
     "reports_heading": "日报",
@@ -720,7 +720,7 @@
     "toast_requested": "申请已提交，等 admin 审批", "toast_unchanged": "没有改动",
     "toast_edit_saved": "已保存。旧版本在历史版本里；口播稿和写作偏好在后台更新",
     "toast_confirmed": "进展已确认并锁定", "toast_undo_assign": "已撤销归属修改", "toast_restored": "进展已恢复",
-    "toast_completed": "任务已完成", "toast_reopened": "任务已重新打开", "toast_pick_merge": "请先选择合并目标", "toast_merged": "任务已合并",
+    "toast_completed": "任务已完成", "toast_reopened": "任务已重新打开", "toast_pick_merge": "请先选择合并目标", "toast_merged": "任务已合并", "toast_attached": "已归到 {key}", "toast_merge_unknown": "没认出合并目标：从列表里选，或者直接输入 issue 编号",
     "toast_generating": "正在调用模型整理日报…", "toast_queued": "已排队，几分钟后刷新就能看到新的日报", "toast_generated": "日报和口播稿已更新",
     "toast_nothing_to_generate": "这天没有任何记录，生成不出日报。先让 agent 记几条进展，或等每晚扫描上传。",
     "toast_time_saved": "已保存：每天 {time} 出日报", "toast_scan_on": "以后每晚扫它的对话", "toast_scan_off": "不再扫它的对话",
@@ -787,7 +787,7 @@
     "tab_all": "All", "tab_open": "Open", "tab_done": "Done", "tab_merged": "Merged",
     "task_status_open": "Open", "task_status_done": "Done", "task_status_merged": "Merged",
     "complete": "Complete", "reopen": "Reopen", "no_progress": "No updates yet", "last_updated": "Last updated {time}",
-    "merge_aria": "Merge into", "merge_into": "Merge into…", "merge": "Merge",
+    "merge_aria": "Merge into a task or issue, or type an issue key", "merge_into": "Merge into… (or an issue key)", "merge": "Merge",
     "empty_tasks": "No tasks here", "empty_tasks_sub": "Switch the status above to see others.",
     "status_done": "Done", "status_wip": "In progress", "status_blocked": "Blocked", "status_unknown": "Unknown",
     "reports_heading": "Reports",
@@ -863,7 +863,7 @@
     "toast_requested": "Request sent — waiting for an admin", "toast_unchanged": "No changes",
     "toast_edit_saved": "Saved. The old version is in History; the voice script and writing style update in the background",
     "toast_confirmed": "Update confirmed and locked", "toast_undo_assign": "Assignment change undone", "toast_restored": "Update restored",
-    "toast_completed": "Task completed", "toast_reopened": "Task reopened", "toast_pick_merge": "Pick a task to merge into first", "toast_merged": "Tasks merged",
+    "toast_completed": "Task completed", "toast_reopened": "Task reopened", "toast_pick_merge": "Pick a task to merge into first", "toast_merged": "Tasks merged", "toast_attached": "Moved to {key}", "toast_merge_unknown": "Couldn't tell where to merge: pick from the list or type an issue key",
     "toast_generating": "Asking the model to write the report…", "toast_queued": "Queued — refresh in a few minutes to see the new report", "toast_generated": "Report and voice script updated",
     "toast_nothing_to_generate": "Nothing was recorded for this day, so there's no report to generate. Log some progress with your agent, or wait for the nightly scan.",
     "toast_time_saved": "Saved: report at {time} every day", "toast_scan_on": "Its conversations will be scanned nightly", "toast_scan_off": "Its conversations won't be scanned",
@@ -1072,17 +1072,43 @@
     $('#hidden-list').innerHTML=hidden.length?hidden.map(item=>`<div class="item item-head"><div><div class="item-body">${esc(item.content_md)}</div><div class="meta">${esc(item.status)} ${item.k?'· '+esc(item.k):''}</div></div><button class="btn small" data-action="restore" data-id="${esc(item.update_id)}">${esc(t('restore'))}</button></div>`).join(''):empty(t('empty_hidden'),t('empty_hidden_sub'));
   }
 
+  // 合并目标 = 已有任务 + 同步来的 issue。issue 按编号去重；输进去的不在列表里也行，
+  // 只要是 issue 编号，服务器会现去 Mobius 查。以前只列已有任务，issue 没进展就选不到
+  function mergeTargets(){
+    const live=state.data.tasks.items.filter(x=>x.status!=='merged'), seen=new Set(), out=[];
+    live.filter(x=>x.issue_key).forEach(x=>{ if(seen.has(x.issue_key))return; seen.add(x.issue_key); out.push({label:`${x.issue_key} · ${x.alias||x.title}`,issue:x.issue_key}); });
+    (state.data.issues.items||[]).forEach(i=>{ if(seen.has(i.issue_key))return; seen.add(i.issue_key); out.push({label:`${i.issue_key} · ${i.title}`,issue:i.issue_key}); });
+    const labels=new Set(out.map(o=>o.label));
+    live.filter(x=>!x.issue_key).sort((a,b)=>(b.last_update||'').localeCompare(a.last_update||'')).forEach(x=>{
+      let label=`${x.alias||x.title} · ${t('freeform')}`;
+      if(labels.has(label)) label+=` (${(x.last_update||'').slice(5,10)})`;   // 同名的自由任务靠日期分开
+      labels.add(label); out.push({label,task:x.task_id});
+    });
+    return out;
+  }
+  function resolveMergeTarget(text){
+    const hit=(state.mergeTargets||[]).find(o=>o.label===text);
+    if(hit) return hit;
+    const key=(text.match(/^\s*([A-Za-z][A-Za-z0-9]{1,9}-\d+)(?![\w-])/)||[])[1];
+    return key?{issue:key.toUpperCase()}:null;
+  }
   function renderTasks(){
     $$('#task-tabs button').forEach(button=>button.classList.toggle('active',button.dataset.taskStatus===state.taskStatus));
     const hasGlobalFilter=$('#agent-filter').value||$('#source-filter').value||$('#status-filter').value;
     const tasks=state.data.tasks.items.filter(x=>(state.taskStatus==='all'||x.status===state.taskStatus)&&
       (!hasGlobalFilter||x.updates.some(matches)));
+    // 页面每分钟会悄悄刷新一次，重画会把正在输入的合并目标冲掉——先记下，画完放回去
+    const typed={}; $$('.merge-input').forEach(i=>{ if(i.value) typed[i.dataset.mergeTarget]=i.value; });
+    const typing=document.activeElement&&document.activeElement.dataset?document.activeElement.dataset.mergeTarget:null;
+    state.mergeTargets=mergeTargets();
+    $('#merge-targets').innerHTML=state.mergeTargets.map(o=>`<option value="${esc(o.label)}"></option>`).join('');
     $('#task-list').innerHTML=tasks.length?tasks.map(task=>{
-      const targets=state.data.tasks.items.filter(x=>x.task_id!==task.task_id&&x.status!=='merged').map(x=>`<option value="${esc(x.task_id)}">${issueLabel(x)}</option>`).join('');
       const action=task.status==='open'?`<button class="btn small" data-action="complete-task" data-id="${esc(task.task_id)}">${esc(t('complete'))}</button>`:task.status==='done'?`<button class="btn small" data-action="reopen-task" data-id="${esc(task.task_id)}">${esc(t('reopen'))}</button>`:'';
       const statusText=['open','done','merged'].includes(task.status)?t('task_status_'+task.status):task.status;
-      return `<div class="task-row"><div><div class="item-title">${issueLabel(task)}</div><div class="item-body">${esc(task.last_progress||t('no_progress'))}</div><div class="meta"><span class="tag ${task.status==='done'?'done':''}">${esc(statusText)}</span><span>${esc(t('n_updates',{n:task.update_count}))}</span><span>${esc(t('last_updated',{time:(task.last_update||'').slice(0,16).replace('T',' ')}))}</span></div></div><div class="task-actions">${action}${task.status!=='merged'&&targets?`<select aria-label="${esc(t('merge_aria'))}" data-merge-target="${esc(task.task_id)}"><option value="">${esc(t('merge_into'))}</option>${targets}</select><button class="btn small" data-action="merge-task" data-id="${esc(task.task_id)}">${esc(t('merge'))}</button>`:''}</div></div>`;
+      return `<div class="task-row"><div><div class="item-title">${issueLabel(task)}</div><div class="item-body">${esc(task.last_progress||t('no_progress'))}</div><div class="meta"><span class="tag ${task.status==='done'?'done':''}">${esc(statusText)}</span><span>${esc(t('n_updates',{n:task.update_count}))}</span><span>${esc(t('last_updated',{time:(task.last_update||'').slice(0,16).replace('T',' ')}))}</span></div></div><div class="task-actions">${action}${task.status!=='merged'?`<input class="merge-input" list="merge-targets" aria-label="${esc(t('merge_aria'))}" placeholder="${esc(t('merge_into'))}" data-merge-target="${esc(task.task_id)}" autocomplete="off"><button class="btn small" data-action="merge-task" data-id="${esc(task.task_id)}">${esc(t('merge'))}</button>`:''}</div></div>`;
     }).join(''):empty(t('empty_tasks'),t('empty_tasks_sub'));
+    Object.entries(typed).forEach(([id,v])=>{ const i=$(`[data-merge-target="${id}"]`); if(i) i.value=v; });
+    if(typing){ const i=$(`[data-merge-target="${typing}"]`); if(i){ i.focus(); i.setSelectionRange(i.value.length,i.value.length); } }
   }
 
   // ---- Markdown → HTML ----
@@ -1430,6 +1456,8 @@
   }
 
   $('#account-trigger').addEventListener('click',toggleAccountMenu);
+  // 合并目标输完直接回车，等于点旁边的「合并」
+  $('#task-list').addEventListener('keydown',event=>{ const input=event.target.closest('.merge-input'); if(event.key!=='Enter'||!input||event.isComposing)return; event.preventDefault(); const b=$(`[data-action="merge-task"][data-id="${input.dataset.mergeTarget}"]`); if(b) b.click(); });
   $('#account-menu').addEventListener('click',event=>{
     const action=event.target.closest('[data-account-action]'); if(!action) return;
     closeAccountMenu();
@@ -1520,8 +1548,12 @@
       if(action.dataset.action==='complete-task') await mutate(`/api/tasks/${action.dataset.id}/complete`,{date:state.data.date},t('toast_completed'));
       if(action.dataset.action==='reopen-task') await mutate(`/api/tasks/${action.dataset.id}/reopen`,{date:state.data.date},t('toast_reopened'));
       if(action.dataset.action==='merge-task'){
-        const select=$(`[data-merge-target="${action.dataset.id}"]`); if(!select.value)throw new Error(t('toast_pick_merge'));
-        await mutate('/api/tasks/merge',{source_task_id:action.dataset.id,target_task_id:select.value,date:state.data.date},t('toast_merged'));
+        const input=$(`[data-merge-target="${action.dataset.id}"]`), text=input.value.trim();
+        if(!text) throw new Error(t('toast_pick_merge'));
+        const target=resolveMergeTarget(text);
+        if(!target){ toast(t('toast_merge_unknown'),null,true); return; }
+        if(target.issue) await mutate(`/api/tasks/${encodeURIComponent(action.dataset.id)}/attach`,{issue_key:target.issue,date:state.data.date},t('toast_attached',{key:target.issue}));
+        else await mutate('/api/tasks/merge',{source_task_id:action.dataset.id,target_task_id:target.task,date:state.data.date},t('toast_merged'));
       }
     }catch(error){ if(!$('#toast').classList.contains('show'))toast(error.message,null,true); }
     finally{action.disabled=false;}

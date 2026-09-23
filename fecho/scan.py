@@ -439,7 +439,7 @@ def scan(days: int = 1, dry_run: bool = False, author: Optional[str] = None) -> 
             candidate = e.get("issue") or (mentioned[0] if mentioned else bound)
             if candidate and candidate not in valid_keys:
                 try:
-                    mobius.fetch_issue(author, candidate)
+                    mobius.fetch_issue(author, candidate, token=mobius.token_for(author))
                     valid_keys.add(candidate)
                 except Exception:
                     # Historical references must not block the whole day. If Mobius

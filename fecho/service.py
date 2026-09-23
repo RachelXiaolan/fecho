@@ -57,6 +57,21 @@ def merge_tasks(source_task_id: str, target_task_id: str,
     return store.merge_tasks(source_task_id, target_task_id, author or whoami())
 
 
+def attach_to_issue(task_id: str, issue_key: str,
+                    author: Optional[str] = None) -> Dict[str, Any]:
+    """把一个任务整个归到某个 issue 上：issue 还没有对应的任务就先建一个，再合并过去。
+
+    合并的目标原来只能是「已有任务」，而一个 issue 要先有进展被归过去才会变成任务——
+    没归过去就选不到，选不到就归不过去。人点名的归属锁住，模型之后不能再改。
+    """
+    author = author or whoami()
+    issue = mobius.ensure_issue(author, issue_key)
+    target = store.task_for_issue(author, issue["issue_key"], issue.get("title") or None)
+    if target["task_id"] == task_id:
+        raise ValueError("这个任务已经在 %s 上了" % issue["issue_key"])
+    return store.merge_tasks(task_id, target["task_id"], author)
+
+
 def report(date: str, author: Optional[str] = None) -> Dict[str, Any]:
     who = author or whoami()
     return {"author": who, "date": date,

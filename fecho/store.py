@@ -122,6 +122,11 @@ def _get_or_create_mobius_task(author: str, issue_key: str, title: Optional[str]
     return db.get_task(task_id)
 
 
+def task_for_issue(author: str, issue_key: str, title: Optional[str] = None) -> Dict[str, Any]:
+    """这个 issue 对应的任务，没有就建。issue 必须已经核实过（mobius.ensure_issue）。"""
+    return _get_or_create_mobius_task(author, issue_key, title)
+
+
 def _validate_issue(author: str, issue_key: str) -> str:
     key = (issue_key or "").strip().upper()
     if not match.ISSUE_RE.fullmatch(key):

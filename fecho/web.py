@@ -759,6 +759,9 @@ def build_app():
                                (update_id, me)).fetchone()
         if row is None:
             raise ValueError("进展不存在: %s" % update_id)
+        if body.get("issue_key"):
+            from . import mobius
+            body["issue_key"] = mobius.ensure_issue(me, body["issue_key"])["issue_key"]
         kw = ({"issue_key": body["issue_key"]} if body.get("issue_key")
               else {"freeform": True})
         result = store.correct_progress(update_id, me, **kw)
@@ -780,7 +783,8 @@ def build_app():
         if "content" in body:
             kw["content_md"] = body["content"]
         if body.get("issue_key"):
-            kw["issue_key"] = body["issue_key"]
+            from . import mobius
+            kw["issue_key"] = mobius.ensure_issue(me, body["issue_key"])["issue_key"]
         elif "issue_key" in body:
             kw["freeform"] = True
         result = store.correct_progress(update_id, me, **kw)
@@ -814,6 +818,15 @@ def build_app():
         me = guard(request, authorization)
         from . import service
         result = service.merge_tasks(body["source_task_id"], body["target_task_id"], author=me)
+        return {"ok": True, **result,
+                "dashboard": dashboard_payload(me, body.get("date") or store.today())}
+
+    @app.post("/api/tasks/{task_id}/attach")
+    def api_attach_task(task_id: str, request: Request, body: Dict[str, Any] = Body(...),
+                        authorization: Optional[str] = Header(None)):
+        me = guard(request, authorization)
+        from . import service
+        result = service.attach_to_issue(task_id, body.get("issue_key") or "", author=me)
         return {"ok": True, **result,
                 "dashboard": dashboard_payload(me, body.get("date") or store.today())}
 

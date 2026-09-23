@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
-from . import config, db, store
+from . import config, db, match, store
 
 
 class MobiusError(RuntimeError):
@@ -77,10 +77,22 @@ def fetch_open_issues(assignee: str, token: Optional[str] = None) -> List[Dict[s
     return list(out.values())
 
 
-def fetch_issue(author: str, identifier: str) -> Dict[str, Any]:
+def token_for(author: str) -> Optional[str]:
+    """云端每人用自己的 Mobius 授权；本机版返回 None，走配置里那一个。
+
+    以前按编号查单个 issue 时没带授权，云端一律报「未配置 Mobius」再被吞掉——
+    扫描里明确写了的 issue 号在云端从来没认出来过。
+    """
+    if not config.CLOUD:
+        return None
+    from . import mobius_login
+    return mobius_login.access_token(author)
+
+
+def fetch_issue(author: str, identifier: str, token: Optional[str] = None) -> Dict[str, Any]:
     """Resolve one historical issue and retain it in the local validation cache."""
     res = _rpc("tools/call", {
-        "name": "get_issue", "arguments": {"identifier": identifier}})
+        "name": "get_issue", "arguments": {"identifier": identifier}}, token=token)
     content = res.get("content") or []
     if not content:
         raise MobiusError("Mobius 没有返回 issue %s" % identifier)
@@ -102,6 +114,27 @@ def fetch_issue(author: str, identifier: str) -> Dict[str, Any]:
              json.dumps(issue, ensure_ascii=False)),
         )
     return issue
+
+
+def ensure_issue(author: str, issue_key: str) -> Dict[str, Any]:
+    """人手点名的 issue：缓存里有就用，没有就现去 Mobius 查一次。
+
+    缓存只装同步范围里的那些，人要归的 issue 常常不在里面（别人名下的、没指派的、
+    刚建的）。以前这种一律「不在已同步的 issue 中」，人连手动补救都做不到。
+    """
+    key = (issue_key or "").strip().upper()
+    if not match.ISSUE_RE.fullmatch(key):
+        raise ValueError("issue 编号格式不对：%s（应该像 AI-2660）" % issue_key)
+    with db.cursor() as conn:
+        row = conn.execute("SELECT * FROM mobius_issues WHERE author=? AND issue_key=?",
+                           (author, key)).fetchone()
+    if row:
+        return dict(row)
+    try:
+        issue = fetch_issue(author, key, token=token_for(author))
+    except MobiusError as exc:
+        raise ValueError("没能在 Mobius 上确认 %s：%s" % (key, exc)) from exc
+    return {"issue_key": key, "title": issue.get("title", ""), "state": issue.get("state", "")}
 
 
 def sync(author: str, assignee: Optional[str] = None,
