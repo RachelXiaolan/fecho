@@ -188,6 +188,28 @@ class TestDashboardContract(unittest.TestCase):
         self.assertIn("event.target.closest('#lang-toggle')", self.html)
         self.assertNotIn('<div class="lang-switch" role="group"', self.html)
 
+    def test_cloud_account_menu_replaces_the_settings_nav_item(self):
+        """云端账号入口放在侧边栏底部，设置不再占用工作区主导航。"""
+        self.assertIn('id="account-menu" data-cloud-only hidden', self.html)
+        self.assertIn('id="account-trigger"', self.html)
+        self.assertIn('id="account-name"', self.html)
+        self.assertIn('id="account-email"', self.html)
+        self.assertIn('data-account-action="settings"', self.html)
+        self.assertIn('id="account-logout"', self.html)
+        self.assertNotIn('id="nav-settings"', self.html)
+
+    def test_account_menu_can_be_closed_and_logs_out_through_the_existing_endpoint(self):
+        """菜单可在点外部或按 Escape 时关闭；退出复用服务端撤销 session 的接口。"""
+        self.assertIn('function closeAccountMenu', self.html)
+        self.assertIn("event.key==='Escape'&&state.accountMenuOpen", self.html)
+        self.assertIn("request('/auth/logout',{method:'POST'})", self.html)
+        self.assertIn("window.location.assign('/login')", self.html)
+
+    def test_collapsed_sidebar_keeps_account_details_inside_the_popover(self):
+        """收起时只藏触发按钮上的文字，弹层仍要展示账号详情。"""
+        self.assertIn('.shell.sidebar-collapsed .account-trigger .account-copy', self.html)
+        self.assertIn('.shell:not(.sidebar-expanded) .account-trigger .account-copy', self.html)
+
     def test_has_loading_error_and_live_feedback_regions(self):
         self.assertIn('id="loading"', self.html)
         self.assertIn('id="error-state"', self.html)
