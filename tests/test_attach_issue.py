@@ -128,7 +128,7 @@ class TestMergePicker(unittest.TestCase):
         encoding="utf-8")
 
     def test_picker_offers_synced_issues_and_accepts_a_typed_key(self):
-        self.assertIn('<datalist id="merge-targets">', self.html)
+        self.assertIn('role="combobox"', self.html)
         self.assertIn("state.data.issues.items||[]", self.html,
                       "候选里要有同步来的 issue，不只是已有任务")
         self.assertIn("/attach`", self.html, "选中 issue 走 attach，能现建任务")

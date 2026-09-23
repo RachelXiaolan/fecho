@@ -210,6 +210,15 @@
     .task-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:18px;align-items:center;padding:17px 18px;border-top:1px solid var(--line)}
     .task-row:first-child{border-top:0}.task-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
     .task-actions select{max-width:210px}.task-actions .merge-input{width:240px;max-width:100%}
+    .merge-box{position:relative;display:inline-flex;max-width:100%}
+    .merge-menu{position:absolute;z-index:30;top:calc(100% + 6px);left:0;width:max(100%,320px);max-height:300px;overflow-y:auto;padding:5px;
+      border:1px solid var(--line);border-radius:10px;background:var(--surface);box-shadow:0 14px 32px rgba(40,30,50,.18)}
+    .merge-option{display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:7px;font-size:13px;color:var(--ink);cursor:pointer;white-space:nowrap}
+    .merge-option span{overflow:hidden;text-overflow:ellipsis}
+    .merge-option.active{background:var(--hover-bg)}
+    .status-icon{flex:none}
+    .status-backlog,.status-canceled,.status-duplicate,.status-free{color:var(--faint)}.status-todo{color:var(--muted)}
+    .status-progress{color:var(--butter-deep)}.status-review{color:var(--success)}.status-done{color:var(--taro-deep)}
     .segmented{display:flex;gap:3px;background:var(--surface-soft);padding:3px;border-radius:9px;width:max-content}
     .segmented button{border:0;background:transparent;padding:7px 11px;border-radius:7px;color:var(--muted);font-size:11px;font-weight:700}
     .segmented button.active{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
@@ -526,7 +535,7 @@
       <section class="view" data-page="tasks" aria-labelledby="tasks-heading">
         <div class="section-head"><div><h2 id="tasks-heading" data-i18n="tasks_heading"></h2><p data-i18n="tasks_sub"></p></div>
           <div class="segmented" id="task-tabs"><button class="active" data-task-status="all" data-i18n="tab_all"></button><button data-task-status="open" data-i18n="tab_open"></button><button data-task-status="done" data-i18n="tab_done"></button><button data-task-status="merged" data-i18n="tab_merged"></button></div></div>
-        <datalist id="merge-targets"></datalist><div class="panel" id="task-list"></div>
+        <div class="panel" id="task-list"></div>
       </section>
 
       <section class="view" data-page="reports" aria-labelledby="reports-heading">
@@ -720,7 +729,7 @@
     "toast_requested": "申请已提交，等 admin 审批", "toast_unchanged": "没有改动",
     "toast_edit_saved": "已保存。旧版本在历史版本里；口播稿和写作偏好在后台更新",
     "toast_confirmed": "进展已确认并锁定", "toast_undo_assign": "已撤销归属修改", "toast_restored": "进展已恢复",
-    "toast_completed": "任务已完成", "toast_reopened": "任务已重新打开", "toast_pick_merge": "请先选择合并目标", "toast_merged": "任务已合并", "toast_attached": "已归到 {key}", "issue_closed": "已关闭", "toast_merge_unknown": "没认出合并目标：从列表里选，或者直接输入 issue 编号",
+    "toast_completed": "任务已完成", "toast_reopened": "任务已重新打开", "toast_pick_merge": "请先选择合并目标", "toast_merged": "任务已合并", "toast_attached": "已归到 {key}", "toast_merge_unknown": "没认出合并目标：从列表里选，或者直接输入 issue 编号",
     "toast_generating": "正在调用模型整理日报…", "toast_queued": "已排队，几分钟后刷新就能看到新的日报", "toast_generated": "日报和口播稿已更新",
     "toast_nothing_to_generate": "这天没有任何记录，生成不出日报。先让 agent 记几条进展，或等每晚扫描上传。",
     "toast_time_saved": "已保存：每天 {time} 出日报", "toast_scan_on": "以后每晚扫它的对话", "toast_scan_off": "不再扫它的对话",
@@ -863,7 +872,7 @@
     "toast_requested": "Request sent — waiting for an admin", "toast_unchanged": "No changes",
     "toast_edit_saved": "Saved. The old version is in History; the voice script and writing style update in the background",
     "toast_confirmed": "Update confirmed and locked", "toast_undo_assign": "Assignment change undone", "toast_restored": "Update restored",
-    "toast_completed": "Task completed", "toast_reopened": "Task reopened", "toast_pick_merge": "Pick a task to merge into first", "toast_merged": "Tasks merged", "toast_attached": "Moved to {key}", "issue_closed": "closed", "toast_merge_unknown": "Couldn't tell where to merge: pick from the list or type an issue key",
+    "toast_completed": "Task completed", "toast_reopened": "Task reopened", "toast_pick_merge": "Pick a task to merge into first", "toast_merged": "Tasks merged", "toast_attached": "Moved to {key}", "toast_merge_unknown": "Couldn't tell where to merge: pick from the list or type an issue key",
     "toast_generating": "Asking the model to write the report…", "toast_queued": "Queued — refresh in a few minutes to see the new report", "toast_generated": "Report and voice script updated",
     "toast_nothing_to_generate": "Nothing was recorded for this day, so there's no report to generate. Log some progress with your agent, or wait for the nightly scan.",
     "toast_time_saved": "Saved: report at {time} every day", "toast_scan_on": "Its conversations will be scanned nightly", "toast_scan_off": "Its conversations won't be scanned",
@@ -1078,7 +1087,7 @@
     const live=state.data.tasks.items.filter(x=>x.status!=='merged'), seen=new Set(), out=[];
     // 同步来的 issue 服务器已经按「开着的在前、优先级高的在前」排好；有任务短名的用短名
     const alias={}; live.filter(x=>x.issue_key).forEach(x=>{ if(!alias[x.issue_key]) alias[x.issue_key]=x.alias||x.title; });
-    (state.data.issues.items||[]).forEach(i=>{ if(seen.has(i.issue_key))return; seen.add(i.issue_key); out.push({label:`${i.issue_key} · ${alias[i.issue_key]||i.title}${i.closed?` (${t('issue_closed')})`:''}`,issue:i.issue_key}); });
+    (state.data.issues.items||[]).forEach(i=>{ if(seen.has(i.issue_key))return; seen.add(i.issue_key); out.push({label:`${i.issue_key} · ${alias[i.issue_key]||i.title}`,issue:i.issue_key,state:i.state,stateType:i.state_type}); });
     live.filter(x=>x.issue_key).forEach(x=>{ if(seen.has(x.issue_key))return; seen.add(x.issue_key); out.push({label:`${x.issue_key} · ${x.alias||x.title}`,issue:x.issue_key}); });
     const labels=new Set(out.map(o=>o.label));
     live.filter(x=>!x.issue_key).sort((a,b)=>(b.last_update||'').localeCompare(a.last_update||'')).forEach(x=>{
@@ -1087,6 +1096,59 @@
       labels.add(label); out.push({label,task:x.task_id});
     });
     return out;
+  }
+  // issue 状态图标：形状照 Linear 那套（虚线圈 / 空圈 / 半圈 / 大半圈 / 勾 / 叉 / 斜杠），颜色用自己的主题色
+  const STATUS_KIND={backlog:'backlog',todo:'todo',unstarted:'todo','in progress':'progress',started:'progress','in review':'review',
+    done:'done',completed:'done',canceled:'canceled',cancelled:'canceled',duplicate:'duplicate'};
+  function statusKind(name,type){ return STATUS_KIND[(name||'').toLowerCase()]||STATUS_KIND[(type||'').toLowerCase()]||(type?'todo':''); }
+  function statusIcon(name,type){
+    const kind=statusKind(name,type), c='cx="8" cy="8"';
+    const shape={
+      backlog:`<circle ${c} r="6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2.2 2"/>`,
+      todo:`<circle ${c} r="6" fill="none" stroke="currentColor" stroke-width="1.5"/>`,
+      progress:`<circle ${c} r="6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 4.2a3.8 3.8 0 0 1 0 7.6z" fill="currentColor"/>`,
+      review:`<circle ${c} r="6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 4.2a3.8 3.8 0 1 1-3.8 3.8H8z" fill="currentColor"/>`,
+      done:`<circle ${c} r="7" fill="currentColor"/><path d="m5.1 8.2 2 2 3.9-4.1" fill="none" stroke="var(--surface)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>`,
+      canceled:`<circle ${c} r="7" fill="currentColor"/><path d="m5.7 5.7 4.6 4.6m0-4.6-4.6 4.6" stroke="var(--surface)" stroke-width="1.6" stroke-linecap="round"/>`,
+      duplicate:`<circle ${c} r="7" fill="currentColor"/><path d="m5.6 10.4 4.8-4.8" stroke="var(--surface)" stroke-width="1.6" stroke-linecap="round"/>`,
+      free:`<rect x="2.5" y="2.5" width="11" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="2 1.8"/>`,
+    }[kind||'free'];
+    return `<svg class="status-icon status-${kind||'free'}" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">${shape}</svg>`;
+  }
+
+  // 合并目标下拉：原生 datalist 只能显示纯文字，放不了状态图标，所以自己画
+  const MERGE_MENU_MAX=60;
+  function mergeMatches(query){
+    const q=(query||'').trim().toLowerCase(), all=state.mergeTargets||[];
+    return (q?all.filter(o=>o.label.toLowerCase().includes(q)):all).slice(0,MERGE_MENU_MAX);
+  }
+  function openMergeMenu(input){
+    closeMergeMenu();
+    const items=mergeMatches(input.value);
+    if(!items.length) return;
+    const menu=document.createElement('div');
+    menu.className='merge-menu'; menu.id='merge-menu'; menu.setAttribute('role','listbox');
+    menu.innerHTML=items.map((o,i)=>`<div class="merge-option${i===0?' active':''}" role="option" id="merge-opt-${i}" data-i="${i}" title="${esc(o.issue?(o.state||''):t('freeform'))}">${o.issue?statusIcon(o.state,o.stateType):statusIcon('','')}<span>${esc(o.label)}</span></div>`).join('');
+    input.parentElement.appendChild(menu);
+    input.setAttribute('aria-expanded','true'); input.setAttribute('aria-controls','merge-menu'); input.setAttribute('aria-activedescendant','merge-opt-0');
+    state.mergeMenu={input,items,active:0};
+  }
+  function closeMergeMenu(){
+    const m=state.mergeMenu; if(!m) return;
+    state.mergeMenu=null;
+    const menu=$('#merge-menu'); if(menu) menu.remove();
+    if(m.input){ m.input.setAttribute('aria-expanded','false'); m.input.removeAttribute('aria-activedescendant'); }
+  }
+  function moveMergeActive(step){
+    const m=state.mergeMenu; if(!m) return;
+    m.active=(m.active+step+m.items.length)%m.items.length;
+    $$('#merge-menu .merge-option').forEach((el,i)=>el.classList.toggle('active',i===m.active));
+    const el=$(`#merge-opt-${m.active}`); if(el){ el.scrollIntoView({block:'nearest'}); m.input.setAttribute('aria-activedescendant',el.id); }
+  }
+  function pickMergeOption(i){
+    const m=state.mergeMenu; if(!m||!m.items[i]) return;
+    m.input.value=m.items[i].label;
+    closeMergeMenu();
   }
   function resolveMergeTarget(text){
     const hit=(state.mergeTargets||[]).find(o=>o.label===text);
@@ -1102,12 +1164,12 @@
     // 页面每分钟会悄悄刷新一次，重画会把正在输入的合并目标冲掉——先记下，画完放回去
     const typed={}; $$('.merge-input').forEach(i=>{ if(i.value) typed[i.dataset.mergeTarget]=i.value; });
     const typing=document.activeElement&&document.activeElement.dataset?document.activeElement.dataset.mergeTarget:null;
+    closeMergeMenu();
     state.mergeTargets=mergeTargets();
-    $('#merge-targets').innerHTML=state.mergeTargets.map(o=>`<option value="${esc(o.label)}"></option>`).join('');
     $('#task-list').innerHTML=tasks.length?tasks.map(task=>{
       const action=task.status==='open'?`<button class="btn small" data-action="complete-task" data-id="${esc(task.task_id)}">${esc(t('complete'))}</button>`:task.status==='done'?`<button class="btn small" data-action="reopen-task" data-id="${esc(task.task_id)}">${esc(t('reopen'))}</button>`:'';
       const statusText=['open','done','merged'].includes(task.status)?t('task_status_'+task.status):task.status;
-      return `<div class="task-row"><div><div class="item-title">${issueLabel(task)}</div><div class="item-body">${esc(task.last_progress||t('no_progress'))}</div><div class="meta"><span class="tag ${task.status==='done'?'done':''}">${esc(statusText)}</span><span>${esc(t('n_updates',{n:task.update_count}))}</span><span>${esc(t('last_updated',{time:(task.last_update||'').slice(0,16).replace('T',' ')}))}</span></div></div><div class="task-actions">${action}${task.status!=='merged'?`<input class="merge-input" list="merge-targets" aria-label="${esc(t('merge_aria'))}" placeholder="${esc(t('merge_into'))}" data-merge-target="${esc(task.task_id)}" autocomplete="off"><button class="btn small" data-action="merge-task" data-id="${esc(task.task_id)}">${esc(t('merge'))}</button>`:''}</div></div>`;
+      return `<div class="task-row"><div><div class="item-title">${issueLabel(task)}</div><div class="item-body">${esc(task.last_progress||t('no_progress'))}</div><div class="meta"><span class="tag ${task.status==='done'?'done':''}">${esc(statusText)}</span><span>${esc(t('n_updates',{n:task.update_count}))}</span><span>${esc(t('last_updated',{time:(task.last_update||'').slice(0,16).replace('T',' ')}))}</span></div></div><div class="task-actions">${action}${task.status!=='merged'?`<span class="merge-box"><input class="merge-input" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-label="${esc(t('merge_aria'))}" placeholder="${esc(t('merge_into'))}" data-merge-target="${esc(task.task_id)}" autocomplete="off" spellcheck="false"></span><button class="btn small" data-action="merge-task" data-id="${esc(task.task_id)}">${esc(t('merge'))}</button>`:''}</div></div>`;
     }).join(''):empty(t('empty_tasks'),t('empty_tasks_sub'));
     Object.entries(typed).forEach(([id,v])=>{ const i=$(`[data-merge-target="${id}"]`); if(i) i.value=v; });
     if(typing){ const i=$(`[data-merge-target="${typing}"]`); if(i){ i.focus(); i.setSelectionRange(i.value.length,i.value.length); } }
@@ -1459,7 +1521,21 @@
 
   $('#account-trigger').addEventListener('click',toggleAccountMenu);
   // 合并目标输完直接回车，等于点旁边的「合并」
-  $('#task-list').addEventListener('keydown',event=>{ const input=event.target.closest('.merge-input'); if(event.key!=='Enter'||!input||event.isComposing)return; event.preventDefault(); const b=$(`[data-action="merge-task"][data-id="${input.dataset.mergeTarget}"]`); if(b) b.click(); });
+  $('#task-list').addEventListener('keydown',event=>{
+    const input=event.target.closest('.merge-input'); if(!input||event.isComposing) return;
+    const open=state.mergeMenu&&state.mergeMenu.input===input;
+    if(event.key==='ArrowDown'||event.key==='ArrowUp'){ event.preventDefault(); if(!open) openMergeMenu(input); else moveMergeActive(event.key==='ArrowDown'?1:-1); return; }
+    if(event.key==='Escape'&&open){ event.preventDefault(); event.stopPropagation(); closeMergeMenu(); return; }
+    if(event.key!=='Enter') return;
+    event.preventDefault();
+    if(open){ pickMergeOption(state.mergeMenu.active); return; }            // 先选中，再回车才合并
+    const b=$(`[data-action="merge-task"][data-id="${input.dataset.mergeTarget}"]`); if(b) b.click();
+  });
+  $('#task-list').addEventListener('focusin',event=>{ const input=event.target.closest('.merge-input'); if(input) openMergeMenu(input); });
+  $('#task-list').addEventListener('input',event=>{ const input=event.target.closest('.merge-input'); if(input) openMergeMenu(input); });
+  $('#task-list').addEventListener('focusout',event=>{ if(event.target.closest('.merge-input')) setTimeout(()=>{ const m=state.mergeMenu; if(m&&document.activeElement!==m.input) closeMergeMenu(); },0); });
+  // 按下就选：mousedown 时阻止默认行为，输入框不失焦
+  $('#task-list').addEventListener('mousedown',event=>{ const opt=event.target.closest('.merge-option'); if(!opt) return; event.preventDefault(); pickMergeOption(+opt.dataset.i); });
   $('#account-menu').addEventListener('click',event=>{
     const action=event.target.closest('[data-account-action]'); if(!action) return;
     closeAccountMenu();
