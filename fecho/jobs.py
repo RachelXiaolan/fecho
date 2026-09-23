@@ -7,9 +7,10 @@
 用数据库当队列而不是另起一个队列服务：量很小（一人一天一两个任务），
 Supabase 已经在那了，少一个要运维的东西。
 """
+import json
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 from . import db
 
@@ -43,6 +44,65 @@ def enqueue(author: str, kind: str, date: str, run_after: Optional[str] = None) 
             (job_id, author, kind, date, "queued", 0, run_after or now, now))
     return {"job_id": job_id, "author": author, "kind": kind, "date": date,
             "status": "queued"}
+
+
+# 出日报的几步，按先后。网页的进度条按这个顺序画格子；文字在网页那边翻译
+STAGES = ("sync", "verify", "aliases", "daily", "voice")
+# 会改日报正文的任务种类。口播稿重出、学写作偏好这些不算，进度条不管它们
+REPORT_KINDS = ("daily", "regenerate", "refresh")
+HEARTBEAT_KEY = "worker_heartbeat"
+
+
+def heartbeat() -> None:
+    """后台程序还活着。网页据此区分「在排队」和「后台根本没在跑」。"""
+    now = _now_iso()
+    with db.cursor() as conn:
+        conn.execute("INSERT INTO app_settings (key, value, updated_at) VALUES (?,?,?)"
+                     " ON CONFLICT (key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
+                     (HEARTBEAT_KEY, now, now))
+
+
+def set_progress(job_id: str, stage: str, detail: Optional[str] = None) -> None:
+    """记下这个任务做到哪一步。顺便算一次心跳：长任务跑着的时候后台没空去领新任务。"""
+    blob = json.dumps({"stage": stage, "at": _now_iso(), "detail": detail}, ensure_ascii=False)
+    with db.cursor() as conn:
+        conn.execute("UPDATE jobs SET progress=? WHERE job_id=?", (blob, job_id))
+    heartbeat()
+
+
+def reporter(job_id: str) -> Callable[..., None]:
+    """给出日报的各个环节用的回调：写进度失败绝不能把日报本身拖垮。"""
+    def report(stage: str, detail: Optional[str] = None) -> None:
+        try:
+            set_progress(job_id, stage, detail)
+        except Exception:                          # noqa: BLE001
+            pass
+    return report
+
+
+def status(author: str, date: str) -> Dict[str, Any]:
+    """网页进度条要的全部信息：这天最近一个出日报任务、前面排了几个、后台上次露面是什么时候。"""
+    marks = ",".join("?" * len(REPORT_KINDS))
+    with db.cursor() as conn:
+        row = conn.execute(
+            "SELECT * FROM jobs WHERE author=? AND date=? AND kind IN (" + marks + ")"
+            " ORDER BY created_at DESC LIMIT 1", (author, date) + REPORT_KINDS).fetchone()
+        job = dict(row) if row else None
+        ahead = running = 0
+        if job and job["status"] == "queued":
+            ahead = conn.execute(
+                "SELECT COUNT(*) n FROM jobs WHERE status='queued' AND run_after<=? AND created_at<?",
+                (_now_iso(), job["created_at"])).fetchone()["n"]
+        running = conn.execute("SELECT COUNT(*) n FROM jobs WHERE status='running'").fetchone()["n"]
+        beat = conn.execute("SELECT value FROM app_settings WHERE key=?", (HEARTBEAT_KEY,)).fetchone()
+    if job:
+        try:
+            job["progress"] = json.loads(job.get("progress") or "null")
+        except ValueError:
+            job["progress"] = None
+    return {"job": job, "queue_ahead": ahead, "running": running,
+            "worker_seen_at": beat["value"] if beat else None, "now": _now_iso(),
+            "stages": list(STAGES)}
 
 
 def latest(author: str, date: str) -> Optional[Dict[str, Any]]:

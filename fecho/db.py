@@ -241,7 +241,8 @@ CREATE TABLE IF NOT EXISTS jobs (
     error         TEXT,
     created_at    TEXT NOT NULL,
     started_at    TEXT,
-    finished_at   TEXT
+    finished_at   TEXT,
+    progress      TEXT                  -- 做到哪一步了（JSON），网页上的进度条读它
 );
 CREATE INDEX IF NOT EXISTS idx_jobs_queue ON jobs(status, run_after);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_daily ON jobs(author, kind, date) WHERE kind = 'daily';
@@ -488,6 +489,7 @@ def init() -> None:
             conn.execute("ALTER TABLE report_history ADD COLUMN IF NOT EXISTS fingerprint TEXT")
             conn.execute("ALTER TABLE work_folders ADD COLUMN IF NOT EXISTS"
                          " dismissed INTEGER NOT NULL DEFAULT 0")
+            conn.execute("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS progress TEXT")
             # Supabase 默认开着一个叫 Data API 的网页接口，能直接读这个库里的表。
             # 我们不用它——程序是直连数据库的。打开行级安全又不配任何放行规则，
             # 那个接口就一行都读不到；我们自己连的是建表的那个账号，不受影响。
@@ -527,6 +529,9 @@ def init() -> None:
         folder_columns = {r["name"] for r in conn.execute("PRAGMA table_info(work_folders)").fetchall()}
         if "dismissed" not in folder_columns:
             conn.execute("ALTER TABLE work_folders ADD COLUMN dismissed INTEGER NOT NULL DEFAULT 0")
+        job_columns = {r["name"] for r in conn.execute("PRAGMA table_info(jobs)").fetchall()}
+        if "progress" not in job_columns:
+            conn.execute("ALTER TABLE jobs ADD COLUMN progress TEXT")
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_updates_source_event"
                      " ON updates(source_event_key) WHERE source_event_key IS NOT NULL")
 

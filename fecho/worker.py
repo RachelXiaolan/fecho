@@ -132,10 +132,12 @@ def run_job(job: Dict[str, Any]) -> None:
             log("%s → %s%s" % (label, r.get("status"),
                               "（%d 条偏好）" % r["rules"] if r.get("rules") else ""))
         else:
+            progress = jobs.reporter(job["job_id"])
+            progress("sync")
             sync_issues(author)                   # 同步失败不挡着出日报
             r = service.end_of_day(date, author=author,
                                    force=kind in ("regenerate", "refresh"),
-                                   keep_human=kind != "regenerate")
+                                   keep_human=kind != "regenerate", progress=progress)
             log("%s → %s（%d 个任务 / %d 条进展）" % (
                 label, r.get("status"), r.get("task_count", 0), r.get("update_count", 0)))
         for w in r.get("warnings") or []:
@@ -162,6 +164,10 @@ def sync_issues(author: str) -> None:
 # ---------- 主循环 ----------
 
 def tick(pool: ThreadPoolExecutor) -> int:
+    try:
+        jobs.heartbeat()                          # 网页靠它判断后台是不是还在
+    except Exception:                             # noqa: BLE001 心跳写不上不影响干活
+        pass
     enqueue_due()
     batch = claim()
     if batch:

@@ -13,7 +13,7 @@ import json
 import re
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from . import config, db, llm, personas, pto, store
 
@@ -650,16 +650,19 @@ def by_priority(author: str, tasks: List[Dict[str, Any]]) -> List[Dict[str, Any]
 
 
 def generate(author: str, date: str, force: bool = False,
-             persona_name: Optional[str] = None, keep_human: bool = True) -> Dict[str, Any]:
+             persona_name: Optional[str] = None, keep_human: bool = True,
+             progress: Optional[Callable[..., None]] = None) -> Dict[str, Any]:
     """出一天的日报和口播稿。
 
     keep_human：这天的日报被人亲手改过的话，不覆盖。到点出日报、补扫后自动重出都走这个；
     只有人明确点「重新生成」才传 False——覆盖掉的修改版照样留在历史版本里。
     """
     persona = persona_for(author, persona_name)
+    step = progress or (lambda *a, **k: None)     # 报进度给网页的进度条；本机版直接调用时没有
 
     # 出稿前先把归属重判一次。记的时候手上只有当前那一条的上下文，这里能看到
     # 一整天——连 agent 明确填的 issue 号也重判，那同样是模型的判断，一样会错。
+    step("verify")
     verified = verify_assignments(author, date)
 
     tasks = db.day_tasks(author, date)
@@ -702,6 +705,7 @@ def generate(author: str, date: str, force: bool = False,
     if verified.get("error"):
         warnings.append("交叉验证未执行：%s" % verified["error"])
     model = config.LLM_MODEL
+    step("aliases")
     aliases = task_aliases(author, tasks, persona, warnings)
     from . import style
     style_md = style.for_prompt(author)
@@ -712,6 +716,7 @@ def generate(author: str, date: str, force: bool = False,
         # 后两个任务只剩标题。宁可给多，llm.chat 那边本来就有截断重试。
         # 但要被上限封住：任务多的日子算出来能上五六万，端点未必接受。
         budget = min(max(4000, 1200 * len(tasks) + 2000), llm.MAX_TOKEN_CEILING)
+        step("daily", "%d 个任务 / %d 条进展" % (len(tasks), n_updates))
         raw = llm.chat(_daily_prompt(author, date, tasks, persona, style_md), max_tokens=budget)
         items, todos = _parse_daily(raw, len(tasks))
         if len(items) < len(tasks):
@@ -744,6 +749,7 @@ def generate(author: str, date: str, force: bool = False,
         res["warnings"] = warnings
         return res
 
+    step("voice")
     voice, voice_gen = _make_voice(author, date, daily, tasks, persona, lo, hi, warnings)
 
     generator = daily_gen if daily_gen == voice_gen else "%s+%s" % (daily_gen, voice_gen)

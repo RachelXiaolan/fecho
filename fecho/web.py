@@ -872,6 +872,25 @@ def build_app():
         d = date or store.today()
         return {"date": d, **report_payload(me, d)}
 
+    @app.get("/api/jobs/status")
+    def api_job_status(request: Request, date: Optional[str] = None,
+                       authorization: Optional[str] = Header(None)):
+        """出日报进行到哪了。网页点了生成之后每几秒来问一次，画进度条。
+
+        带上当前日报是谁写的：任务「成功」了也可能是兜底稿（模型超时），得让人一眼看出来。
+        本机版没有队列，出日报就在那次请求里同步做完，这里恒为空。
+        """
+        me = guard(request, authorization)
+        d = date or store.today()
+        if not config.CLOUD:
+            return {"job": None}
+        from . import jobs
+        out = jobs.status(me, d)
+        report = db.get_report(me, d, "daily") or {}
+        out["report"] = {"generator": report.get("generator"), "created_at": report.get("created_at"),
+                         "warnings": report.get("warnings") or []}
+        return out
+
     @app.post("/api/regenerate")
     def api_regenerate(request: Request, body: Dict[str, Any] = Body(default={}),
                        authorization: Optional[str] = Header(None)):

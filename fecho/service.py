@@ -5,7 +5,7 @@ MCP server 直接调这里（单进程，装完就能跑）；REST 服务也调�
 """
 import os
 from datetime import date as _date, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from . import __version__, config, db, digest, mobius, store
 
@@ -101,10 +101,11 @@ def after_human_edit(author: str, date: str) -> Dict[str, Any]:
 
 
 def end_of_day(date: Optional[str] = None, author: Optional[str] = None,
-               force: bool = False, keep_human: bool = True) -> Dict[str, Any]:
+               force: bool = False, keep_human: bool = True,
+               progress: Optional[Callable[..., None]] = None) -> Dict[str, Any]:
     who = author or whoami()
     when = date or store.today()
-    r = digest.generate(who, when, force=force, keep_human=keep_human)
+    r = digest.generate(who, when, force=force, keep_human=keep_human, progress=progress)
     if r["status"] in ("generated", "skipped", "pto-exempt") and not config.CLOUD:
         # 无论这次是不是重新生成，都把本地当前的成品同步给团队 collector；
         # 没配 collector 或推送失败都不影响本地产物，只是团队视图暂时看不到这份。
