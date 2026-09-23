@@ -277,6 +277,29 @@ class TestPageContract(unittest.TestCase):
         self.assertIn("bodyFrom < line.to", entry,
                       "勾选框后面没字就别画删除线")
 
+    def test_table_commit_never_reenters_an_editor_update(self):
+        """改完表格格子直接点保存，报 `Cannot destructure property 'tile' of 'l.pop(...)'`。
+
+        真实事故（Leo 反馈）：保存先把表格写回原文，写回让表格 widget 换掉；焦点还在格子里的话，
+        Chrome 在这次更新进行到一半时同步派发 focusout，处理函数再写回一次，在半成品上
+        posAtDOM / dispatch，CM6 内部就崩了。
+        """
+        entry = (Path(__file__).resolve().parents[1] / "editor" / "entry.js").read_text(encoding="utf-8")
+        self.assertIn("if (tableCommitting || !table.isConnected) return", entry,
+                      "写回期间、或表格已经被换掉时，不能再写回")
+        self.assertIn("queueMicrotask(commit)", entry,
+                      "focusout 可能在编辑器更新半路派发，要等同步代码跑完再写回")
+
+    def test_table_range_is_the_widget_range(self):
+        """紧跟表格、没空行隔开的一行按 GFM 也是表格的一行。
+
+        原来画格子只认带 | 的行、写回时也只认带 | 的行，而 widget 盖住的是整个表格节点：
+        这一行被 widget 吞掉，在编辑器里彻底看不见。现在两边都以 widget 的范围为准。
+        """
+        entry = (Path(__file__).resolve().parents[1] / "editor" / "entry.js").read_text(encoding="utf-8")
+        self.assertIn("view.state.field(tableField).between", entry)
+        self.assertNotIn("filter((r) => r.includes('|'))", entry)
+
     def test_folder_list_groups_by_the_fourth_level(self):
         """工作文件夹按第 4 级归堆折叠。
 

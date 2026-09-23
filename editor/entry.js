@@ -302,8 +302,15 @@ class TableWidget extends WidgetType {
   toDOM() { return buildTableDOM(this.raw, this.sizes) }
 }
 
+// 表格写回原文时会把自己的 widget 换掉；焦点还在格子里的话，Chrome 会在这次更新
+// 进行到一半时同步派发 focusout。那时再去 posAtDOM / dispatch，CM6 内部结构是半成品，
+// 会抛 "Cannot destructure property 'tile'…"。所以写回期间不许再进来。
+let tableCommitting = false
+
 function buildTableDOM(raw, sizes) {
-  const lines = raw.split('\n').filter((r) => r.includes('|'))
+  // 紧跟表格、没空行隔开的那一行，按 GFM 也算表格的一行（哪怕没有 |）。
+  // 原来只认带 | 的行，这种行就被 widget 吞掉、在编辑器里彻底看不见
+  const lines = raw.split('\n').filter((r) => !TABLE_SIZE_RE.test(r))
   const head = splitCells(lines[0] || '')
   const body = lines.slice(2).map(splitCells)
 
@@ -332,16 +339,15 @@ function buildTableDOM(raw, sizes) {
   })
   allRows.forEach((tr, i) => { const h = sizes && sizes.h[i]; if (h) tr.style.height = h + 'px' })
 
-  // 表格在文档里的真实范围：位置会随上文编辑漂移，所以每次提交时现找，不记死
+  // 表格在文档里的真实范围：位置会随上文编辑漂移，所以每次提交时现找，不记死。
+  // 直接取 widget 自己盖住的那一段，和画出来的永远是同一段
   const rangeNow = (view) => {
-    const first = view.state.doc.lineAt(view.posAtDOM(table))
-    let last = first
-    for (let n = first.number + 1; n <= view.state.doc.lines; n++) {
-      const ln = view.state.doc.line(n)
-      if (ln.text.includes('|') || TABLE_SIZE_RE.test(ln.text)) last = ln
-      else break
-    }
-    return {from: first.from, to: last.to}
+    const at = view.posAtDOM(table)
+    let hit = null
+    view.state.field(tableField).between(at, at, (from, to) => {
+      if (from <= at && at <= to) { hit = {from, to}; return false }
+    })
+    return hit
   }
 
   const serialize = () => {
@@ -365,19 +371,24 @@ function buildTableDOM(raw, sizes) {
   }
 
   const commit = () => {
+    if (tableCommitting || !table.isConnected) return
     const root = table.closest('.cm-editor')
     const view = root && EditorView.findFromDOM(root)
     if (!view) return
-    const {from, to} = rangeNow(view)
+    const range = rangeNow(view)
+    if (!range) return
     const next = serialize()
-    if (next === view.state.doc.sliceString(from, to)) return
-    view.dispatch({changes: {from, to, insert: next}})
+    if (next === view.state.doc.sliceString(range.from, range.to)) return
+    tableCommitting = true
+    try { view.dispatch({changes: {from: range.from, to: range.to, insert: next}}) }
+    finally { tableCommitting = false }
   }
   table.__commit = commit
 
-  // 焦点整个离开表格才写回，边打字边写回会把 widget 重建掉、焦点就没了
+  // 焦点整个离开表格才写回，边打字边写回会把 widget 重建掉、焦点就没了。
+  // focusout 可能是编辑器更新或销毁的半路派发的，等这一轮同步代码跑完再写回
   table.addEventListener('focusout', (e) => {
-    if (!table.contains(e.relatedTarget)) commit()
+    if (!table.contains(e.relatedTarget)) queueMicrotask(commit)
   })
   table.addEventListener('keydown', (e) => {
     // 格子是 contenteditable，⌘B 会被浏览器接管、插一个 <b> 标签进来；
