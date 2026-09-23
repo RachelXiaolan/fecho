@@ -169,16 +169,17 @@ class TestPagesContract(unittest.TestCase):
         cls.onboard = (PRESETS / "onboard.html").read_text(encoding="utf-8")
 
     def test_dashboard_has_settings_and_admin(self):
-        for needle in ('data-view="settings"', 'data-view="admin"', 'data-page="settings"',
+        for needle in ('data-view="admin"', 'data-page="settings"',
                        'data-page="admin"', "/api/agents", "/api/folders", "/api/settings",
                        "/api/admin/requests", "/api/admin/users", "/api/admin/dashboard"):
             self.assertIn(needle, self.dash)
+        self.assertIn('data-account-action="settings"', self.dash)
 
     def test_admin_entry_is_hidden_until_we_know_you_are_admin(self):
         self.assertIn('data-view="admin" data-admin-only hidden', self.dash)
-        self.assertIn('data-view="settings" data-cloud-only hidden', self.dash)
+        self.assertIn('id="account-menu" data-cloud-only hidden', self.dash)
         self.assertIn("[hidden]{display:none!important}", self.dash,
-                      ".nav button 的 display:flex 会盖掉 hidden，必须强制隐藏")
+                      "账户菜单和主导航按钮都必须尊重 hidden")
 
     def test_viewing_someone_else_is_read_only(self):
         body = self.dash[self.dash.index("async function mutate"):]
