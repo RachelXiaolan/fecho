@@ -9,7 +9,7 @@ Supabase 已经在那了，少一个要运维的东西。
 """
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, Optional
 
 from . import db
@@ -19,12 +19,26 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+# 扫描上传后自动重出：攒一会儿再跑。本机脚本常常分好几批上传（9/23 一个小时里传了 5 次），
+# 以前每传一批就从头重写一遍整天的日报，既慢又白烧模型
+REFRESH_DELAY = timedelta(minutes=10)
+
+
 def enqueue(author: str, kind: str, date: str, run_after: Optional[str] = None) -> Dict[str, Any]:
     """排一个任务。每天到点的 daily 任务一人一天只有一个，重复排会被忽略。"""
     job_id = str(uuid.uuid4())
     now = _now_iso()
     with db.cursor() as conn:
-        if kind == "daily":
+        if kind == "refresh":
+            # 已经有一个在等的就并进去；正在跑的不算——它开跑之后才传上来的进展它看不到，
+            # 以前在跑就直接忽略，晚到的进展可能一直进不了日报
+            existing = conn.execute(
+                "SELECT * FROM jobs WHERE author=? AND kind='refresh' AND date=? AND status='queued'",
+                (author, date)).fetchone()
+            if existing:
+                return dict(existing)
+            run_after = run_after or (datetime.now(timezone.utc) + REFRESH_DELAY).isoformat(timespec="seconds")
+        elif kind == "daily":
             existing = conn.execute(
                 "SELECT * FROM jobs WHERE author=? AND kind='daily' AND date=?",
                 (author, date)).fetchone()

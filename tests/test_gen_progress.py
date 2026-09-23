@@ -27,8 +27,12 @@ class TestProgressRecording(unittest.TestCase):
         seen = []
         with mock_llm("[1] done | 做完了\n"), \
                 mock.patch.object(digest, "verify_assignments", return_value={"changed": [], "error": None}):
-            digest.generate("t", D, force=True, progress=lambda stage, detail=None: seen.append(stage))
-        self.assertEqual(seen, ["verify", "aliases", "daily", "voice"])
+            digest.generate("t", D, force=True, progress=lambda stage, detail=None: seen.append((stage, detail)))
+        stages = [st for n, (st, _) in enumerate(seen) if n == 0 or seen[n - 1][0] != st]
+        self.assertEqual(stages, ["verify", "aliases", "daily", "voice"])
+        daily = [d for st, d in seen if st == "daily"]
+        self.assertEqual(daily[0], "已写完 0/1 批（1 个任务 / 1 条进展）")
+        self.assertEqual(daily[-1], "已写完 1/1 批（1 个任务 / 1 条进展）", "每写完一批报一次")
 
     def test_worker_writes_progress_and_a_heartbeat(self):
         job = jobs.enqueue("t", "regenerate", D)
@@ -73,7 +77,45 @@ class TestProgressRecording(unittest.TestCase):
         self.assertIsNotNone(jobs.status("t", D)["worker_seen_at"])
 
 
+class TestRefreshIsDebounced(unittest.TestCase):
+    """扫描常常分好几批传（9/23 一小时 5 次），以前每传一批就把整天日报从头重写一遍。"""
+
+    def setUp(self):
+        reset()
+        self.addCleanup(reset)
+        with db.cursor() as c:
+            c.execute("DELETE FROM jobs")
+
+    def test_uploads_within_the_window_share_one_refresh_that_waits(self):
+        first = jobs.enqueue("t", "refresh", D)
+        again = jobs.enqueue("t", "refresh", D)
+        self.assertEqual(first["job_id"], again["job_id"])
+        with db.cursor() as c:
+            row = c.execute("SELECT run_after, created_at FROM jobs WHERE job_id=?", (first["job_id"],)).fetchone()
+        self.assertGreater(row["run_after"], row["created_at"], "要等一会儿再跑")
+        self.assertEqual(worker.claim(), [], "还没到时间，后台不会领")
+
+    def test_progress_arriving_while_a_refresh_runs_gets_its_own_refresh(self):
+        """在跑的那次看不到它开跑之后才传上来的进展，以前却直接忽略了。"""
+        running = jobs.enqueue("t", "refresh", D)
+        with db.cursor() as c:
+            c.execute("UPDATE jobs SET status='running' WHERE job_id=?", (running["job_id"],))
+        late = jobs.enqueue("t", "refresh", D)
+        self.assertNotEqual(late["job_id"], running["job_id"])
+
+
 class TestStatusEndpoint(WebCase):
+    def test_partial_batch_failure_is_flagged(self):
+        job = jobs.enqueue(A, "regenerate", self.today)
+        with db.cursor() as c:
+            c.execute("UPDATE jobs SET status='succeeded', started_at=created_at, finished_at=created_at"
+                      " WHERE job_id=?", (job["job_id"],))
+        digest._persist(A, self.today, "daily", "# 日报", "fp", "llm", None, 1,
+                        ["日报第 2/5 批（任务 2、3）LLM 失败（timed out），这几项用了进展原文"])
+        body = self.get("/api/jobs/status?date=" + self.today, A).json()
+        self.assertIn("第 2/5 批", body["report"]["partial"])
+
+
     def test_status_includes_the_report_author_so_a_fallback_is_visible(self):
         """任务「成功」了也可能是兜底稿，网页要看得出来。"""
         job = jobs.enqueue(A, "regenerate", self.today)

@@ -702,11 +702,11 @@
     "reports_heading": "日报",
     "edit": "修改", "regenerate": "重新生成", "regenerate_now": "现在生成",
     "gen_stage_sync": "同步 issue", "gen_stage_verify": "核对归属", "gen_stage_aliases": "起任务名", "gen_stage_daily": "写日报", "gen_stage_voice": "写口播稿",
-    "gen_queued": "排队中", "gen_queue_ahead": "前面还有 {n} 个任务", "gen_queue_busy": "后台正在处理别人的 {n} 个任务，轮到就开始",
+    "gen_queued": "排队中", "gen_scheduled": "有新进展传上来了，等一会儿攒齐再重出，{time} 开始", "gen_queue_ahead": "前面还有 {n} 个任务", "gen_queue_busy": "后台正在处理别人的 {n} 个任务，轮到就开始",
     "gen_worker_down": "后台程序已经 {m} 分钟没有动静，可能没在运行。这不是你的问题，告诉管理员看一下 lu2。",
     "gen_running": "正在生成 · 第 {i}/{n} 步：{stage}", "gen_step_time": "这一步 {t}",
     "gen_slow_daily": "写日报已经超过 3 分钟。模型单次最多等 3 分钟，再久多半会超时，出来的会是兜底稿。",
-    "gen_done": "已生成，用时 {t}", "gen_fallback": "生成结束，但模型没写成，这篇是兜底稿（只是进展原文）",
+    "gen_done": "已生成，用时 {t}", "gen_fallback": "生成结束，但模型没写成，这篇是兜底稿（只是进展原文）", "gen_partial": "已生成，但有几批模型没写成，那几项用的是进展原文",
     "gen_failed": "生成失败", "gen_retry": "上次失败了，{time} 会自动重试", "gen_local": "正在生成日报…", "gen_close": "关闭",
     "snap": "截图", "snap_settings": "截图保存设置", "snap_title": "截图存到哪里", "snap_ask": "每次询问保存位置",
     "snap_folder": "固定存到一个文件夹", "snap_pick": "选择文件夹…", "snap_change": "更换…", "snap_no_folder": "还没选",
@@ -857,11 +857,11 @@
     "reports_heading": "Reports",
     "edit": "Edit", "regenerate": "Regenerate", "regenerate_now": "Regenerate now",
     "gen_stage_sync": "Sync issues", "gen_stage_verify": "Check attribution", "gen_stage_aliases": "Name tasks", "gen_stage_daily": "Write report", "gen_stage_voice": "Voice script",
-    "gen_queued": "Queued", "gen_queue_ahead": "{n} job(s) ahead of yours", "gen_queue_busy": "The worker is busy with {n} other job(s); yours starts next",
+    "gen_queued": "Queued", "gen_scheduled": "New progress came in; waiting for the rest before regenerating, starting at {time}", "gen_queue_ahead": "{n} job(s) ahead of yours", "gen_queue_busy": "The worker is busy with {n} other job(s); yours starts next",
     "gen_worker_down": "The worker hasn't checked in for {m} min and may be down. Not your fault — ask an admin to look at lu2.",
     "gen_running": "Generating · step {i}/{n}: {stage}", "gen_step_time": "this step {t}",
     "gen_slow_daily": "Writing the report has taken over 3 minutes. The model gets 3 minutes per call; past that it usually times out and you get the fallback draft.",
-    "gen_done": "Done in {t}", "gen_fallback": "Finished, but the model didn't write it — this is the fallback draft (raw progress only)",
+    "gen_done": "Done in {t}", "gen_fallback": "Finished, but the model didn't write it — this is the fallback draft (raw progress only)", "gen_partial": "Done, but some batches failed — those items are raw progress",
     "gen_failed": "Generation failed", "gen_retry": "The last attempt failed; retrying at {time}", "gen_local": "Generating the report…", "gen_close": "Dismiss",
     "snap": "Screenshot", "snap_settings": "Screenshot settings", "snap_title": "Save screenshots to", "snap_ask": "Ask where every time",
     "snap_folder": "Always this folder", "snap_pick": "Choose folder…", "snap_change": "Change…", "snap_no_folder": "none yet",
@@ -1563,8 +1563,10 @@
       const waited=(now-isoMs(job.created_at))/1000, seen=st.worker_seen_at?(now-isoMs(st.worker_seen_at))/1000:Infinity;
       // 后台在忙别的长任务时心跳会稀一点；没活干还不露面才算掉线
       const down=seen>(st.running?600:GEN_WORKER_STALE_S);
-      if(down) box.classList.add('warn');
-      const note=down?t('gen_worker_down',{m:Math.max(1,Math.round(seen/60))}):st.queue_ahead?t('gen_queue_ahead',{n:st.queue_ahead}):st.running?t('gen_queue_busy',{n:st.running}):'';
+      if(down&&!later) box.classList.add('warn');
+      const later=isoMs(job.run_after)>now;          // 自动重出：等新进展传完再开跑
+      const note=later?t('gen_scheduled',{time:new Date(isoMs(job.run_after)).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})})
+        :down?t('gen_worker_down',{m:Math.max(1,Math.round(seen/60))}):st.queue_ahead?t('gen_queue_ahead',{n:st.queue_ahead}):st.running?t('gen_queue_busy',{n:st.running}):'';
       html=`<div class="gen-head"><span class="spinner" aria-hidden="true"></span><b>${esc(t('gen_queued'))}</b><span class="gen-time">${clockText(waited)}</span></div>${bar(-1,false)}${note?`<div class="gen-note">${esc(note)}</div>`:''}`;
     }else if(job.status==='running'){
       const p=job.progress||{}, cur=Math.max(0,stages.indexOf(p.stage)), stageSec=p.at?(now-isoMs(p.at))/1000:0;
@@ -1584,8 +1586,10 @@
         const why=((st.report.warnings||[]).find(w=>/LLM/.test(w))||'');
         html=`<div class="gen-head"><b>${esc(t('gen_fallback'))}</b><span class="gen-time">${clockText(took)}</span>${close}</div>${bar(stages.length,true)}${why?`<div class="gen-note">${esc(why)}</div>`:''}`;
       }else{
-        box.classList.add('ok');
-        html=`<div class="gen-head"><b>${esc(t('gen_done',{t:clockText(took)}))}</b>${close}</div>${bar(stages.length,true)}`;
+        // 分批写时个别批失败：整篇不是兜底稿，但那几项是进展原文，得让人知道
+        const partial=st.report&&st.report.partial;
+        box.classList.add(partial?'warn':'ok');
+        html=`<div class="gen-head"><b>${esc(t(partial?'gen_partial':'gen_done',{t:clockText(took)}))}</b>${partial?`<span class="gen-time">${clockText(took)}</span>`:''}${close}</div>${bar(stages.length,true)}${partial?`<div class="gen-note">${esc(partial)}</div>`:''}`;
       }
     }
     box.hidden=false; box.innerHTML=html;

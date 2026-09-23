@@ -887,8 +887,11 @@ def build_app():
         from . import jobs
         out = jobs.status(me, d)
         report = db.get_report(me, d, "daily") or {}
+        warnings = report.get("warnings") or []
+        # 分批写时个别批失败：整篇不是兜底稿，但那几项是进展原文（digest._write_daily 的提示）
+        partial = next((w for w in warnings if "批" in w and "LLM 失败" in w), None)
         out["report"] = {"generator": report.get("generator"), "created_at": report.get("created_at"),
-                         "warnings": report.get("warnings") or []}
+                         "warnings": warnings, "partial": partial}
         return out
 
     @app.post("/api/regenerate")

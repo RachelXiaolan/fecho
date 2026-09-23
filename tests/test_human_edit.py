@@ -171,7 +171,7 @@ class TestVoiceFollowsTheEdit(EditCase):
 class TestWorkerKinds(EditCase):
     def run_kind(self, kind):
         clear("jobs")
-        jobs.enqueue(A, kind, DAY)
+        jobs.enqueue(A, kind, DAY, run_after=jobs._now_iso())   # refresh 默认攒 10 分钟，这里要马上跑
         job = worker.claim()[0]
         worker.run_job(job)
         with db.cursor() as c:

@@ -338,10 +338,11 @@ def _voice_prompt(author, date, daily_md, persona, target_items, feedback=None) 
 
 # ---------- fallback（LLM 不可用时的确定性产物） ----------
 
-def _fallback_daily(author, date, tasks, persona, aliases=None) -> str:
-    """LLM 挂了也要出同样结构的稿——链接、短名、图标照拼，内容用进展原文顶上。"""
+def _fallback_items(tasks: List[Dict[str, Any]], indexes: Optional[List[int]] = None) -> Dict[int, Dict[str, Any]]:
+    """用进展原文拼出任务条目（序号是全局序号）。整篇兜底和某一批降级都用它。"""
     items = {}
-    for i, t in enumerate(tasks, 1):
+    for i in indexes or range(1, len(tasks) + 1):
+        t = tasks[i - 1]
         updates = t["updates"]
         ups = [u["content_md"].strip().splitlines()[0] for u in updates]
         statuses = [u.get("completion_status", "unknown") for u in updates]
@@ -355,8 +356,128 @@ def _fallback_daily(author, date, tasks, persona, aliases=None) -> str:
             task_status = "unknown"
         items[i] = {"status": task_status, "summary": ups[0] if ups else "",
                     "bullets": [(statuses[n], u) for n, u in enumerate(ups[1:], 1)]}
+    return items
+
+
+def _fallback_daily(author, date, tasks, persona, aliases=None) -> str:
+    """LLM 挂了也要出同样结构的稿——链接、短名、图标照拼，内容用进展原文顶上。"""
+    items = _fallback_items(tasks)
     return (_assemble_daily(date, tasks, items, [], persona, aliases)
             + "\n> 本篇为兜底稿（LLM 不可用），内容取自进展原文，未经整理。\n")
+
+
+# ---------- 分批写日报 ----------
+# 一次调用写整天，任务多的日子写不完：9/23 11 个任务 / 155 条进展，推理模型 + 非流式，
+# 180 秒超时，整篇掉成兜底稿。按任务切成几批分别写，每批都远小于上限。
+BATCH_TASKS = 4          # 一批最多几个任务
+BATCH_UPDATES = 40       # 一批大约多少条进展（单个任务超了也不拆：它的总结要看到全部进展）
+BATCH_WORKERS = 3        # 同时跑几批。总耗时约等于最慢那批，而不是几批加起来
+
+
+def _batches(tasks: List[Dict[str, Any]]) -> List[List[int]]:
+    """按顺序切批，返回每批的全局任务序号（从 1 起）。"""
+    out: List[List[int]] = []
+    cur: List[int] = []
+    n = 0
+    for i, t in enumerate(tasks, 1):
+        k = len(t["updates"])
+        if cur and (len(cur) >= BATCH_TASKS or n + k > BATCH_UPDATES):
+            out.append(cur)
+            cur, n = [], 0
+        cur.append(i)
+        n += k
+    if cur:
+        out.append(cur)
+    return out
+
+
+# 模型常在待办前面自己写上任务名（「**Bug Hunter**：…」「**曝光权限**：…」），而名字和链接
+# 是系统拼的：留着就成了「[**Binance**](…)：**曝光权限与 IPM 验证**：…」这种双重标题
+_TODO_LABEL = re.compile(r"^\s*\*\*[^*\n]{1,40}\*\*\s*[:：]\s*")
+
+
+def _clean_todo(text: str) -> str:
+    while _TODO_LABEL.match(text):
+        text = _TODO_LABEL.sub("", text, count=1)
+    return text.strip()
+
+
+def _write_batch(author, date, tasks, indexes, persona, style_md):
+    """写一批，返回 (条目, 待办, 提示)，序号都已换回全局序号。失败抛 LLMError。"""
+    sub = [tasks[i - 1] for i in indexes]
+    # 预算按任务数给。固定 4000 时 28 条进展被截断在半句话上；分批后单批小得多
+    budget = min(max(4000, 1200 * len(sub) + 2000), llm.MAX_TOKEN_CEILING)
+    prompt = _daily_prompt(author, date, sub, persona, style_md)
+    raw = llm.chat(prompt, max_tokens=budget)
+    items, todos = _parse_daily(raw, len(sub))
+    if len(items) < len(sub):
+        # 少解析出任务块，多半是被 max_tokens 截断了——加大额度再来一次，只能加不能减
+        raw = llm.chat(prompt, max_tokens=max(budget, min(budget * 2, llm.MAX_TOKEN_CEILING)))
+        items, todos = _parse_daily(raw, len(sub))
+    if not items:
+        raise llm.LLMError("没解析出任何任务块，原样片段：%s" % raw[:200])
+    notes = []
+    if len(items) < len(sub):
+        notes.append("有 %d 个任务没写出来，可能因长度被截断" % (len(sub) - len(items)))
+    mapped = {indexes[j - 1]: v for j, v in items.items()}
+    mapped_todos = []
+    for j, text in todos:
+        text = _clean_todo(text)
+        if not text:
+            continue
+        if not j and len(sub) == 1:
+            j = 1          # 这一批只有一个任务：待办只能出自它的进展
+        mapped_todos.append((indexes[j - 1] if j and 1 <= j <= len(sub) else None, text))
+    return mapped, mapped_todos, notes
+
+
+def _write_daily(author, date, tasks, persona, style_md, warnings, step):
+    """分批写，合并成一篇。返回 (条目, 待办, 失败的批数, 总批数)。
+
+    某一批失败只让那一批用进展原文顶上，不拖垮整篇；每写完一批报一次进度。
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    batches = _batches(tasks)
+    n_updates = sum(len(t["updates"]) for t in tasks)
+    total = len(batches)
+    step("daily", "已写完 0/%d 批（%d 个任务 / %d 条进展）" % (total, len(tasks), n_updates))
+    items: Dict[int, Dict[str, Any]] = {}
+    todos: List[Tuple[Optional[int], str]] = []
+    failed: List[Tuple[int, List[int], str]] = []
+    done = 0
+    results: Dict[int, Any] = {}
+    with ThreadPoolExecutor(max_workers=min(BATCH_WORKERS, total)) as pool:
+        futures = {pool.submit(_write_batch, author, date, tasks, b, persona, style_md): k
+                   for k, b in enumerate(batches)}
+        for fut in as_completed(futures):
+            k = futures[fut]
+            try:
+                results[k] = fut.result()
+            except llm.LLMError as exc:
+                results[k] = exc
+            done += 1
+            step("daily", "已写完 %d/%d 批（%d 个任务 / %d 条进展）" % (done, total, len(tasks), n_updates))
+    seen_todo = set()
+    for k, b in enumerate(batches):            # 按原顺序合并，不按完成先后
+        r = results[k]
+        if isinstance(r, Exception):
+            failed.append((k + 1, b, str(r)))
+            items.update(_fallback_items(tasks, b))
+            continue
+        got, got_todos, notes = r
+        items.update(got)
+        for idx, text in got_todos:
+            key = (idx, text.strip())
+            if key not in seen_todo:
+                seen_todo.add(key)
+                todos.append((idx, text))
+        for note in notes:
+            warnings.append("第 %d/%d 批：%s" % (k + 1, total, note))
+    for k, b, err in failed:
+        warnings.append("日报第 %d/%d 批（任务 %s）LLM 失败（%s），这几项用了进展原文"
+                        % (k, total, "、".join(str(i) for i in b), err[:120]))
+    return items, todos, len(failed), total
 
 
 def _fallback_voice(author, date, tasks, persona, lo: int, hi: int) -> str:
@@ -711,34 +832,19 @@ def generate(author: str, date: str, force: bool = False,
     style_md = style.for_prompt(author)
 
     # 日报和口播稿各自独立降级：一个挂了不该把另一个也拖成兜底稿。
-    try:
-        # 预算按任务数给。上一版固定 4000，28 条进展的日报被截断在半句话上，
-        # 后两个任务只剩标题。宁可给多，llm.chat 那边本来就有截断重试。
-        # 但要被上限封住：任务多的日子算出来能上五六万，端点未必接受。
-        budget = min(max(4000, 1200 * len(tasks) + 2000), llm.MAX_TOKEN_CEILING)
-        step("daily", "%d 个任务 / %d 条进展" % (len(tasks), n_updates))
-        raw = llm.chat(_daily_prompt(author, date, tasks, persona, style_md), max_tokens=budget)
-        items, todos = _parse_daily(raw, len(tasks))
-        if len(items) < len(tasks):
-            # 少解析出任务块，多半是被 max_tokens 截断了——加大额度再来一次。
-            # 只能加不能减：以前写的是 min(budget*2, 上限)，首次预算超过上限时
-            # 反而把额度压小了（48 个任务：59600 → 16000），重试比第一次还弱，
-            # 结果推理把额度烧光、正文为空，整篇掉成兜底稿。
-            raw = llm.chat(_daily_prompt(author, date, tasks, persona, style_md),
-                           max_tokens=max(budget, min(budget * 2, llm.MAX_TOKEN_CEILING)))
-            items, todos = _parse_daily(raw, len(tasks))
-        if not items:
-            raise llm.LLMError("没解析出任何任务块，原样片段：%s" % raw[:200])
-        if len(items) < len(tasks):
-            warnings.append("只整理出 %d/%d 个任务，其余可能因长度被截断"
-                            % (len(items), len(tasks)))
-        # 链接和结构在这里拼死，模型碰不到——它写错 URL 的账已经吃过一次了。
-        daily = _assemble_daily(date, tasks, items, todos, persona, aliases)
-        daily_gen = "llm"
-    except llm.LLMError as exc:
-        warnings.append("日报 LLM 失败（%s），已输出兜底稿" % str(exc)[:160])
+    items, todos, n_failed, n_batches = _write_daily(author, date, tasks, persona, style_md, warnings, step)
+    if n_failed == n_batches:
+        # 一批都没写成才算整篇兜底
+        warnings.append("日报 LLM 失败（%d 批全部失败），已输出兜底稿" % n_batches)
         daily = _fallback_daily(author, date, tasks, persona, aliases)
         daily_gen = "fallback"
+    else:
+        # 链接和结构在这里拼死，模型碰不到——它写错 URL 的账已经吃过一次了。
+        daily = _assemble_daily(date, tasks, items, todos, persona, aliases)
+        if n_failed:
+            daily += ("\n> 有 %d/%d 批模型没写成，那几项用的是进展原文，未经整理。\n"
+                      % (n_failed, n_batches))
+        daily_gen = "llm"
 
     if archive_only:
         if pto_status == "pto":
