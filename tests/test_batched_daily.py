@@ -154,3 +154,14 @@ class TestSectionNumbering(unittest.TestCase):
         wip = md.split("## In Progress")[1]
         self.assertEqual(re.findall(r"^(\d+)\.", done, re.M), ["1", "2", "3"])
         self.assertEqual(re.findall(r"^(\d+)\.", wip, re.M), ["1", "2"])
+
+
+class TestTestsStayQuiet(unittest.TestCase):
+    def test_simulated_scenarios_do_not_print_to_the_screen(self):
+        """测试里虚构的 Alice、2030 年、网关超时打到屏幕上，会被 agent 的对话记下来，
+        再被 Fecho 扫描当成真事记进日报（9/23 真出过）。"""
+        import os
+        import sys
+        if os.environ.get("FECHO_TEST_VERBOSE"):
+            self.skipTest("手动要求看输出")
+        self.assertTrue(getattr(sys.stdout, "_fecho_quiet", False))

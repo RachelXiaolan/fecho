@@ -42,3 +42,13 @@ if not os.environ.get("FECHO_TEST_TMP"):
                            "测试文件第一行必须是 import _env。")
 
 TMP = os.environ["FECHO_TEST_TMP"]
+
+# 测试会演各种场景：虚构的同事 Alice、2030 年的日期、故意制造的网关超时和授权过期。
+# 这些场景的日志原本都打到屏幕上，读起来和真实的工作记录一模一样。agent 帮人跑测试时，
+# 这些输出进了对话，Fecho 扫描对话就把它们当成真事记成了工作进展——9/23 真出过：
+# 「多个日报任务因网关超时失败」「Alice 的 Mobius 同步因授权过期失败」进了 Rachel 的日报。
+# 所以跑测试时把程序自己往标准输出打的东西都关掉（测试结果走标准错误，不受影响）。
+# 要看就设 FECHO_TEST_VERBOSE=1。
+if not os.environ.get("FECHO_TEST_VERBOSE") and not getattr(sys.stdout, "_fecho_quiet", False):
+    sys.stdout = open(os.devnull, "w", encoding="utf-8")
+    sys.stdout._fecho_quiet = True
