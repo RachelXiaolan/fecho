@@ -138,3 +138,19 @@ class TestTodoCleanup(unittest.TestCase):
             _, todos, _ = digest._write_batch("t", D, tasks, [1], digest.persona_for("t"), "")
         self.assertEqual(todos, [(1, "把另一半做完")])
         self.assertEqual(tasks[0]["task_id"], rec["task"]["task_id"])
+
+
+class TestSectionNumbering(unittest.TestCase):
+    def test_each_section_counts_from_one(self):
+        """以前用全天的序号：Done 里 1、2、4、5，In Progress 里 3、7，看着像漏了几条。"""
+        tasks = [{"task_id": str(k), "issue_key": None, "title": "任务%d" % k, "updates": []} for k in range(5)]
+        items = {1: {"status": "done", "summary": "a", "bullets": []},
+                 2: {"status": "wip", "summary": "b", "bullets": []},
+                 3: {"status": "done", "summary": "c", "bullets": []},
+                 4: {"status": "wip", "summary": "d", "bullets": []},
+                 5: {"status": "done", "summary": "e", "bullets": []}}
+        md = digest._assemble_daily(D, tasks, items, [], digest.persona_for("t"))
+        done = md.split("## Done")[1].split("## In Progress")[0]
+        wip = md.split("## In Progress")[1]
+        self.assertEqual(re.findall(r"^(\d+)\.", done, re.M), ["1", "2", "3"])
+        self.assertEqual(re.findall(r"^(\d+)\.", wip, re.M), ["1", "2"])

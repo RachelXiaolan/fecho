@@ -293,13 +293,14 @@ def _assemble_daily(date, tasks, items, todos, persona, aliases=None) -> str:
         if not indexes:
             continue
         out += ["", "## %s" % label, ""]
-        for i in indexes:
+        # 每一栏从 1 连续编号。以前用任务在全天里的序号，Done 里是 1、2、4、5……看着像漏了
+        for n, i in enumerate(indexes, 1):
             t = tasks[i - 1]
             it = items.get(i) or {}
             icon = STATUS_ICON[status_key]
             head = _link(t, short_name(t, persona, aliases), persona)
             summary = it.get("summary", "")
-            out.append("%d. %s %s%s" % (i, icon, head, "：" + summary if summary else ""))
+            out.append("%d. %s %s%s" % (n, icon, head, "：" + summary if summary else ""))
             for bullet_status, text in it.get("bullets", []):
                 out.append("    * %s %s" % (
                     STATUS_ICON.get(bullet_status, STATUS_ICON["unknown"]), text))
