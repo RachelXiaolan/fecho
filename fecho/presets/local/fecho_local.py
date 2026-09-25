@@ -23,8 +23,8 @@ Windows 用任务计划程序。
 
 提炼用的是用户自己的 agent，不需要任何 LLM 密钥。
 
-这份文件由服务器分发（__URL__/local/fecho_local.py）。提示词、解析规则、路径规则与服务器上的
-scan.py / cloudscan.py 保持一致，仓库里有测试盯着两边不走样。
+这份文件由服务器分发（__URL__/local/fecho_local.py）。提示词、解析规则和事件键由
+fecho/scan_contract.py 统一维护；改动后运行 scripts/build_local_script.py 重新生成本文件。
 """
 import argparse
 import glob
@@ -41,6 +41,95 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+# BEGIN GENERATED SCAN CONTRACT
+
+"""Pure transcript-scan rules shared with the standalone client.
+
+Keep this module limited to the stdlib so its source can be embedded in the
+single-file scanner distributed to user machines.
+"""
+import hashlib
+import re
+
+
+DEFAULT_CHUNK_CHARS = 18000
+BOILERPLATE_PATTERN = (
+    r"<command-(message|name|args)>|<system-reminder>|<local-command-|"
+    r"Base directory for this skill:|<user-prompt-submit-hook>"
+)
+BOILERPLATE = re.compile(BOILERPLATE_PATTERN, re.MULTILINE)
+
+PROMPT = """你在读一段「人和 coding agent 一起干活」的对话记录，任务是抽出这段时间**做成了什么**。
+
+规则：
+- 抽的是**成果和进展**，不是对话内容，也不是用户说过的话。
+- 一件事一条。同一件事反复出现，合并成一条。
+- **踩的坑、得出的负面结论也算进展**——「试了 X 发现不行，因为 Y」是有价值的记录。
+- 只写对话里确实发生的事，不许推断、不许补充没做的事。
+- 忽略纯粹的来回确认、纯提问、没有结论的讨论。
+- **不许把「还在讨论/倾向于」写成「已决定」**。只有明确拍板的才用「定为/改成/确定」，
+  还在比较的要写「在评估 X 和 Y」。
+- 每条一到两句话，让人三个月后还看得懂。
+- **必须用中文写**，无论对话本身是什么语言。技术名词（MCP、OAuth、SQLite 等）保留原文。
+
+还要判断每条进展属于下面哪个 issue：
+- 看的是**说的是不是同一件事**，不是字面有没有重合的词。
+- 真的都不属于就写 `-`，系统会归到自由任务。**宁可写 `-` 也不要硬凑**——
+  归错了下游的日报全跟着错，归不上只是多一个自由任务。
+- 只能从下面给的列表里选，不许自己编 issue 号。
+- 如果这段没有任何已经完成、推进或明确踩坑的内容，只输出一行 `NONE`。
+
+{issues}
+
+输出格式：一行一条，`类型 | issue号或-| 内容`，类型是 done / pitfall / decision 三者之一。
+不要 JSON、不要代码块、不要编号、不要解释。内容里随便用什么标点都行。
+
+示例：
+done | AI-2541 | 配对引擎写完了，拿真实 issue 测下来 11/12 命中
+pitfall | AI-2541 | 让模型自己数中文字数会把推理预算烧穿，改成给结构性目标才出得来
+decision | - | 闲鱼选品定了强推三个品类，盗版资料类全部淘汰
+
+对话记录如下：
+
+"""
+
+NO_ISSUES = "（当前没有在办的 issue，所有条目的 issue 号都写 `-`）"
+PROBE_TEXT = "（这是安装时的连通测试，没有对话内容。）"
+
+
+def parse_scan_entries(raw, valid_keys=None, issue_pattern=None):
+    """Parse the line protocol emitted by the transcript summarizer."""
+    cleaned = re.sub(r"^```\w*\s*|\s*```$", "", (raw or "").strip())
+    if cleaned.upper() == "NONE":
+        return []
+    out = []
+    for line in cleaned.splitlines():
+        line = line.strip().lstrip("-*0123456789. ")
+        parts = [part.strip() for part in line.split("|")]
+        if len(parts) < 2:
+            continue
+        kind = parts[0].lower()
+        if kind not in ("done", "pitfall", "decision"):
+            continue
+        issue, content = (parts[1], "|".join(parts[2:]).strip()) if len(parts) >= 3 else ("", parts[1])
+        if not content:
+            continue
+        issue = issue.upper()
+        valid_issue = bool(issue_pattern and issue_pattern.fullmatch(issue))
+        if valid_issue and valid_keys is not None:
+            valid_issue = issue in valid_keys
+        out.append({"kind": kind, "content": content,
+                    "issue": issue if valid_issue else None})
+    return out
+
+
+def scan_event_key(producer, session_id, part, item_index):
+    """Stable idempotency key for one summarized transcript chunk."""
+    seed = "|".join((producer, session_id, part[0]["ts"], part[-1]["ts"], str(item_index)))
+    return "scan:" + hashlib.sha256(seed.encode("utf-8")).hexdigest()
+
+# END GENERATED SCAN CONTRACT
 
 IS_MAC = sys.platform == "darwin"
 IS_WINDOWS = sys.platform.startswith("win")
@@ -63,8 +152,7 @@ WINDOWS_TASK = "FechoCloudCheck"                                         # Windo
 # 中国没有夏令时，固定 +8 就是北京时间。不用 zoneinfo：有些机器上没有时区数据库。
 BEIJING = timezone(timedelta(hours=8))
 CHECK_EVERY_SECONDS = 15 * 60
-# 单次交给 agent 的对话上限（字符）。和服务器上 scan.py 的默认值一致。
-CHUNK_CHARS = 18000
+CHUNK_CHARS = DEFAULT_CHUNK_CHARS
 UPLOAD_BATCH = 50
 AGENT_TIMEOUT = 600
 LOCK_STALE_SECONDS = 2 * 60 * 60
@@ -111,53 +199,6 @@ FIX_HINT = {
                    "用 CC Switch 接其他线路的，在 CC Switch 里给 Claude 选一个能用的线路。",
     "codex": "打开 ChatGPT 桌面版确认已登录，或在终端运行 codex login。",
 }
-
-# 宿主注入的样板：slash command 展开、skill 说明文档、系统提醒。
-# 它们以 user 身份出现在记录里，但不是用户说的话。
-BOILERPLATE = re.compile(
-    r"<command-(message|name|args)>|<system-reminder>|<local-command-|"
-    r"Base directory for this skill:|<user-prompt-submit-hook>",
-    re.MULTILINE,
-)
-
-PROMPT = """你在读一段「人和 coding agent 一起干活」的对话记录，任务是抽出这段时间**做成了什么**。
-
-规则：
-- 抽的是**成果和进展**，不是对话内容，也不是用户说过的话。
-- 一件事一条。同一件事反复出现，合并成一条。
-- **踩的坑、得出的负面结论也算进展**——「试了 X 发现不行，因为 Y」是有价值的记录。
-- 只写对话里确实发生的事，不许推断、不许补充没做的事。
-- 忽略纯粹的来回确认、纯提问、没有结论的讨论。
-- **不许把「还在讨论/倾向于」写成「已决定」**。只有明确拍板的才用「定为/改成/确定」，
-  还在比较的要写「在评估 X 和 Y」。
-- 每条一到两句话，让人三个月后还看得懂。
-- **必须用中文写**，无论对话本身是什么语言。技术名词（MCP、OAuth、SQLite 等）保留原文。
-
-还要判断每条进展属于下面哪个 issue：
-- 看的是**说的是不是同一件事**，不是字面有没有重合的词。
-- 真的都不属于就写 `-`，系统会归到自由任务。**宁可写 `-` 也不要硬凑**——
-  归错了下游的日报全跟着错，归不上只是多一个自由任务。
-- 只能从下面给的列表里选，不许自己编 issue 号。
-- 如果这段没有任何已经完成、推进或明确踩坑的内容，只输出一行 `NONE`。
-
-{issues}
-
-输出格式：一行一条，`类型 | issue号或-| 内容`，类型是 done / pitfall / decision 三者之一。
-不要 JSON、不要代码块、不要编号、不要解释。内容里随便用什么标点都行。
-
-示例：
-done | AI-2541 | 配对引擎写完了，拿真实 issue 测下来 11/12 命中
-pitfall | AI-2541 | 让模型自己数中文字数会把推理预算烧穿，改成给结构性目标才出得来
-decision | - | 闲鱼选品定了强推三个品类，盗版资料类全部淘汰
-
-对话记录如下：
-
-"""
-# 本机不拉 issue 列表：归属由服务器看完一整天再判（它手上有这个人的 Mobius issue），
-# 本机这边只管把「做成了什么」抽准。
-NO_ISSUES = "（当前没有在办的 issue，所有条目的 issue 号都写 `-`）"
-PROBE_TEXT = "（这是安装时的连通测试，没有对话内容。）"
-
 
 # ---------- 小工具 ----------
 
@@ -426,31 +467,18 @@ def render(rows, cap=2000):
 
 
 def parse_entries(raw):
-    """一行一条、竖线分隔。本机不认 issue 号，归属交给服务器判。"""
-    cleaned = re.sub(r"^```\w*\s*|\s*```$", "", (raw or "").strip())
+    """本机版本不保存 issue 归属；解析协议由 scan_contract 统一维护。"""
+    cleaned = (raw or "").strip()
     if cleaned.upper() == "NONE":
         return []
-    out = []
-    for line in cleaned.splitlines():
-        line = line.strip().lstrip("-*0123456789. ")
-        parts = [x.strip() for x in line.split("|")]
-        if len(parts) < 2:
-            continue
-        kind = parts[0].lower()
-        if kind not in ("done", "pitfall", "decision"):
-            continue
-        content = "|".join(parts[2:]).strip() if len(parts) >= 3 else parts[1]
-        if content:
-            out.append({"kind": kind, "content": content})
-    if not out:
+    entries = parse_scan_entries(cleaned)
+    if not entries:
         raise ValueError("agent 的输出不符合约定格式：%s" % cleaned[:120])
-    return out
+    return [{"kind": item["kind"], "content": item["content"]} for item in entries]
 
 
 def event_key(agent, session_id, part, index):
-    """稳定的去重键：同一段对话同一个位置，每次扫都一样（和 scan.py 同一种算法）。"""
-    seed = "|".join((agent, session_id, part[0]["ts"], part[-1]["ts"], str(index)))
-    return "scan:" + hashlib.sha256(seed.encode("utf-8")).hexdigest()
+    return scan_event_key(agent, session_id, part, index)
 
 
 # ---------- 叫醒本机 agent 来提炼 ----------

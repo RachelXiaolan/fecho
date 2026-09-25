@@ -22,6 +22,10 @@ REPORT_PROMPT_VERSION = "daily-v2-status-fields"
 VERIFY_PROMPT_VERSION = "assignment-v4-learned-hints"
 
 
+class ReportChanged(RuntimeError):
+    """The report changed while a generated version was being composed."""
+
+
 def _cjk_len(text: str) -> int:
     return len(re.sub(r"[\s#*`>_\-\[\]()]", "", text or ""))
 
@@ -794,7 +798,9 @@ def generate(author: str, date: str, force: bool = False,
     # 排序放在算指纹之后：只改呈现顺序，不该让所有旧日报都被判成「输入变了」
     tasks = by_priority(author, tasks)
 
-    existing = db.get_report(author, date, "daily")
+    report_baseline = {kind: db.get_report(author, date, kind)
+                       for kind in ("daily", "voice")}
+    existing = report_baseline["daily"]
     # 人写的或改过的日报不覆盖。事实有变时照样出一版自动的，但只放进历史版本给人对照；
     # 网页上提示「有新进展」，由人决定要不要点「重新生成」换成自动版。
     archive_only = bool(existing and existing.get("generator") == "human" and keep_human)
@@ -809,8 +815,14 @@ def generate(author: str, date: str, force: bool = False,
         daily = "# %s 工作日志 · %s\n\n休假（PTO），当日无任务进展，日志豁免。\n" % (
             date, persona["display_name"])
         voice = "今天请假，没有工作内容，跳过日志。"
-        _persist(author, date, "daily", daily, fp, "pto-exempt", None, 0)
-        _persist(author, date, "voice", voice, fp, "pto-exempt", None, 0)
+        try:
+            _persist_generated(author, date, [
+                ("daily", daily, fp, "pto-exempt", None, 0, []),
+                ("voice", voice, fp, "pto-exempt", None, 0, []),
+            ], report_baseline)
+        except ReportChanged:
+            return _result(author, date, "superseded", pto_status, 0, 0,
+                           reason="日报在生成期间已被修改，保留了更新版本")
         _write_files(author, date, daily, voice, persona)
         _stamp_pto(author, date, "pto")
         return _result(author, date, "pto-exempt", pto_status, 0, 0)
@@ -865,10 +877,24 @@ def generate(author: str, date: str, force: bool = False,
         daily = "> 当日为 PTO（请假），以下为期间仍产生的进展。\n\n" + daily
         warnings.append("当日为 PTO，日报已降级标注")
 
-    _persist(author, date, "daily", daily, fp, daily_gen,
-             model if daily_gen == "llm" else None, n_updates, warnings)
-    _persist(author, date, "voice", voice, fp, voice_gen,
-             model if voice_gen == "llm" else None, n_updates, warnings)
+    generated = [
+        ("daily", daily, fp, daily_gen, model if daily_gen == "llm" else None,
+         n_updates, warnings),
+        ("voice", voice, fp, voice_gen, model if voice_gen == "llm" else None,
+         n_updates, warnings),
+    ]
+    try:
+        _persist_generated(author, date, generated, report_baseline)
+    except ReportChanged:
+        # The manual or newer version wins. Keep the completed automatic draft
+        # available in history without changing the current report or its voice.
+        _archive_generated(author, date, generated)
+        current = db.get_report(author, date, "daily")
+        status = "kept-human" if current and current.get("generator") == "human" else "superseded"
+        res = _result(author, date, status, pto_status, len(tasks), n_updates,
+                      reason="日报在生成期间已被修改，保留了更新版本；本次自动稿已存入历史")
+        res["warnings"] = warnings
+        return res
     paths = _write_files(author, date, daily, voice, persona)
     _stamp_pto(author, date, pto_status)
 
@@ -1046,6 +1072,60 @@ def _persist(author, date, kind, content, fp, generator, model, n,
             " created_at=excluded.created_at",
             (str(uuid.uuid4()), author, date, kind, content, fp, generator, model,
              n, _cjk_len(content), json.dumps(warnings or [], ensure_ascii=False), store.now_iso()))
+
+
+def _persist_generated(author: str, date: str, reports: List[Tuple],
+                       baseline: Dict[str, Optional[Dict[str, Any]]]) -> None:
+    """Atomically save generated reports only if none changed during generation.
+
+    ``baseline`` is captured before any model call. Conditional writes prevent
+    an older, slow generation from replacing a human edit or a newer report.
+    """
+    now = store.now_iso()
+    with db.cursor() as conn:
+        previous = {kind: baseline.get(kind) for kind, *_ in reports}
+        for kind, content, fp, generator, model, count, warnings in reports:
+            prev = previous[kind]
+            values = (str(uuid.uuid4()), content, fp, generator, model, count,
+                      _cjk_len(content), json.dumps(warnings or [], ensure_ascii=False), now)
+            if prev:
+                changed = conn.execute(
+                    "UPDATE reports SET report_id=?,content_md=?,fingerprint=?,generator=?,"
+                    "model=?,entry_count=?,char_count=?,warnings=?,created_at=? "
+                    "WHERE author=? AND date=? AND kind=? AND created_at=? AND generator=? "
+                    "AND fingerprint=? AND content_md=?",
+                    values + (author, date, kind, prev["created_at"], prev["generator"],
+                              prev["fingerprint"], prev["content_md"])).rowcount
+            else:
+                changed = conn.execute(
+                    "INSERT INTO reports (report_id,author,date,kind,content_md,fingerprint,"
+                    "generator,model,entry_count,char_count,warnings,created_at) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?) "
+                    "ON CONFLICT(author,date,kind) DO NOTHING",
+                    (values[0], author, date, kind, content, fp, generator, model, count,
+                     values[6], values[7], now)).rowcount
+            if changed != 1:
+                raise ReportChanged("report changed during generation")
+
+        # Add prior versions only after all conditional writes succeeded. Any
+        # conflict rolls back both report writes and history entries together.
+        for kind, *_ in reports:
+            prev = previous[kind]
+            if prev:
+                conn.execute(
+                    "INSERT INTO report_history (author,date,kind,content_md,generator,created_at,fingerprint)"
+                    " VALUES (?,?,?,?,?,?,?)",
+                    (author, date, kind, prev["content_md"], prev["generator"],
+                     prev["created_at"], prev["fingerprint"]))
+
+
+def _archive_generated(author: str, date: str, reports: List[Tuple]) -> None:
+    with db.cursor() as conn:
+        for kind, content, fp, generator, _model, _count, _warnings in reports:
+            conn.execute(
+                "INSERT INTO report_history (author,date,kind,content_md,generator,created_at,fingerprint)"
+                " VALUES (?,?,?,?,?,?,?)",
+                (author, date, kind, content, generator, store.now_iso(), fp))
 
 
 def _write_files(author, date, daily, voice, persona) -> Dict[str, str]:

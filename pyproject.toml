@@ -49,4 +49,5 @@ packages = ["fecho"]
 
 [tool.setuptools.package-data]
 fecho = ["presets/*.md", "presets/personas/*.json", "presets/*.html", "presets/skill/*.md",
-         "presets/local/*.py", "presets/vendor/cm6/*.js", "presets/assets/*.svg"]
+         "presets/local/*.py", "presets/vendor/cm6/*.js", "presets/assets/*.svg",
+         "presets/assets/*.css", "presets/assets/*.js"]

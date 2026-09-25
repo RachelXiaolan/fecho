@@ -12,7 +12,11 @@ MARK_URL = "/assets/fecho-mark.svg"
 class TestDashboardContract(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.html = HTML.read_text(encoding="utf-8")
+        cls.html = "\n".join([
+            HTML.read_text(encoding="utf-8"),
+            (PRESETS / "assets" / "dashboard.css").read_text(encoding="utf-8"),
+            (PRESETS / "assets" / "dashboard.js").read_text(encoding="utf-8"),
+        ])
 
     def test_reports_are_rendered_not_shown_as_markdown_source(self):
         """日报以渲染后的文档显示，不再把 # ** [](...) 这些源码原样吐给人看。"""
