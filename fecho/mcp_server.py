@@ -124,7 +124,7 @@ TOOLS = [
     {
         "name": "end_of_day",
         "description": ("收工：把今天的进展按任务整理成日报和口播稿（调 LLM）。"
-                        "输入没变时不会重复生成。"),
+                        "默认保留人工修改的日报；force=true 才覆盖并重新生成。"),
         "inputSchema": {"type": "object", "properties": {
             "date": {"type": "string"}, "force": {"type": "boolean"}}},
     },
@@ -295,13 +295,19 @@ def _cloud_call(name: str, args: Dict[str, Any], me: str, context: MCPContext) -
         return "已改：每天 %s 出日报，本机 %02d:%02d 扫描。最多 15 分钟内生效。" % (t, *divmod(scan, 60))
 
     if name == "end_of_day":
-        # 出日报要好几分钟，放在请求里做会超时——排队交给后台程序
+        # 出日报要好几分钟，放在请求里做会超时——排队交给后台程序。
+        # 普通收工走 refresh，保留人工日报；只有显式 force 才用 regenerate 覆盖。
         date = args.get("date") or store.today()
         from .web import overview
         if not overview(me, date)["updates"]:
             return ("%s 没有任何记录，生成不出日报。先用 log_progress 记几条进展，"
                     "或等每晚本机扫描上传。" % date)
-        job = jobs.enqueue(me, "regenerate", date)
+        force = bool(args.get("force"))
+        kind = "regenerate" if force else "refresh"
+        from datetime import datetime, timezone
+        run_after = (datetime.now(timezone.utc).isoformat(timespec="seconds")
+                     if kind == "refresh" else None)
+        job = jobs.enqueue(me, kind, date, run_after=run_after)
         return "已排队生成 %s 的日报（%s），几分钟后在 %s 能看到。" % (date, job["status"], url)
 
     if name == "mobius_login":
