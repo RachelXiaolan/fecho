@@ -33,7 +33,7 @@ from .match import ISSUE_RE
 from .scan_contract import (BOILERPLATE as _BOILERPLATE, DEFAULT_CHUNK_CHARS,
                             NO_ISSUES, PROMPT, parse_scan_entries, scan_event_key)
 
-# 单次输入上限可在配置中调低；默认值来自 standalone scan contract。
+# 单次请求的输入上限（字符）。默认值和本机脚本共用（scan_contract），可在配置里调低。
 CHUNK_CHARS = int(config.get("scan_chunk_chars", "FECHO_SCAN_CHUNK_CHARS", DEFAULT_CHUNK_CHARS))
 
 
@@ -251,7 +251,7 @@ def render(rows: List[Dict[str, Any]], cap: int = 2000) -> str:
 
 
 def parse_entries(raw: str, valid_keys: Optional[set] = None) -> List[Dict[str, str]]:
-    """解析共用的扫描输出协议，并校验 issue 归属。"""
+    """解析扫描输出（规则见 scan_contract.parse_scan_entries），只认真实存在的 issue。"""
     return parse_scan_entries(raw, valid_keys, ISSUE_RE)
 
 

@@ -23,7 +23,7 @@ VERIFY_PROMPT_VERSION = "assignment-v4-learned-hints"
 
 
 class ReportChanged(RuntimeError):
-    """The report changed while a generated version was being composed."""
+    """生成日报的这几分钟里，日报或口播稿被改过了（人手改、或者另一次生成先写完了）。"""
 
 
 def _cjk_len(text: str) -> int:
@@ -886,8 +886,7 @@ def generate(author: str, date: str, force: bool = False,
     try:
         _persist_generated(author, date, generated, report_baseline)
     except ReportChanged:
-        # The manual or newer version wins. Keep the completed automatic draft
-        # available in history without changing the current report or its voice.
+        # 人改的或更新的版本胜出。这次写好的自动稿放进历史给人对照，当前的日报和口播稿都不动
         _archive_generated(author, date, generated)
         current = db.get_report(author, date, "daily")
         status = "kept-human" if current and current.get("generator") == "human" else "superseded"
@@ -1076,10 +1075,11 @@ def _persist(author, date, kind, content, fp, generator, model, n,
 
 def _persist_generated(author: str, date: str, reports: List[Tuple],
                        baseline: Dict[str, Optional[Dict[str, Any]]]) -> None:
-    """Atomically save generated reports only if none changed during generation.
+    """把生成好的日报和口播稿一起写回——前提是它们在生成期间都没被改过。
 
-    ``baseline`` is captured before any model call. Conditional writes prevent
-    an older, slow generation from replacing a human edit or a newer report.
+    baseline 是调模型之前读的。写回时带上它当条件：对不上就说明这几分钟里有人改过，
+    或者另一次更晚开始的生成先写完了。这时抛 ReportChanged，两份都不写（同一个事务），
+    免得一次慢吞吞的旧生成把人刚改好的日报盖掉（Tony 的 PR #4）。
     """
     now = store.now_iso()
     with db.cursor() as conn:
@@ -1107,8 +1107,7 @@ def _persist_generated(author: str, date: str, reports: List[Tuple],
             if changed != 1:
                 raise ReportChanged("report changed during generation")
 
-        # Add prior versions only after all conditional writes succeeded. Any
-        # conflict rolls back both report writes and history entries together.
+        # 条件写全部成功了才把旧版本放进历史；中途冲突就整个事务回滚，历史也不会多出半截
         for kind, *_ in reports:
             prev = previous[kind]
             if prev:

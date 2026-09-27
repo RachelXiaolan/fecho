@@ -387,3 +387,18 @@ class TestFreshCloudReportIsNotDirty(WebCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestScanContractIsEmbedded(unittest.TestCase):
+    def test_local_script_carries_the_current_contract(self):
+        """提示词和解析规则只在 fecho/scan_contract.py 改，改完要重新生成本机脚本。
+
+        忘了生成，服务器和同事电脑上跑的就是两套规则——以前两份手抄，就靠这条测试盯着。
+        """
+        from pathlib import Path
+        root = Path(__file__).resolve().parents[1]
+        contract = (root / "fecho" / "scan_contract.py").read_text(encoding="utf-8").rstrip()
+        local = (root / "fecho" / "presets" / "local" / "fecho_local.py").read_text(encoding="utf-8")
+        start = local.index("# BEGIN GENERATED SCAN CONTRACT") + len("# BEGIN GENERATED SCAN CONTRACT")
+        embedded = local[start:local.index("# END GENERATED SCAN CONTRACT")].strip()
+        self.assertEqual(embedded, contract, "改了 scan_contract.py 后请运行 python3 scripts/build_local_script.py")

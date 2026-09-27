@@ -44,16 +44,22 @@ from pathlib import Path
 
 # BEGIN GENERATED SCAN CONTRACT
 
-"""Pure transcript-scan rules shared with the standalone client.
+"""扫描对话的共用规则：提示词、输出格式的解析、去重键。服务器和本机脚本用的是同一份。
 
-Keep this module limited to the stdlib so its source can be embedded in the
-single-file scanner distributed to user machines.
+以前 scan.py 和 presets/local/fecho_local.py 各抄一份，靠测试盯着两边不走样。
+现在只在这里改，改完跑 scripts/build_local_script.py 把它嵌进本机脚本。
+本机脚本要单文件、只用标准库地发到每个人电脑上，所以这里也只能 import 标准库。
 """
 import hashlib
 import re
 
 
+# 单次请求的输入上限（字符）。实测 24K tokens 打推理模型会超时。
 DEFAULT_CHUNK_CHARS = 18000
+
+# 宿主注入的样板：slash command 展开、skill 说明文档、系统提醒。
+# 它们以 user 身份出现在记录里，但不是用户说的话——实测占了一天内容的 40%+，
+# 喂进去纯烧钱还带偏总结。
 BOILERPLATE_PATTERN = (
     r"<command-(message|name|args)>|<system-reminder>|<local-command-|"
     r"Base directory for this skill:|<user-prompt-submit-hook>"
@@ -99,7 +105,15 @@ PROBE_TEXT = "（这是安装时的连通测试，没有对话内容。）"
 
 
 def parse_scan_entries(raw, valid_keys=None, issue_pattern=None):
-    """Parse the line protocol emitted by the transcript summarizer."""
+    """一行一条、竖线分隔：`类型 | issue号或- | 内容`。
+
+    刻意不用 JSON：中文内容里的引号会把它打断（实测两个项目全炸在这），
+    而这里根本不需要嵌套结构。
+
+    issue 只认真实存在的：光校验形状不够——模型可以吐出一个格式完全正确但根本不存在的号，
+    那样就成了凭空造归属。不传 valid_keys / issue_pattern 时一律不认（本机脚本就是这样，
+    归属交给服务器判）。
+    """
     cleaned = re.sub(r"^```\w*\s*|\s*```$", "", (raw or "").strip())
     if cleaned.upper() == "NONE":
         return []
@@ -112,6 +126,7 @@ def parse_scan_entries(raw, valid_keys=None, issue_pattern=None):
         kind = parts[0].lower()
         if kind not in ("done", "pitfall", "decision"):
             continue
+        # 老格式没有 issue 段：`类型 | 内容`
         issue, content = (parts[1], "|".join(parts[2:]).strip()) if len(parts) >= 3 else ("", parts[1])
         if not content:
             continue
@@ -125,7 +140,10 @@ def parse_scan_entries(raw, valid_keys=None, issue_pattern=None):
 
 
 def scan_event_key(producer, session_id, part, item_index):
-    """Stable idempotency key for one summarized transcript chunk."""
+    """稳定的去重键：同一段对话同一个位置，每次扫都一样。
+
+    重扫时模型措辞会变，只靠正文去重挡不住；用会话、时间窗和条目序号算，重放不会多记。
+    """
     seed = "|".join((producer, session_id, part[0]["ts"], part[-1]["ts"], str(item_index)))
     return "scan:" + hashlib.sha256(seed.encode("utf-8")).hexdigest()
 

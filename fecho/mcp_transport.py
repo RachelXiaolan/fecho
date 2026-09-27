@@ -1,8 +1,8 @@
-"""HTTP adapters for the MCP protocol transports.
+"""MCP 的两种 HTTP 传输：SSE（本机版给 ChatGPT 用）和 Streamable HTTP（/mcp）。
 
-This module owns only transport/session state. Tool behavior stays in
-``mcp_server`` and the same adapter is used by the local SSE and cloud HTTP
-entry points.
+这里只管连接和会话；工具本身在 mcp_server。从 web.py 拆出来（Tony 的 PR #4），
+顺带把认人、查库、跑工具这些同步操作挪进线程池——以前直接在异步路由里做，
+一次慢查询就把所有连接都卡住。
 """
 import asyncio
 import dataclasses
@@ -22,10 +22,15 @@ def install_mcp_routes(app: Any, guard: Callable[..., str]) -> None:
     sessions: Dict[str, Dict[str, Any]] = {}
     http_contexts: Dict[str, mcp_server.MCPContext] = {}
 
+    # ---- MCP over SSE ----
+    # 老一档的 MCP 传输，但 ChatGPT 现在要的就是它，且 URL 必须以 /sse/ 结尾。
+    # 握手是两条腿：GET 开一条长连接，第一个事件告诉对方「消息往哪 POST」；
+    # 之后每次 POST 的响应不从 POST 返回，而是顺着那条长连接推回去。
     @app.get("/sse/")
     @app.get("/sse")
     async def sse_stream(request: Request, authorization: Optional[str] = Header(None)):
         if config.CLOUD:
+            # 长连接 + 会话存内存，放到按请求运行的平台上撑不住。云端版只走 /mcp。
             raise HTTPException(404, "云端版请用 %s/mcp" % config.PUBLIC_URL)
         await run_in_threadpool(guard, request, authorization)
         sid = secrets.token_urlsafe(16)
@@ -40,7 +45,7 @@ def install_mcp_routes(app: Any, guard: Callable[..., str]) -> None:
                     try:
                         msg = await asyncio.wait_for(queue.get(), timeout=15)
                     except asyncio.TimeoutError:
-                        yield ": keep-alive\n\n"
+                        yield ": keep-alive\n\n"      # 挡住中间层的空闲超时
                         continue
                     if msg is None:
                         break
@@ -65,8 +70,9 @@ def install_mcp_routes(app: Any, guard: Callable[..., str]) -> None:
             await session["queue"].put(resp)
         return JSONResponse(status_code=202, content={"ok": True})
 
+    # ---- MCP over Streamable HTTP ----
     def remember_session(sid: str, author: str, client_name: str) -> None:
-        """Persist the client name because cloud requests may reach another instance."""
+        """agent 连上来时报的名字记进库：云端版的下一个请求可能落到别的实例上。"""
         try:
             with db.cursor() as conn:
                 conn.execute(
@@ -75,17 +81,17 @@ def install_mcp_routes(app: Any, guard: Callable[..., str]) -> None:
                     " author=excluded.author, client_name=excluded.client_name,"
                     " created_at=excluded.created_at",
                     (sid, author, client_name, store.now_iso()))
-        except Exception:  # noqa: BLE001  Persistence failure must not reject initialize.
+        except Exception:  # noqa: BLE001 记不下来不该挡住连接
             pass
 
     def session_client(sid: str, author: str) -> Optional[str]:
-        """Look up only a session owned by this caller."""
+        """按会话号查回 agent 名字。只认同一个人的会话：拿着别人的会话号查不到别人的 agent。"""
         try:
             with db.cursor() as conn:
                 row = conn.execute("SELECT client_name FROM mcp_sessions"
                                    " WHERE session_id=? AND author=?", (sid, author)).fetchone()
             return row["client_name"] if row else None
-        except Exception:  # noqa: BLE001  Older local schemas may not have this table.
+        except Exception:  # noqa: BLE001 表还没建好时照常工作
             return None
 
     @app.post("/mcp")
@@ -102,17 +108,21 @@ def install_mcp_routes(app: Any, guard: Callable[..., str]) -> None:
             http_contexts[sid] = mcp_server.MCPContext(session_id=sid)
         context = http_contexts.get(sid) if sid else None
         if context is None:
-            # A request can land on another cloud instance; never fall back to the
-            # process-wide default context, which belongs to the local author.
+            # 云端版跑在多个实例上，这次请求落到的实例可能没见过这个会话号。
+            # 按会话号新建一个——不能退回默认上下文，那是本机版那一个人的身份，
+            # 退回去等于把这个人的进展记到别人头上。
             context = mcp_server.MCPContext(session_id=sid or secrets.token_urlsafe(18))
             if sid:
                 http_contexts[sid] = context
         if config.CLOUD:
             if method == "initialize":
-                context.author = me
+                context.author = me          # initialize 会往缓存里写客户端名，用原对象
             else:
+                # 身份每次都按这次请求的 token 重填，不信任缓存里的
                 context = dataclasses.replace(context, author=me)
                 if context.client_name == "unknown-agent" and sid:
+                    # 这个实例没见过这个会话的 initialize：去库里找回是哪个 agent，
+                    # 否则记下的进展来源会是 unknown-agent
                     name = await run_in_threadpool(session_client, sid, me)
                     if name:
                         context = dataclasses.replace(context, client_name=name)
@@ -120,6 +130,6 @@ def install_mcp_routes(app: Any, guard: Callable[..., str]) -> None:
         if config.CLOUD and method == "initialize" and sid:
             await run_in_threadpool(remember_session, sid, me, context.client_name)
         headers = {"Mcp-Session-Id": sid} if sid else {}
-        if resp is None:
+        if resp is None:                       # 通知类消息没有响应体
             return JSONResponse(status_code=202, content=None, headers=headers)
         return JSONResponse(resp, headers=headers)
