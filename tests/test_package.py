@@ -30,8 +30,11 @@ class TestPackageContents(unittest.TestCase):
         patterns = pyproject.split("[tool.setuptools.package-data]", 1)[1].split("]", 1)[0]
         patterns = [x.strip().strip('"') for x in patterns.split("[", 1)[1].split(",")]
         presets = ROOT / "fecho" / "presets"
+        # 页面引用的静态产物也要：0.10.1 的截图脚本就漏过，pip 装的本机版点截图会失败
         shipped = (list(presets.glob("*.html")) + list(presets.glob("*.md"))
-                   + list(presets.glob("local/*")) + list(presets.glob("skill/*")))
+                   + list(presets.glob("local/*")) + list(presets.glob("skill/*"))
+                   + list(presets.glob("vendor/*/*.js")) + list(presets.glob("assets/*.*")))
+        shipped = [f for f in shipped if not f.name.startswith(".")]
         for f in shipped:
             rel = "presets/" + f.relative_to(presets).as_posix()
             self.assertTrue(any(fnmatch.fnmatch(rel, pat) for pat in patterns),
