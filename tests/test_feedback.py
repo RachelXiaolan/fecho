@@ -120,8 +120,7 @@ class TestOverHttp(WebCase):
 class TestPage(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.html = (Path(__file__).resolve().parents[1] / "fecho" / "presets" /
-                    "dashboard.html").read_text(encoding="utf-8")
+        cls.html = _env.page("dashboard.html")
 
     def test_feedback_page_accepts_images_three_ways(self):
         for needle in ('data-view="feedback" data-cloud-only hidden', 'data-page="feedback"',

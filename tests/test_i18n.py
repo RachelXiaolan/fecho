@@ -18,7 +18,7 @@ CJK = re.compile(r"[一-鿿]")
 
 
 def load(name):
-    html = (PRESETS / name).read_text(encoding="utf-8")
+    html = _env.page(name)       # 拆出去的 dashboard.js 拼回来一起查
     raw = re.search(r'<script type="application/json" id="i18n">(.*?)</script>', html, re.S).group(1)
     return html, json.loads(raw)
 

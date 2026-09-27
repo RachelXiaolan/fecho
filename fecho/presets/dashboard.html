@@ -7,6 +7,8 @@
   <link rel="icon" href="/assets/fecho-mark.svg" type="image/svg+xml">
   <script id="theme-boot">try{var s=localStorage.getItem('fecho-theme');document.documentElement.dataset.theme=s==='dark'||s==='light'?s:(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');}catch(_){document.documentElement.dataset.theme='light';}</script>
     <link rel="stylesheet" href="/assets/dashboard.css">
+    <!-- 截图脚本第一次点截图才加载。地址放在这里，返回页面时服务器会给它挂上缓存键 -->
+    <meta name="fecho-snapshot" content="/vendor/snapshot/snapshot.min.js">
 </head>
 <body>
 <div class="shell">

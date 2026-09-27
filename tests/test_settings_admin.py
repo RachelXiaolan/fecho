@@ -165,7 +165,7 @@ class TestHermesCannotBeSwitchedOn(WebCase):
 class TestPagesContract(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.dash = (PRESETS / "dashboard.html").read_text(encoding="utf-8")
+        cls.dash = _env.page("dashboard.html")
         cls.onboard = (PRESETS / "onboard.html").read_text(encoding="utf-8")
 
     def test_dashboard_has_settings_and_admin(self):

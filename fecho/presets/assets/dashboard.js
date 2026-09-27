@@ -645,7 +645,8 @@ const $ = (selector, root=document) => root.querySelector(selector);
   // 每天要把日报截图贴进频道，长日报不好长截图。点一下把渲染好的日报整块画成 PNG，
   // 文件名按「0923_worklog_Rachel.png」起好。存哪：每次弹系统的保存框，或者固定存到一个文件夹。
   // 两种都要 Chrome / Edge 的文件系统接口；Safari、Firefox 只能退回普通下载。
-  const SNAPSHOT_SRC='/vendor/snapshot/snapshot.min.js';
+  // 地址从页面的 meta 里拿：那里的地址服务器挂了缓存键，脚本文件本身改不了
+  const SNAPSHOT_SRC=(document.querySelector('meta[name="fecho-snapshot"]')||{}).content||'/vendor/snapshot/snapshot.min.js';
   const canPickFile=typeof window.showSaveFilePicker==='function', canPickDir=typeof window.showDirectoryPicker==='function';
   function snapMode(){ try{ return localStorage.getItem('fecho-snap-mode')==='folder'&&canPickDir?'folder':'ask'; }catch(_){ return 'ask'; } }
   function setSnapMode(mode){ try{ localStorage.setItem('fecho-snap-mode',mode); }catch(_){} }

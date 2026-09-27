@@ -137,7 +137,7 @@ class TestStatusEndpoint(WebCase):
 
 
 class TestProgressStripContract(unittest.TestCase):
-    html = (Path(__file__).resolve().parents[1] / "fecho" / "presets" / "dashboard.html").read_text(encoding="utf-8")
+    html = _env.page("dashboard.html")
 
     def test_page_polls_while_a_job_is_active_and_flags_fallback_and_a_dead_worker(self):
         self.assertIn("/api/jobs/status?date=", self.html)

@@ -270,7 +270,7 @@ class TestRobustness(ScriptCase):
 
 class TestDashboardAcceptsWindowsPaths(unittest.TestCase):
     def test_manual_folder_input(self):
-        html = (Path(__file__).resolve().parents[1] / "fecho" / "presets" / "dashboard.html").read_text(encoding="utf-8")
+        html = _env.page("dashboard.html")
         self.assertIn("[A-Za-z]:[\\\\/]", html)
         self.assertNotIn("if(!path.startsWith('/'))", html)
 

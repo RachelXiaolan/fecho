@@ -124,8 +124,7 @@ class TestAttachEndpoint(unittest.TestCase):
 
 
 class TestMergePicker(unittest.TestCase):
-    html = (Path(__file__).resolve().parents[1] / "fecho" / "presets" / "dashboard.html").read_text(
-        encoding="utf-8")
+    html = _env.page("dashboard.html")
 
     def test_picker_offers_synced_issues_and_accepts_a_typed_key(self):
         self.assertIn('role="combobox"', self.html)
@@ -137,14 +136,16 @@ class TestMergePicker(unittest.TestCase):
 class TestReportSnapshot(unittest.TestCase):
     """日报截图：每天要把日报贴进频道，长日报不好长截图。"""
     root = Path(__file__).resolve().parents[1]
-    html = (root / "fecho" / "presets" / "dashboard.html").read_text(encoding="utf-8")
+    html = _env.page("dashboard.html")
 
     def test_bundle_is_shipped_and_cache_busted(self):
         import inspect
         from fecho import web
         self.assertTrue((self.root / "fecho" / "presets" / "vendor" / "snapshot" / "snapshot.min.js").is_file(),
                         "产物要提交进仓库，部署不需要 node")
-        self.assertIn("/vendor/snapshot/snapshot.min.js?v=", inspect.getsource(web.build_app))
+        # 地址放在页面的 meta 里，服务器挂缓存键；脚本文件从 meta 读（缓存键的实测见 test_human_edit）
+        self.assertIn('<meta name="fecho-snapshot" content="/vendor/snapshot/snapshot.min.js">', self.html)
+        self.assertIn('meta[name="fecho-snapshot"]', self.html)
 
     def test_file_is_named_like_0923_worklog_rachel(self):
         self.assertIn("_worklog_${name}.png", self.html)

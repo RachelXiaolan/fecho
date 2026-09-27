@@ -12,11 +12,7 @@ MARK_URL = "/assets/fecho-mark.svg"
 class TestDashboardContract(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.html = "\n".join([
-            HTML.read_text(encoding="utf-8"),
-            (PRESETS / "assets" / "dashboard.css").read_text(encoding="utf-8"),
-            (PRESETS / "assets" / "dashboard.js").read_text(encoding="utf-8"),
-        ])
+        cls.html = _env.page("dashboard.html")
 
     def test_reports_are_rendered_not_shown_as_markdown_source(self):
         """日报以渲染后的文档显示，不再把 # ** [](...) 这些源码原样吐给人看。"""
@@ -89,13 +85,13 @@ class TestDashboardContract(unittest.TestCase):
         self.assertIn('background:var(--butter)', self.html)
         self.assertIn('border-radius:50%', self.html)
         for page in ("dashboard.html", "login.html", "onboard.html", "guide.html"):
-            html = (PRESETS / page).read_text(encoding="utf-8")
+            html = _env.page(page)
             self.assertIn('<link rel="icon" href="%s"' % MARK_URL, html, page)
 
     def test_taro_milk_design_system_has_complete_light_and_dark_tokens(self):
         """四个入口页必须共享奶油浅色和深葡萄紫黑夜模式，不能只改 Dashboard。"""
         for page in ("dashboard.html", "login.html", "onboard.html", "guide.html"):
-            html = (PRESETS / page).read_text(encoding="utf-8")
+            html = _env.page(page)
             self.assertIn('--canvas:#fff9ec', html, page)
             self.assertIn(':root[data-theme="dark"]', html, page)
             self.assertIn('--canvas:#18121e', html, page)

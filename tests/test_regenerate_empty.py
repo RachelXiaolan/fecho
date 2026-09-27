@@ -42,8 +42,7 @@ class TestRegenerateWithNothingRecorded(WebCase):
 
     def test_dashboard_shows_a_distinct_message(self):
         from pathlib import Path
-        html = (Path(__file__).resolve().parents[1] / "fecho" / "presets" /
-                "dashboard.html").read_text(encoding="utf-8")
+        html = _env.page("dashboard.html")
         regen = html[html.index("async function regenerate"):]
         regen = regen[:regen.index("$('#regenerate').addEventListener")]
         self.assertIn("result.empty", regen)

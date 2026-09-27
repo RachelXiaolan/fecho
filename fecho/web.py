@@ -23,7 +23,7 @@ from . import __version__, accounts, config, db, quick_api, store
 
 # 云端版的两个 cookie：登录后的会话、跳去 Mobius 登录路上的临时状态
 SESSION_COOKIE = "fecho_session"
-_EDITOR_TAG = ""   # 编辑器产物的缓存键，算一次就记住
+_ASSET_TAGS: Dict[str, str] = {}   # 静态产物的缓存键，每个文件算一次就记住
 OAUTH_COOKIE = "fecho_oauth"
 
 TOKEN = os.getenv("FECHO_WEB_TOKEN") or config.get("web_token", "FECHO_WEB_TOKEN", "")
@@ -231,28 +231,41 @@ def dashboard_payload(author: str, date: str) -> Dict[str, Any]:
 
 # ---------- FastAPI ----------
 
-def _editor_tag() -> str:
-    """编辑器产物的缓存键。
+def _asset_tag(rel: str) -> str:
+    """静态产物（presets/ 下的相对路径）的缓存键：版本号 + 内容哈希。
 
-    产物的文件名是固定的，不挂个会变的东西，浏览器就一直用缓存里的旧编辑器——
-    改完代码看不到效果，同事升级了也还在跑老版本。用内容算：
-    重新构建过就必定变，没变就让浏览器接着用缓存。
+    产物的文件名是固定的，不挂个会变的东西，浏览器就一直用缓存里的旧文件——
+    改完代码看不到效果，同事升级了也还在跑老版本。只挂版本号也不够：同一个版本里
+    热修一下，页面是新的、脚本还是缓存里旧的，两边对不上。用内容算：
+    改过就必定变，没变就让浏览器接着用缓存。
     """
-    global _EDITOR_TAG
-    if _EDITOR_TAG:
-        return _EDITOR_TAG
+    if rel in _ASSET_TAGS:
+        return _ASSET_TAGS[rel]
     from pathlib import Path
 
-    bundle = Path(__file__).resolve().parent / "presets" / "vendor" / "cm6" / "editor.min.js"
     tag = __version__
     try:
         import hashlib
 
-        tag += "-" + hashlib.sha256(bundle.read_bytes()).hexdigest()[:8]
+        data = (Path(__file__).resolve().parent / "presets" / rel).read_bytes()
+        tag += "-" + hashlib.sha256(data).hexdigest()[:8]
     except OSError:
         pass          # 产物不在就只用版本号，不值得为这个把页面弄挂
-    _EDITOR_TAG = tag
+    _ASSET_TAGS[rel] = tag
     return tag
+
+
+def _editor_tag() -> str:
+    return _asset_tag("vendor/cm6/editor.min.js")
+
+
+# 页面里引用的静态产物：返回页面时给每个挂上缓存键
+_TAGGED_ASSETS = (
+    ("/vendor/cm6/editor.min.js", "vendor/cm6/editor.min.js"),
+    ("/vendor/snapshot/snapshot.min.js", "vendor/snapshot/snapshot.min.js"),
+    ("/assets/dashboard.css", "assets/dashboard.css"),
+    ("/assets/dashboard.js", "assets/dashboard.js"),
+)
 
 
 def build_app():
@@ -1175,14 +1188,10 @@ def build_app():
         if config.CLOUD and not _signed_in(request):
             return RedirectResponse("/login", status_code=302)
         html = (Path(__file__).resolve().parent / "presets" / "dashboard.html").read_text(encoding="utf-8")
-        return (html.replace("/vendor/cm6/editor.min.js",
-                             "/vendor/cm6/editor.min.js?v=" + _editor_tag())
-                    .replace("/vendor/snapshot/snapshot.min.js",
-                             "/vendor/snapshot/snapshot.min.js?v=" + __version__)
-                    .replace("/assets/dashboard.css",
-                             "/assets/dashboard.css?v=" + __version__)
-                    .replace("/assets/dashboard.js",
-                             "/assets/dashboard.js?v=" + __version__))
+        # 编辑器产物挂的是 /vendor/cm6/editor.min.js?v=<版本号>-<内容哈希>，其余同理
+        for url, rel in _TAGGED_ASSETS:
+            html = html.replace(url, url + "?v=" + _asset_tag(rel))
+        return html
 
     return app
 

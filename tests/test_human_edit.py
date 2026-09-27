@@ -242,8 +242,7 @@ class TestPageContract(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         from pathlib import Path
-        cls.html = (Path(__file__).resolve().parents[1] / "fecho" / "presets" /
-                    "dashboard.html").read_text(encoding="utf-8")
+        cls.html = _env.page("dashboard.html")
 
     def test_edit_and_style_controls_exist(self):
         for needle in ('id="edit-report"', "/api/reports/daily", 'id="style-editor"', "/api/style"):
@@ -254,12 +253,23 @@ class TestPageContract(unittest.TestCase):
 
         版本号是返回页面时替进去的，所以这里连 web 一起验。
         """
-        from fecho import __version__, web
+        import hashlib
+        import re as _re
+        from fastapi.testclient import TestClient
+        from fecho import __version__, config as cfg, web
         self.assertIn('src="/vendor/cm6/editor.min.js"', self.html)
-        source = inspect.getsource(web.build_app)
-        self.assertIn("/vendor/cm6/editor.min.js?v=", source,
-                      "返回页面时要给编辑器产物挂上版本号")
-        self.assertIn("__version__", source)
+        # 真请求一次页面：每个静态产物都要挂上「版本号-内容哈希」。
+        # 只挂版本号不够——同一版本里热修一下，页面是新的、脚本还是旧的
+        presets = Path(__file__).resolve().parents[1] / "fecho" / "presets"
+        with mock.patch.object(cfg, "CLOUD", False):
+            page = TestClient(web.build_app()).get("/").text
+        for url, rel in (("/vendor/cm6/editor.min.js", "vendor/cm6/editor.min.js"),
+                         ("/vendor/snapshot/snapshot.min.js", "vendor/snapshot/snapshot.min.js"),
+                         ("/assets/dashboard.css", "assets/dashboard.css"),
+                         ("/assets/dashboard.js", "assets/dashboard.js")):
+            digest_ = hashlib.sha256((presets / rel).read_bytes()).hexdigest()[:8]
+            self.assertIn("%s?v=%s-%s" % (url, __version__, digest_), page, url)
+            self.assertIsNone(_re.search(_re.escape(url) + r'(?!\?v=)["\']', page), url + " 有一处没挂缓存键")
 
     def test_editor_skips_empty_mark_decorations(self):
         """空的 mark 装饰会让 CM6 抛错，并把整个渲染层停掉。

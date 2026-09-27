@@ -52,3 +52,26 @@ TMP = os.environ["FECHO_TEST_TMP"]
 if not os.environ.get("FECHO_TEST_VERBOSE") and not getattr(sys.stdout, "_fecho_quiet", False):
     sys.stdout = open(os.devnull, "w", encoding="utf-8")
     sys.stdout._fecho_quiet = True
+
+
+def page(name):
+    """读一个页面，把它引用的本地 CSS / JS 原样拼回原位，得到浏览器实际执行的完整内容。
+
+    Dashboard 的样式和脚本拆到了 presets/assets/ 下（Tony 的 PR #4）。页面检查、
+    「不许写死中文」「用到的翻译键都得存在」这几条防线原本只读 html——不拼回来，
+    JS 里的东西就再也没人盯着，测试照样全绿。拼在原位，<script>…</script> 的结构也不变。
+    """
+    import re
+    from pathlib import Path
+
+    presets = Path(__file__).resolve().parents[1] / "fecho" / "presets"
+    html = (presets / name).read_text(encoding="utf-8")
+
+    def css(m):
+        return "<style>\n%s\n</style>" % (presets / "assets" / m.group(1)).read_text(encoding="utf-8")
+
+    def js(m):
+        return "<script>\n%s\n</script>" % (presets / "assets" / m.group(1)).read_text(encoding="utf-8")
+
+    html = re.sub(r'<link rel="stylesheet" href="/assets/([\w.-]+\.css)">', css, html)
+    return re.sub(r'<script src="/assets/([\w.-]+\.js)"></script>', js, html)
