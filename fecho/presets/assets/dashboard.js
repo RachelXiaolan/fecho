@@ -35,6 +35,9 @@ const $ = (selector, root=document) => root.querySelector(selector);
 
   async function request(path, options={}){
     const response = await fetch(path, options);
+    // 登录过期（比如标签页开着好几天没动）：服务器会告诉登录页在哪，直接过去，别卡在「请先登录」
+    const login=response.status===401&&response.headers.get('X-Fecho-Login');
+    if(login){ window.location.assign(login); return new Promise(()=>{}); }
     let payload = {};
     try { payload = await response.json(); } catch (_) { payload = {}; }
     if (!response.ok) throw new Error(payload.error || payload.detail || t('err_request',{status:response.status}));

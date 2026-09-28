@@ -393,3 +393,21 @@ class TestWebLoginFlow(WebCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestExpiredSessionGoesToLogin(WebCase):
+    def test_api_tells_the_page_where_to_log_in(self):
+        """标签页开了好几天，会话过期后回来：以前只显示「请先登录」和一个永远失败的「重试」。"""
+        self.client.cookies.set("fecho_session", "expired-or-garbage")
+        r = self.client.get("/api/dashboard")
+        self.assertEqual(r.status_code, 401)
+        self.assertEqual(r.headers.get("X-Fecho-Login"), "/login")
+
+    def test_agent_token_errors_do_not_redirect(self):
+        """agent 带错 token 是另一回事：不该让它去网页登录。"""
+        r = self.client.get("/api/dashboard", headers={"Authorization": "Bearer nope"})
+        self.assertEqual(r.status_code, 401)
+        self.assertIsNone(r.headers.get("X-Fecho-Login"))
+
+    def test_page_follows_the_hint(self):
+        self.assertIn("response.headers.get('X-Fecho-Login')", _env.page("dashboard.html"))

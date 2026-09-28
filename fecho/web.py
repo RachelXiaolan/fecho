@@ -314,7 +314,9 @@ def build_app():
                 return author
             author = accounts.resolve_session(request.cookies.get(SESSION_COOKIE, ""))
             if not author:
-                raise HTTPException(401, "请先登录")
+                # 带上登录页地址：网页据此直接跳去登录。以前只显示「请先登录」和一个「重试」，
+                # 登录过期后重试永远失败——标签页开了好几天再回来就卡在那
+                raise HTTPException(401, "请先登录", headers={"X-Fecho-Login": "/login"})
             return author
 
         host = (request.client.host if request.client else "") or ""
